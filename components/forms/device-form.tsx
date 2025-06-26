@@ -214,6 +214,27 @@ export function DeviceForm({
       return;
     }
 
+    const ports = getConfig().io_setup?.ports || [];
+    const thisPort = ports.find((p) => p.id === portId);
+
+    if (!thisPort) {
+      toast.error(`Port ${portId} not found.`, {
+        duration: 5000,
+      });
+      return;
+    }
+
+    const unitConflict = thisPort.devices.some(
+      (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id // allow if editing same device
+    );
+
+    if (unitConflict) {
+      toast.error(`Unit number ${unitNumber} is already in use on this port.`, {
+        duration: 5000,
+      });
+      return;
+    }
+
     const newDeviceConfig: DeviceConfig = {
       id: existingConfig?.id || `device-${Date.now()}`,
       enabled,

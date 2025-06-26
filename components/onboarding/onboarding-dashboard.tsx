@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -15,20 +15,27 @@ import {
   Server,
   Settings,
   Shield,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/components/ui/use-toast"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/use-toast";
 
-import { DeviceDiscoveryDialog } from "@/components/onboarding/device-discovery-dialog"
-import { DeviceRegistrationDialog } from "@/components/onboarding/device-registration-dialog"
-import { DeviceCard } from "@/components/onboarding/device-card"
-import { BaremetalDeviceLayout } from "@/components/onboarding/baremetal-device-layout"
-import { SidebarNav } from "@/components/sidebar-nav"
-import { NetworkGraph } from "@/components/network-graph"
+import { DeviceDiscoveryDialog } from "@/components/onboarding/device-discovery-dialog";
+import { DeviceRegistrationDialog } from "@/components/onboarding/device-registration-dialog";
+import { DeviceCard } from "@/components/onboarding/device-card";
+import { BaremetalDeviceLayout } from "@/components/onboarding/baremetal-device-layout";
+import { SidebarNav } from "@/components/sidebar-nav";
+import { NetworkGraph } from "@/components/network-graph";
 
 // Sample device data
 const discoveredDevices = [
@@ -84,7 +91,7 @@ const discoveredDevices = [
     memory: 92,
     storage: 78,
   },
-]
+];
 
 // Navigation items for the sidebar
 const navItems = [
@@ -119,35 +126,35 @@ const navItems = [
     href: "/settings",
     icon: Settings,
   },
-]
+];
 
 export default function OnboardingDashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [discoveryDialogOpen, setDiscoveryDialogOpen] = useState(false)
-  const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false)
-  const [selectedDevice, setSelectedDevice] = useState<any>(null)
-  const { toast } = useToast()
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [discoveryDialogOpen, setDiscoveryDialogOpen] = useState(false);
+  const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<any>(null);
+  const { toast } = useToast();
 
   // Filter devices based on search query
   const filteredDevices = discoveredDevices.filter(
     (device) =>
       device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       device.ip.includes(searchQuery) ||
-      device.mac.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+      device.mac.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleRefresh = () => {
     toast({
       title: "Refreshing device list",
       description: "Scanning network for devices...",
-    })
-  }
+    });
+  };
 
   const handleRegisterDevice = (device: any) => {
-    setSelectedDevice(device)
-    setRegistrationDialogOpen(true)
-  }
+    setSelectedDevice(device);
+    setRegistrationDialogOpen(true);
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -160,7 +167,11 @@ export default function OnboardingDashboard() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setDiscoveryDialogOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDiscoveryDialogOpen(true)}
+            >
               <Search className="h-4 w-4 mr-2" />
               Discover Device
             </Button>
@@ -188,7 +199,10 @@ export default function OnboardingDashboard() {
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
-                  <Button className="ml-4" onClick={() => setDiscoveryDialogOpen(true)}>
+                  <Button
+                    className="ml-4"
+                    onClick={() => setDiscoveryDialogOpen(true)}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Device
                   </Button>
@@ -197,18 +211,28 @@ export default function OnboardingDashboard() {
                 {/* Device grid */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {filteredDevices.map((device) => (
-                    <DeviceCard key={device.id} device={device} onRegister={() => handleRegisterDevice(device)} />
+                    <DeviceCard
+                      key={device.id}
+                      device={device}
+                      onRegister={() => handleRegisterDevice(device)}
+                    />
                   ))}
                 </div>
 
                 {filteredDevices.length === 0 && (
                   <div className="text-center py-12">
                     <Server className="h-12 w-12 mx-auto text-muted-foreground" />
-                    <h3 className="mt-4 text-lg font-medium">No devices found</h3>
+                    <h3 className="mt-4 text-lg font-medium">
+                      No devices found
+                    </h3>
                     <p className="mt-2 text-muted-foreground">
-                      No devices match your search criteria. Try adjusting your search or discover new devices.
+                      No devices match your search criteria. Try adjusting your
+                      search or discover new devices.
                     </p>
-                    <Button className="mt-4" onClick={() => setDiscoveryDialogOpen(true)}>
+                    <Button
+                      className="mt-4"
+                      onClick={() => setDiscoveryDialogOpen(true)}
+                    >
                       Discover Devices
                     </Button>
                   </div>
@@ -220,10 +244,14 @@ export default function OnboardingDashboard() {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Total Devices</CardTitle>
+                      <CardTitle className="text-sm font-medium">
+                        Total Devices
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{discoveredDevices.length}</div>
+                      <div className="text-2xl font-bold">
+                        {discoveredDevices.length}
+                      </div>
                       <div className="flex items-center text-xs text-muted-foreground">
                         <Clock className="h-3 w-3 mr-1" />
                         Last updated: 2 minutes ago
@@ -232,15 +260,24 @@ export default function OnboardingDashboard() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Online Devices</CardTitle>
+                      <CardTitle className="text-sm font-medium">
+                        Online Devices
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {discoveredDevices.filter((d) => d.status === "online").length}
+                        {
+                          discoveredDevices.filter((d) => d.status === "online")
+                            .length
+                        }
                       </div>
                       <Progress
                         value={
-                          (discoveredDevices.filter((d) => d.status === "online").length / discoveredDevices.length) * 100
+                          (discoveredDevices.filter(
+                            (d) => d.status === "online"
+                          ).length /
+                            discoveredDevices.length) *
+                          100
                         }
                         className="h-2"
                       />
@@ -248,27 +285,47 @@ export default function OnboardingDashboard() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Configured Devices</CardTitle>
+                      <CardTitle className="text-sm font-medium">
+                        Configured Devices
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{discoveredDevices.filter((d) => d.configured).length}</div>
+                      <div className="text-2xl font-bold">
+                        {discoveredDevices.filter((d) => d.configured).length}
+                      </div>
                       <Progress
-                        value={(discoveredDevices.filter((d) => d.configured).length / discoveredDevices.length) * 100}
+                        value={
+                          (discoveredDevices.filter((d) => d.configured)
+                            .length /
+                            discoveredDevices.length) *
+                          100
+                        }
                         className="h-2"
                       />
                     </CardContent>
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Alerts</CardTitle>
+                      <CardTitle className="text-sm font-medium">
+                        Alerts
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {discoveredDevices.filter((d) => d.status === "warning").length}
+                        {
+                          discoveredDevices.filter(
+                            (d) => d.status === "warning"
+                          ).length
+                        }
                       </div>
                       <div className="flex items-center text-xs text-yellow-600">
                         <AlertTriangle className="h-3 w-3 mr-1" />
-                        {discoveredDevices.filter((d) => d.status === "warning").length} devices need attention
+                        {
+                          discoveredDevices.filter(
+                            (d) => d.status === "warning"
+                          ).length
+                        }{" "}
+                        devices need attention
                       </div>
                     </CardContent>
                   </Card>
@@ -278,7 +335,9 @@ export default function OnboardingDashboard() {
                 <Card className="mb-6">
                   <CardHeader>
                     <CardTitle>Network Health</CardTitle>
-                    <CardDescription>Overall status of your IoT network</CardDescription>
+                    <CardDescription>
+                      Overall status of your IoT network
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -289,12 +348,17 @@ export default function OnboardingDashboard() {
                         <div className="font-medium">Memory Usage</div>
                       </div>
                       {discoveredDevices.map((device) => (
-                        <div key={device.id} className="grid gap-2 md:grid-cols-4 border-t pt-2">
+                        <div
+                          key={device.id}
+                          className="grid gap-2 md:grid-cols-4 border-t pt-2"
+                        >
                           <div className="flex items-center">
                             <Server className="h-4 w-4 mr-2 text-muted-foreground" />
                             <div>
                               <div>{device.name}</div>
-                              <div className="text-xs text-muted-foreground">{device.ip}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {device.ip}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center">
@@ -303,8 +367,8 @@ export default function OnboardingDashboard() {
                                 device.status === "online"
                                   ? "bg-green-500"
                                   : device.status === "warning"
-                                    ? "bg-yellow-500"
-                                    : "bg-red-500"
+                                  ? "bg-yellow-500"
+                                  : "bg-red-500"
                               }`}
                             />
                             <span className="capitalize">{device.status}</span>
@@ -317,7 +381,11 @@ export default function OnboardingDashboard() {
                               value={device.cpu}
                               className="h-2"
                               indicatorClassName={
-                                device.cpu > 80 ? "bg-red-500" : device.cpu > 60 ? "bg-yellow-500" : "bg-green-500"
+                                device.cpu > 80
+                                  ? "bg-red-500"
+                                  : device.cpu > 60
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
                               }
                             />
                           </div>
@@ -329,7 +397,11 @@ export default function OnboardingDashboard() {
                               value={device.memory}
                               className="h-2"
                               indicatorClassName={
-                                device.memory > 80 ? "bg-red-500" : device.memory > 60 ? "bg-yellow-500" : "bg-green-500"
+                                device.memory > 80
+                                  ? "bg-red-500"
+                                  : device.memory > 60
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
                               }
                             />
                           </div>
@@ -343,7 +415,9 @@ export default function OnboardingDashboard() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Recent Activities</CardTitle>
-                    <CardDescription>Latest events from your IoT network</CardDescription>
+                    <CardDescription>
+                      Latest events from your IoT network
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -352,8 +426,12 @@ export default function OnboardingDashboard() {
                           <CheckCircle2 className="h-5 w-5 text-blue-700" />
                         </div>
                         <div>
-                          <p className="font-medium">Gateway-001 configured successfully</p>
-                          <p className="text-sm text-muted-foreground">10 minutes ago</p>
+                          <p className="font-medium">
+                            Gateway-001 configured successfully
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            10 minutes ago
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center">
@@ -361,8 +439,12 @@ export default function OnboardingDashboard() {
                           <Network className="h-5 w-5 text-green-700" />
                         </div>
                         <div>
-                          <p className="font-medium">Gateway-002 discovered on network</p>
-                          <p className="text-sm text-muted-foreground">25 minutes ago</p>
+                          <p className="font-medium">
+                            Gateway-002 discovered on network
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            25 minutes ago
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center">
@@ -370,8 +452,12 @@ export default function OnboardingDashboard() {
                           <AlertTriangle className="h-5 w-5 text-yellow-700" />
                         </div>
                         <div>
-                          <p className="font-medium">Gateway-004 high CPU usage detected</p>
-                          <p className="text-sm text-muted-foreground">1 hour ago</p>
+                          <p className="font-medium">
+                            Gateway-004 high CPU usage detected
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            1 hour ago
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center">
@@ -379,8 +465,12 @@ export default function OnboardingDashboard() {
                           <AlertTriangle className="h-5 w-5 text-red-700" />
                         </div>
                         <div>
-                          <p className="font-medium">Gateway-003 went offline</p>
-                          <p className="text-sm text-muted-foreground">3 hours ago</p>
+                          <p className="font-medium">
+                            Gateway-003 went offline
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            3 hours ago
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -408,7 +498,9 @@ export default function OnboardingDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Recent Activities</CardTitle>
-                <CardDescription>Latest events from your IoT network</CardDescription>
+                <CardDescription>
+                  Latest events from your IoT network
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -417,8 +509,12 @@ export default function OnboardingDashboard() {
                       <CheckCircle2 className="h-5 w-5 text-blue-700" />
                     </div>
                     <div>
-                      <p className="font-medium">Gateway-001 configured successfully</p>
-                      <p className="text-sm text-muted-foreground">10 minutes ago</p>
+                      <p className="font-medium">
+                        Gateway-001 configured successfully
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        10 minutes ago
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center">
@@ -426,8 +522,12 @@ export default function OnboardingDashboard() {
                       <Network className="h-5 w-5 text-green-700" />
                     </div>
                     <div>
-                      <p className="font-medium">Gateway-002 discovered on network</p>
-                      <p className="text-sm text-muted-foreground">25 minutes ago</p>
+                      <p className="font-medium">
+                        Gateway-002 discovered on network
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        25 minutes ago
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center">
@@ -435,8 +535,12 @@ export default function OnboardingDashboard() {
                       <AlertTriangle className="h-5 w-5 text-yellow-700" />
                     </div>
                     <div>
-                      <p className="font-medium">Gateway-004 high CPU usage detected</p>
-                      <p className="text-sm text-muted-foreground">1 hour ago</p>
+                      <p className="font-medium">
+                        Gateway-004 high CPU usage detected
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        1 hour ago
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center">
@@ -445,7 +549,9 @@ export default function OnboardingDashboard() {
                     </div>
                     <div>
                       <p className="font-medium">Gateway-003 went offline</p>
-                      <p className="text-sm text-muted-foreground">3 hours ago</p>
+                      <p className="text-sm text-muted-foreground">
+                        3 hours ago
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -461,13 +567,15 @@ export default function OnboardingDashboard() {
       </main>
 
       {/* Dialogs */}
-      <DeviceDiscoveryDialog open={discoveryDialogOpen} onOpenChange={setDiscoveryDialogOpen} />
+      <DeviceDiscoveryDialog
+        open={discoveryDialogOpen}
+        onOpenChange={setDiscoveryDialogOpen}
+      />
       <DeviceRegistrationDialog
         open={registrationDialogOpen}
         onOpenChange={setRegistrationDialogOpen}
         device={selectedDevice}
       />
     </div>
-  )
+  );
 }
-
