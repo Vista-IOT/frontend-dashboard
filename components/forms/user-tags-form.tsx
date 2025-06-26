@@ -36,7 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, X, FileText } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -107,12 +107,32 @@ function TagDialog({
       }
     }
   }, [open, editTag]);
-
+  const { getConfig } = useConfigStore();
   const handleSubmit = () => {
     setIsNameTouched(true);
 
     if (!tagName.trim()) {
       return; // stop submission if name is empty
+    }
+
+    // Get all existing user tags from the store
+    const allTags: UserTag[] = getConfig().user_tags;
+
+    // Check if the name already exists (excluding the current tag being edited)
+    const nameExists = allTags.some(
+      (tag) =>
+        tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+        tag.id !== editTag?.id
+    );
+
+    if (nameExists) {
+      // Show some UI feedback, like an alert or toast
+      console.log("Triggering toast...");
+      toast.error("A tag with this name already exists.", {
+        duration: 5000,
+      });
+
+      return;
     }
 
     const tagData = {
@@ -292,7 +312,6 @@ function TagDialog({
 }
 
 export function UserTagsForm() {
-  const { toast } = useToast();
   const userTags = useConfigStore((state) => state.config.user_tags || []);
   const updateConfig = useConfigStore((state) => state.updateConfig);
 
@@ -318,9 +337,8 @@ export function UserTagsForm() {
         t.id === tag.id ? { ...tag } : t
       );
       updateConfig(["user_tags"], updatedTags);
-      toast({
-        title: "Tag Updated",
-        description: `Tag "${tag.name}" has been updated successfully.`,
+      toast.success(`Tag "${tag.name}" has been updated successfully.`, {
+        duration: 3000,
       });
     } else {
       const newTag: UserTag = {
@@ -328,9 +346,8 @@ export function UserTagsForm() {
         id: Date.now().toString(),
       };
       updateConfig(["user_tags"], [...userTags, newTag]);
-      toast({
-        title: "Tag Added",
-        description: `Tag "${newTag.name}" has been added successfully.`,
+      toast.success(`Tag "${newTag.name}" has been added successfully.`, {
+        duration: 3000,
       });
     }
     setTagDialogOpen(false);
@@ -341,15 +358,12 @@ export function UserTagsForm() {
       const updatedTags = userTags.filter((tag) => tag.id !== selectedTagId);
       updateConfig(["user_tags"], updatedTags);
       setSelectedTagId(null);
-      toast({
-        title: "Tag Deleted",
-        description: "The selected tag has been deleted.",
+      toast.success("The selected tag has been deleted.", {
+        duration: 3000,
       });
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to delete.",
-        variant: "destructive",
+      toast.error("Please select a tag to delete.", {
+        duration: 3000,
       });
     }
   };

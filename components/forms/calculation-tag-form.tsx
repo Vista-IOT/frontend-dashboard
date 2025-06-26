@@ -55,6 +55,8 @@ import {
 import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
 import type { ConfigSchema } from "@/lib/stores/configuration-store"; // adjust the path as needed
 import { useConfigStore } from "@/lib/stores/configuration-store";
+import { toast } from "sonner";
+
 // Define the form schema
 const calculationTagSchema = z.object({
   id: z.string().optional(),
@@ -220,6 +222,61 @@ export function CalculationTagForm({
   // Custom submit logic, called only if validation passes
 
   function onValidSubmit(values: FormValues) {
+    // 1. Duplicate tag name check
+    const isDuplicate = calculation_tags.some(
+      (tag) =>
+        tag.name.trim().toLowerCase() === values.name.trim().toLowerCase() &&
+        tag.name !== initialValues?.name // allow same name if editing
+    );
+
+    if (isDuplicate) {
+      toast.error("A calculation tag with this name already exists.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 2. Empty formula check
+    if (!values.formula || values.formula.trim() === "") {
+      toast.error("Formula field cannot be empty.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 3. At least one variable (A–H) must be filled
+    const variableFields = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const atLeastOneFilled = variableFields.some(
+      (field) => values[field as keyof FormValues]?.trim() !== ""
+    );
+
+    if (!atLeastOneFilled) {
+      toast.error("At least one variable (A–H) must be provided.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 4. (Optional) Formula basic validation - can be extended to regex
+    const hasInvalidCharacters = /[^a-zA-Z0-9+\-*/().]/.test(values.formula);
+
+    if (hasInvalidCharacters) {
+      toast.error("Formula contains invalid characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    const openParens = (values.formula.match(/\(/g) || []).length;
+    const closeParens = (values.formula.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      toast.error("Formula has unbalanced parentheses.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    //  All validations passed
     onSubmit(values);
     onCancel();
     console.log("Submitted");

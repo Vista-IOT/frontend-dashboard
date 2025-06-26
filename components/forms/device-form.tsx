@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { IOPortConfig } from "./io-tag-form"; // Assuming IOPortConfig is exported from there
 import type { IOTag } from "@/lib/stores/configuration-store";
@@ -59,38 +59,38 @@ export const deviceConfigSchema = z.object({
 });
 
 // Example object that follows the DeviceConfig shape
-const config = {
-  id: "dev001",
-  enabled: true,
-  name: "Sensor A",
-  deviceType: "Modbus RTU",
-  unitNumber: 5,
-  tagWriteType: "Bit",
-  description: "Main Modbus sensor",
-  addDeviceNameAsPrefix: true,
-  useAsciiProtocol: 1,
-  packetDelay: 10,
-  digitalBlockSize: 32,
-  analogBlockSize: 16,
-  tags: [
-    {
-      id: "tag001",
-      name: "Voltage",
-      dataType: "Analog",
-      address: "40001",
-      description: "Reads voltage",
-    },
-  ],
-};
+// const config = {
+//   id: "dev001",
+//   enabled: true,
+//   name: "Sensor A",
+//   deviceType: "Modbus RTU",
+//   unitNumber: 5,
+//   tagWriteType: "Bit",
+//   description: "Main Modbus sensor",
+//   addDeviceNameAsPrefix: true,
+//   useAsciiProtocol: 1,
+//   packetDelay: 10,
+//   digitalBlockSize: 32,
+//   analogBlockSize: 16,
+//   tags: [
+//     {
+//       id: "tag001",
+//       name: "Voltage",
+//       dataType: "Analog",
+//       address: "40001",
+//       description: "Reads voltage",
+//     },
+//   ],
+// };
 
-const result = deviceConfigSchema.safeParse(config);
+// const result = deviceConfigSchema.safeParse(config);
 
-if (!result.success) {
-  console.error("❌ Validation failed:", result.error.format());
-} else {
-  console.log("✅ Valid config:", result.data);
-  // Save to localStorage, DB, or send to backend
-}
+// if (!result.success) {
+//   console.error("❌ Validation failed:", result.error.format());
+// } else {
+//   console.log("✅ Valid config:", result.data);
+//   // Save to localStorage, DB, or send to backend
+// }
 
 export interface DeviceConfig {
   id: string;
@@ -125,10 +125,16 @@ export function DeviceForm({
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true);
   const [name, setName] = useState(existingConfig?.name || "NewDevice");
   const [nameError, setNameError] = useState(() => {
-    const lowerNewName = (existingConfig?.name || "NewDevice").trim().toLowerCase();
+    const lowerNewName = (existingConfig?.name || "NewDevice")
+      .trim()
+      .toLowerCase();
     const lowerExistingNames = (existingDeviceNames || [])
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     return (
       (existingConfig?.name || "NewDevice") === "NewDevice" ||
       (existingConfig?.name || "NewDevice").trim() === "" ||
@@ -166,12 +172,16 @@ export function DeviceForm({
   useEffect(() => {
     const lowerNewName = name.trim().toLowerCase();
     const lowerExistingNames = (existingDeviceNames || [])
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     setNameError(
       name === "NewDevice" ||
-      name.trim() === "" ||
-      lowerExistingNames.includes(lowerNewName)
+        name.trim() === "" ||
+        lowerExistingNames.includes(lowerNewName)
     );
   }, [name, existingDeviceNames, existingConfig]);
 
@@ -181,12 +191,16 @@ export function DeviceForm({
     // Check for uniqueness (case-insensitive, ignore self if editing)
     const lowerNewName = newName.trim().toLowerCase();
     const lowerExistingNames = existingDeviceNames
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     setNameError(
       newName === "NewDevice" ||
-      newName.trim() === "" ||
-      lowerExistingNames.includes(lowerNewName)
+        newName.trim() === "" ||
+        lowerExistingNames.includes(lowerNewName)
     );
   };
 
@@ -194,9 +208,8 @@ export function DeviceForm({
     e.preventDefault();
 
     if (nameError) {
-      toast({
-        title: "Validation Error",
-        description: "Please provide a valid device name",
+      toast.error("Provide a valid and unique device name", {
+        duration: 5000,
       });
       return;
     }
@@ -289,7 +302,8 @@ export function DeviceForm({
                 />
                 {nameError && (
                   <p className="text-xs text-destructive">
-                    Please enter a unique device name (not used by any other device in this port)
+                    Please enter a unique device name (not used by any other
+                    device in this port)
                   </p>
                 )}
               </div>

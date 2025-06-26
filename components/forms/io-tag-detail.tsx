@@ -52,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   useConfigStore,
   type ConfigState,
@@ -125,8 +125,6 @@ export function IOTagDetailView({
 
   const tagsToDisplay: IOTag[] = deviceToDisplay?.tags || [];
 
-  const { toast } = useToast();
-
   // State for the table and selection
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagFormOpen, setTagFormOpen] = useState(false);
@@ -177,11 +175,10 @@ export function IOTagDetailView({
     );
 
     if (portIndex === -1) {
-      toast({
-        title: "Error",
-        description: `Port ${portId} not found.`,
-        variant: "destructive",
+      toast.error(`Port ${portId} not found.`, {
+        duration: 5000,
       });
+
       setDeleteConfirmOpen(false);
       return;
     }
@@ -192,11 +189,13 @@ export function IOTagDetailView({
     );
 
     if (deviceIndex === -1) {
-      toast({
-        title: "Error",
-        description: `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
-        variant: "destructive",
-      });
+      toast.error(
+        `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
+        {
+          duration: 5000,
+        }
+      );
+
       setDeleteConfirmOpen(false);
       return;
     }
@@ -214,33 +213,48 @@ export function IOTagDetailView({
 
     setSelectedTags([]);
     setDeleteConfirmOpen(false);
-
-    toast({
-      title: "IO Tags Deleted",
-      description: `${selectedTags.length} tag(s) have been deleted from ${deviceToDisplay.name}.`,
-    });
+    toast.success(
+      `${selectedTags.length} tag(s) have been deleted from ${deviceToDisplay.name}.`,
+      {
+        duration: 5000,
+      }
+    );
   };
 
   const handleSaveTag = (newTag: IOTag) => {
+    const existingTags = tagsToDisplay || [];
+    const duplicateNameExists = existingTags.some(
+      (tag: IOTag) =>
+        tag.name.trim().toLowerCase() === newTag.name.trim().toLowerCase() &&
+        tag.id !== editingTag?.id
+    );
+
+    if (duplicateNameExists) {
+      toast.error("A tag with this name already exists in this device.", {
+        duration: 5000,
+      });
+      return;
+    }
+
     let updatedTags: IOTag[];
 
     if (editingTag) {
+      // Duplicate name check before updating or adding
+
       // Update existing tag
       updatedTags = (tagsToDisplay || []).map((tag: IOTag) =>
         tag.id === editingTag.id ? newTag : tag
       );
 
-      toast({
-        title: "IO Tag Updated",
-        description: `Successfully updated tag: ${newTag.name}`,
+      toast.success(`Sucessfully updated tag`, {
+        duration: 5000,
       });
     } else {
       // Add new tag
       updatedTags = [...(tagsToDisplay || []), newTag];
 
-      toast({
-        title: "IO Tag Added",
-        description: `Successfully added tag: ${newTag.name}`,
+      toast.success(`Sucessfully added tag`, {
+        duration: 5000,
       });
     }
 
@@ -251,11 +265,10 @@ export function IOTagDetailView({
     );
 
     if (portIndex === -1) {
-      toast({
-        title: "Error",
-        description: `Port ${portId} not found.`,
-        variant: "destructive",
+      toast.error(`Port ${portId} not found.`, {
+        duration: 5000,
       });
+
       setTagFormOpen(false);
       return;
     }
@@ -266,11 +279,13 @@ export function IOTagDetailView({
     );
 
     if (deviceIndex === -1) {
-      toast({
-        title: "Error",
-        description: `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
-        variant: "destructive",
-      });
+      toast.error(
+        `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
+        {
+          duration: 5000,
+        }
+      );
+
       setTagFormOpen(false);
       return;
     }

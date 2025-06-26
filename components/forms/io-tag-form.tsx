@@ -22,10 +22,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { DeviceConfig } from "./device-form"; // Import consolidated types. IOTag is part of DeviceConfig.
-
+import { toast } from "sonner";
 export interface SerialPortSettings {
   port: string;
   baudRate: number;
@@ -113,12 +113,23 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
     if (!type.trim()) validationErrors.type = "Type is required.";
     if (!name.trim()) validationErrors.name = "Name is required.";
 
+    const allConfigs = getConfig().io_setup.ports;
+    // Get existing configs from the store
+
+    const nameExists = allConfigs.some(
+      (cfg: IOPortConfig) =>
+        cfg.name.trim().toLowerCase() === name.trim().toLowerCase() &&
+        cfg.id !== existingConfig?.id // Allow same name if editing current config
+    );
+
+    if (nameExists) {
+      validationErrors.name = "This name is already used.";
+    }
+
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      toast({
-        title: "Validation Error",
-        description: "Please fix the required fields.",
-        variant: "destructive",
+      toast.error("Invalid data, Validation error", {
+        duration: 5000,
       });
       return;
     }
@@ -126,10 +137,8 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
     setErrors({}); // Clear any previous errors
 
     if (!type || !name) {
-      toast({
-        title: "Validation Error",
-        description: "Type and Name are required fields",
-        variant: "destructive",
+      toast.error("Validation error", {
+        duration: 5000,
       });
       return;
     }

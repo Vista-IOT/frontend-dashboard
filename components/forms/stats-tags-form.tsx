@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, X } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
@@ -93,6 +93,20 @@ function StatsTagDialog({
   const handleSubmit = () => {
     if (!tagName || !referTag) {
       alert("Please fill in both the Name and Refer Tag fields.");
+      return;
+    }
+
+    // Check if the name already exists (excluding the current tag being edited)
+    const nameExists = statsTags.some(
+      (tag) =>
+        tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+        tag.id !== editTag?.id
+    );
+
+    if (nameExists) {
+      toast.error("A stats tag with this name already exists.", {
+        duration: 5000,
+      });
       return;
     }
 
@@ -234,7 +248,6 @@ export function StatsTagsForm() {
   const [selectedTagId, setSelectedTagId] = useState<string | number | null>(
     null
   );
-  const { toast } = useToast();
 
   const handleAddTag = () => {
     setEditingTag(null);
@@ -249,10 +262,8 @@ export function StatsTagsForm() {
         setTagDialogOpen(true);
       }
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to modify.",
-        variant: "destructive",
+      toast.error("Please select a tag to modify.", {
+        duration: 3000,
       });
     }
   };
@@ -262,12 +273,14 @@ export function StatsTagsForm() {
       ? tags.map((t: any) => (t.id === tag.id ? tag : t))
       : [...tags, tag];
     updateConfig(["stats_tags"], updatedTags);
-    toast({
-      title: isEdit ? "Tag Updated" : "Tag Added",
-      description: `Tag "${tag.name}" has been ${
+    toast.success(
+      `Tag "${tag.name}" has been ${
         isEdit ? "updated" : "added"
       } successfully.`,
-    });
+      {
+        duration: 3000,
+      }
+    );
   };
 
   const handleDeleteTag = () => {
@@ -275,15 +288,12 @@ export function StatsTagsForm() {
       const updatedTags = tags.filter((tag: any) => tag.id !== selectedTagId);
       updateConfig(["stats_tags"], updatedTags);
       setSelectedTagId(null);
-      toast({
-        title: "Tag Deleted",
-        description: "The selected tag has been deleted.",
+      toast.success("The selected tag has been deleted.", {
+        duration: 3000,
       });
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to delete.",
-        variant: "destructive",
+      toast.error("Please select a tag to delete.", {
+        duration: 3000,
       });
     }
   };
