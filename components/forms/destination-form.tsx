@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { v4 as uuidv4 } from "uuid";
+import { toast } from "sonner";
 
 const defaultValues: Record<string, any> = {
   "mqtt-broker": {
@@ -72,7 +73,11 @@ const defaultValues: Record<string, any> = {
       type: "none",
       credentials: {},
     },
-    dataMapping: { urlTemplate: "", bodyTemplate: "", contentType: "application/json" },
+    dataMapping: {
+      urlTemplate: "",
+      bodyTemplate: "",
+      contentType: "application/json",
+    },
     description: "",
   },
   "virtual-memory-map": {
@@ -88,9 +93,211 @@ const defaultValues: Record<string, any> = {
   },
 };
 
+// --- Helpers ---
+function isValidClientId(id: string): boolean {
+  return /^[a-zA-Z0-9_-]{3,30}$/.test(id);
+}
+
+function isValidIpOrDomain(address: string): boolean {
+  return /^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,}|^(\d{1,3}\.){3}\d{1,3}$/.test(
+    address
+  );
+}
+
+function isValidAuthString(str: string): boolean {
+  return /^[^\s]{3,}$/.test(str); // min 3 chars, no whitespace
+}
+
+function isValidTLSVersion(version: string): boolean {
+  return /^1\.(0|1|2|3)$/.test(version); // TLS 1.0–1.3
+}
+
+function isNonEmpty(value: string | undefined | null): boolean {
+  return !!value && value.trim().length > 0;
+}
+
+function isPositiveNumber(n: any): boolean {
+  return typeof n === "number" && !isNaN(n) && n > 0;
+}
+
+function isNumber(n: any): boolean {
+  return typeof n === "number" && !isNaN(n);
+}
+
+function showErrors(errors: string[]): boolean {
+  errors.forEach((err) => toast.error(err));
+  return false;
+}
+
+function validateMqttConfig(values: any): boolean {
+  const errors: string[] = [];
+
+  if (!isNonEmpty(values.name)) errors.push("Name is required.");
+  if (!isNonEmpty(values.broker?.address)) {
+    errors.push("Broker address is required.");
+  } else if (!isValidIpOrDomain(values.broker.address)) {
+    errors.push("Enter a valid broker address (domain or IP).");
+  }
+
+  if (!isPositiveNumber(values.broker?.port) || values.broker.port > 65535)
+    errors.push("Port must be between 1 and 65535.");
+
+  if (!isNonEmpty(values.broker?.clientId)) {
+    errors.push("Client ID is required.");
+  } else if (!isValidClientId(values.broker.clientId)) {
+    errors.push(
+      "Client ID must be 3–30 characters, only letters, numbers, -, _."
+    );
+  }
+
+  if (
+    !isNumber(values.broker?.keepalive) ||
+    values.broker.keepalive < 0 ||
+    values.broker.keepalive > 3600
+  )
+    errors.push("Keepalive must be between 0 and 3600 seconds.");
+
+  if (values.broker?.tls?.enabled) {
+    if (
+      !isNonEmpty(values.broker.tls.version) ||
+      !isValidTLSVersion(values.broker.tls.version)
+    )
+      errors.push("TLS version must be 1.0 to 1.3.");
+    if (!isNonEmpty(values.broker.tls.caFile))
+      errors.push("CA file is required.");
+    if (!isNonEmpty(values.broker.tls.certFile))
+      errors.push("Cert file is required.");
+    if (!isNonEmpty(values.broker.tls.keyFile))
+      errors.push("Key file is required.");
+  }
+
+  if (values.broker?.auth?.enabled) {
+    if (
+      !isNonEmpty(values.broker.auth.username) ||
+      !isValidAuthString(values.broker.auth.username)
+    )
+      errors.push("Username must be at least 3 characters, no spaces.");
+    if (
+      !isNonEmpty(values.broker.auth.password) ||
+      !isValidAuthString(values.broker.auth.password)
+    )
+      errors.push("Password must be at least 3 characters, no spaces.");
+  }
+
+  return errors.length > 0 ? showErrors(errors) : true;
+}
+
+function validateAwsIotConfig(values: any): boolean {
+  const errors: string[] = [];
+
+  if (!isNonEmpty(values.name)) errors.push("Name is required.");
+  if (!isNonEmpty(values.aws?.region)) errors.push("Region is required.");
+  if (!isNonEmpty(values.aws?.thingName))
+    errors.push("Thing Name is required.");
+  if (!isNonEmpty(values.aws?.shadow)) errors.push("Shadow is required.");
+  if (!isNonEmpty(values.aws?.endpoint)) errors.push("Endpoint is required.");
+
+  if (!isNonEmpty(values.aws?.credentials?.accessKeyId))
+    errors.push("Access Key ID is required.");
+  if (!isNonEmpty(values.aws?.credentials?.secretAccessKey))
+    errors.push("Secret Access Key is required.");
+
+  if (!isNonEmpty(values.aws?.certificates?.caFile))
+    errors.push("CA File is required.");
+  if (!isNonEmpty(values.aws?.certificates?.certFile))
+    errors.push("Cert File is required.");
+  if (!isNonEmpty(values.aws?.certificates?.keyFile))
+    errors.push("Key File is required.");
+
+  return errors.length > 0 ? showErrors(errors) : true;
+}
+
+function validateAwsMqttConfig(values: any): boolean {
+  const errors: string[] = [];
+
+  if (!isNonEmpty(values.name)) errors.push("Name is required.");
+  if (!isNonEmpty(values.aws?.region)) errors.push("Region is required.");
+  if (!isNonEmpty(values.aws?.endpoint)) errors.push("Endpoint is required.");
+
+  if (!isNonEmpty(values.aws?.credentials?.accessKeyId))
+    errors.push("Access Key ID is required.");
+  if (!isNonEmpty(values.aws?.credentials?.secretAccessKey))
+    errors.push("Secret Access Key is required.");
+
+  if (!isNonEmpty(values.mqtt?.clientId)) errors.push("Client ID is required.");
+  if (!isNumber(values.mqtt?.keepalive))
+    errors.push("Keepalive must be a valid number.");
+
+  return errors.length > 0 ? showErrors(errors) : true;
+}
+
+function validateRestApiConfig(values: any): boolean {
+  const errors: string[] = [];
+
+  if (!isNonEmpty(values.name)) errors.push("Name is required.");
+  if (!isNonEmpty(values.api?.baseUrl)) errors.push("Base URL is required.");
+  if (!isNonEmpty(values.api?.method)) errors.push("HTTP method is required.");
+  if (!isNumber(values.api?.timeout))
+    errors.push("Timeout must be a valid number.");
+  if (!isNumber(values.api?.retries))
+    errors.push("Retries must be a valid number.");
+
+  const auth = values.auth;
+  if (auth?.type === "basic") {
+    if (!isNonEmpty(auth.credentials?.username))
+      errors.push("Basic auth username required.");
+    if (!isNonEmpty(auth.credentials?.password))
+      errors.push("Basic auth password required.");
+  } else if (auth?.type === "bearer") {
+    if (!isNonEmpty(auth.credentials?.token))
+      errors.push("Bearer token required.");
+  } else if (auth?.type === "api-key") {
+    if (!isNonEmpty(auth.credentials?.apiKey))
+      errors.push("API Key is required.");
+    if (!isNonEmpty(auth.credentials?.apiKeyHeader))
+      errors.push("API Key Header required.");
+  }
+
+  if (!isNonEmpty(values.dataMapping?.urlTemplate))
+    errors.push("URL Template is required.");
+  if (!isNonEmpty(values.dataMapping?.bodyTemplate))
+    errors.push("Body Template is required.");
+  if (!isNonEmpty(values.dataMapping?.contentType))
+    errors.push("Content Type is required.");
+
+  return errors.length > 0 ? showErrors(errors) : true;
+}
+
+function validateVirtualMemoryMapConfig(values: any): boolean {
+  const errors: string[] = [];
+
+  if (!isNonEmpty(values.name)) errors.push("Name is required.");
+  if (!isNonEmpty(values.memory?.address)) errors.push("Address is required.");
+  if (!isNonEmpty(values.memory?.dataType))
+    errors.push("Data Type is required.");
+  if (!isNonEmpty(values.memory?.endianness))
+    errors.push("Endianness is required.");
+
+  if (["string", "ascii"].includes(values.memory?.dataType)) {
+    if (!isPositiveNumber(values.memory.length)) {
+      errors.push("Length is required for string/ascii types.");
+    }
+  }
+
+  if (values.memory?.scaling?.enabled) {
+    if (!isNumber(values.memory.scaling.factor))
+      errors.push("Scaling factor must be a number.");
+    if (!isNumber(values.memory.scaling.offset))
+      errors.push("Scaling offset must be a number.");
+  }
+
+  return errors.length > 0 ? showErrors(errors) : true;
+}
+
 export default function DestinationForm({
   type,
   initialValues,
+  existingConfigs = [],
   onSubmit,
   onCancel,
 }: {
@@ -98,9 +305,59 @@ export default function DestinationForm({
   initialValues?: any;
   onSubmit: (dest: any) => void;
   onCancel: () => void;
+  existingConfigs?: any[];
 }) {
-  const [values, setValues] = useState<any>(initialValues || defaultValues[type]);
+  const [values, setValues] = useState<any>(
+    initialValues || defaultValues[type]
+  );
   const [saving, setSaving] = useState(false);
+  const handleSubmit = async () => {
+    let isValid = true;
+
+    if (type === "mqtt-broker") {
+      isValid = validateMqttConfig(values);
+    } else if (type === "aws-iot") {
+      isValid = validateAwsIotConfig(values);
+    } else if (type === "aws-mqtt") {
+      isValid = validateAwsMqttConfig(values);
+    } else if (type === "rest-api") {
+      isValid = validateRestApiConfig(values);
+    } else if (type === "virtual-memory-map") {
+      isValid = validateVirtualMemoryMapConfig(values);
+    }
+
+    if (!isValid) return;
+
+    console.log("Checking duplicates in:", existingConfigs);
+
+    const isDuplicateName = existingConfigs.some(
+      (cfg) =>
+        cfg.name?.trim().toLowerCase() === values.name?.trim().toLowerCase() &&
+        cfg.id !== values.id
+    );
+
+    if (isDuplicateName) {
+      toast.error("Destination name must be unique.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSubmit({
+        ...values,
+        id: values.id || uuidv4(),
+        type,
+      });
+
+      toast.success(
+        `${type.replace(/-/g, " ").toUpperCase()} saved successfully.`
+      );
+    } catch (err) {
+      toast.error("Failed to save destination.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Helper for input changes
   const handleChange = (path: string[], value: any) => {
@@ -133,8 +390,9 @@ export default function DestinationForm({
                 <Input
                   id="name"
                   value={values.name}
-                  onChange={e => handleChange(["name"], e.target.value)}
+                  onChange={(e) => handleChange(["name"], e.target.value)}
                   placeholder="My MQTT Broker"
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -142,7 +400,9 @@ export default function DestinationForm({
                 <Input
                   id="description"
                   value={values.description}
-                  onChange={e => handleChange(["description"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["description"], e.target.value)
+                  }
                   placeholder="Optional description"
                 />
               </div>
@@ -162,7 +422,9 @@ export default function DestinationForm({
                 <Input
                   id="address"
                   value={values.broker.address}
-                  onChange={e => handleChange(["broker", "address"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["broker", "address"], e.target.value)
+                  }
                   placeholder="broker.example.com"
                 />
               </div>
@@ -172,7 +434,9 @@ export default function DestinationForm({
                   id="port"
                   type="number"
                   value={values.broker.port}
-                  onChange={e => handleChange(["broker", "port"], Number(e.target.value))}
+                  onChange={(e) =>
+                    handleChange(["broker", "port"], Number(e.target.value))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -180,7 +444,10 @@ export default function DestinationForm({
                 <Input
                   id="clientId"
                   value={values.broker.clientId}
-                  onChange={e => handleChange(["broker", "clientId"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["broker", "clientId"], e.target.value)
+                  }
+                  placeholder="device_001"
                 />
               </div>
               <div className="space-y-2">
@@ -189,7 +456,12 @@ export default function DestinationForm({
                   id="keepalive"
                   type="number"
                   value={values.broker.keepalive}
-                  onChange={e => handleChange(["broker", "keepalive"], Number(e.target.value))}
+                  onChange={(e) =>
+                    handleChange(
+                      ["broker", "keepalive"],
+                      Number(e.target.value)
+                    )
+                  }
                 />
               </div>
             </div>
@@ -198,7 +470,9 @@ export default function DestinationForm({
                 type="checkbox"
                 id="cleanSession"
                 checked={values.broker.cleanSession}
-                onChange={e => handleChange(["broker", "cleanSession"], e.target.checked)}
+                onChange={(e) =>
+                  handleChange(["broker", "cleanSession"], e.target.checked)
+                }
                 className="rounded"
               />
               <Label htmlFor="cleanSession">Clean Session</Label>
@@ -217,7 +491,9 @@ export default function DestinationForm({
                 type="checkbox"
                 id="tlsEnabled"
                 checked={values.broker.tls.enabled}
-                onChange={e => handleChange(["broker", "tls", "enabled"], e.target.checked)}
+                onChange={(e) =>
+                  handleChange(["broker", "tls", "enabled"], e.target.checked)
+                }
                 className="rounded"
               />
               <Label htmlFor="tlsEnabled">Enable TLS</Label>
@@ -230,7 +506,12 @@ export default function DestinationForm({
                     <Input
                       id="tlsVersion"
                       value={values.broker.tls.version}
-                      onChange={e => handleChange(["broker", "tls", "version"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "version"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -240,7 +521,12 @@ export default function DestinationForm({
                       type="checkbox"
                       id="verifyServer"
                       checked={values.broker.tls.verifyServer}
-                      onChange={e => handleChange(["broker", "tls", "verifyServer"], e.target.checked)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "verifyServer"],
+                          e.target.checked
+                        )
+                      }
                       className="rounded"
                     />
                     <Label htmlFor="verifyServer">Verify Server</Label>
@@ -250,7 +536,12 @@ export default function DestinationForm({
                       type="checkbox"
                       id="allowInsecure"
                       checked={values.broker.tls.allowInsecure}
-                      onChange={e => handleChange(["broker", "tls", "allowInsecure"], e.target.checked)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "allowInsecure"],
+                          e.target.checked
+                        )
+                      }
                       className="rounded"
                     />
                     <Label htmlFor="allowInsecure">Allow Insecure</Label>
@@ -262,7 +553,12 @@ export default function DestinationForm({
                     <Input
                       id="caFile"
                       value={values.broker.tls.caFile}
-                      onChange={e => handleChange(["broker", "tls", "caFile"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "caFile"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -270,7 +566,12 @@ export default function DestinationForm({
                     <Input
                       id="certFile"
                       value={values.broker.tls.certFile}
-                      onChange={e => handleChange(["broker", "tls", "certFile"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "certFile"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -278,7 +579,12 @@ export default function DestinationForm({
                     <Input
                       id="keyFile"
                       value={values.broker.tls.keyFile}
-                      onChange={e => handleChange(["broker", "tls", "keyFile"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "tls", "keyFile"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -298,7 +604,9 @@ export default function DestinationForm({
                 type="checkbox"
                 id="authEnabled"
                 checked={values.broker.auth.enabled}
-                onChange={e => handleChange(["broker", "auth", "enabled"], e.target.checked)}
+                onChange={(e) =>
+                  handleChange(["broker", "auth", "enabled"], e.target.checked)
+                }
                 className="rounded"
               />
               <Label htmlFor="authEnabled">Enable Authentication</Label>
@@ -311,7 +619,12 @@ export default function DestinationForm({
                     <Input
                       id="username"
                       value={values.broker.auth.username}
-                      onChange={e => handleChange(["broker", "auth", "username"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "auth", "username"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -320,7 +633,12 @@ export default function DestinationForm({
                       id="password"
                       type="password"
                       value={values.broker.auth.password}
-                      onChange={e => handleChange(["broker", "auth", "password"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["broker", "auth", "password"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -345,7 +663,7 @@ export default function DestinationForm({
                 <Input
                   id="name"
                   value={values.name}
-                  onChange={e => handleChange(["name"], e.target.value)}
+                  onChange={(e) => handleChange(["name"], e.target.value)}
                   placeholder="My AWS IoT"
                 />
               </div>
@@ -354,7 +672,9 @@ export default function DestinationForm({
                 <Input
                   id="description"
                   value={values.description}
-                  onChange={e => handleChange(["description"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["description"], e.target.value)
+                  }
                   placeholder="Optional description"
                 />
               </div>
@@ -374,7 +694,9 @@ export default function DestinationForm({
                 <Input
                   id="region"
                   value={values.aws.region}
-                  onChange={e => handleChange(["aws", "region"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "region"], e.target.value)
+                  }
                   placeholder="us-east-1"
                 />
               </div>
@@ -383,7 +705,9 @@ export default function DestinationForm({
                 <Input
                   id="thingName"
                   value={values.aws.thingName}
-                  onChange={e => handleChange(["aws", "thingName"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "thingName"], e.target.value)
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -391,7 +715,9 @@ export default function DestinationForm({
                 <Input
                   id="shadow"
                   value={values.aws.shadow}
-                  onChange={e => handleChange(["aws", "shadow"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "shadow"], e.target.value)
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -399,7 +725,9 @@ export default function DestinationForm({
                 <Input
                   id="endpoint"
                   value={values.aws.endpoint}
-                  onChange={e => handleChange(["aws", "endpoint"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "endpoint"], e.target.value)
+                  }
                   placeholder="xxxxxx.iot.us-east-1.amazonaws.com"
                 />
               </div>
@@ -419,7 +747,12 @@ export default function DestinationForm({
                 <Input
                   id="accessKeyId"
                   value={values.aws.credentials.accessKeyId}
-                  onChange={e => handleChange(["aws", "credentials", "accessKeyId"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "accessKeyId"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -428,7 +761,12 @@ export default function DestinationForm({
                   id="secretAccessKey"
                   type="password"
                   value={values.aws.credentials.secretAccessKey}
-                  onChange={e => handleChange(["aws", "credentials", "secretAccessKey"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "secretAccessKey"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -436,7 +774,12 @@ export default function DestinationForm({
                 <Input
                   id="sessionToken"
                   value={values.aws.credentials.sessionToken}
-                  onChange={e => handleChange(["aws", "credentials", "sessionToken"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "sessionToken"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
             </div>
@@ -455,7 +798,12 @@ export default function DestinationForm({
                 <Input
                   id="caFile"
                   value={values.aws.certificates.caFile}
-                  onChange={e => handleChange(["aws", "certificates", "caFile"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "certificates", "caFile"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -463,7 +811,12 @@ export default function DestinationForm({
                 <Input
                   id="certFile"
                   value={values.aws.certificates.certFile}
-                  onChange={e => handleChange(["aws", "certificates", "certFile"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "certificates", "certFile"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -471,7 +824,12 @@ export default function DestinationForm({
                 <Input
                   id="keyFile"
                   value={values.aws.certificates.keyFile}
-                  onChange={e => handleChange(["aws", "certificates", "keyFile"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "certificates", "keyFile"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
             </div>
@@ -494,7 +852,7 @@ export default function DestinationForm({
                 <Input
                   id="name"
                   value={values.name}
-                  onChange={e => handleChange(["name"], e.target.value)}
+                  onChange={(e) => handleChange(["name"], e.target.value)}
                   placeholder="My AWS MQTT"
                 />
               </div>
@@ -503,7 +861,9 @@ export default function DestinationForm({
                 <Input
                   id="description"
                   value={values.description}
-                  onChange={e => handleChange(["description"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["description"], e.target.value)
+                  }
                   placeholder="Optional description"
                 />
               </div>
@@ -523,7 +883,9 @@ export default function DestinationForm({
                 <Input
                   id="region"
                   value={values.aws.region}
-                  onChange={e => handleChange(["aws", "region"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "region"], e.target.value)
+                  }
                   placeholder="us-east-1"
                 />
               </div>
@@ -532,7 +894,9 @@ export default function DestinationForm({
                 <Input
                   id="endpoint"
                   value={values.aws.endpoint}
-                  onChange={e => handleChange(["aws", "endpoint"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["aws", "endpoint"], e.target.value)
+                  }
                   placeholder="xxxxxx.iot.us-east-1.amazonaws.com"
                 />
               </div>
@@ -552,7 +916,12 @@ export default function DestinationForm({
                 <Input
                   id="accessKeyId"
                   value={values.aws.credentials.accessKeyId}
-                  onChange={e => handleChange(["aws", "credentials", "accessKeyId"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "accessKeyId"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -561,7 +930,12 @@ export default function DestinationForm({
                   id="secretAccessKey"
                   type="password"
                   value={values.aws.credentials.secretAccessKey}
-                  onChange={e => handleChange(["aws", "credentials", "secretAccessKey"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "secretAccessKey"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -569,7 +943,12 @@ export default function DestinationForm({
                 <Input
                   id="sessionToken"
                   value={values.aws.credentials.sessionToken}
-                  onChange={e => handleChange(["aws", "credentials", "sessionToken"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(
+                      ["aws", "credentials", "sessionToken"],
+                      e.target.value
+                    )
+                  }
                 />
               </div>
             </div>
@@ -588,7 +967,9 @@ export default function DestinationForm({
                 <Input
                   id="clientId"
                   value={values.mqtt.clientId}
-                  onChange={e => handleChange(["mqtt", "clientId"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["mqtt", "clientId"], e.target.value)
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -597,7 +978,9 @@ export default function DestinationForm({
                   id="keepalive"
                   type="number"
                   value={values.mqtt.keepalive}
-                  onChange={e => handleChange(["mqtt", "keepalive"], Number(e.target.value))}
+                  onChange={(e) =>
+                    handleChange(["mqtt", "keepalive"], Number(e.target.value))
+                  }
                 />
               </div>
             </div>
@@ -606,7 +989,9 @@ export default function DestinationForm({
                 type="checkbox"
                 id="cleanSession"
                 checked={values.mqtt.cleanSession}
-                onChange={e => handleChange(["mqtt", "cleanSession"], e.target.checked)}
+                onChange={(e) =>
+                  handleChange(["mqtt", "cleanSession"], e.target.checked)
+                }
                 className="rounded"
               />
               <Label htmlFor="cleanSession">Clean Session</Label>
@@ -630,7 +1015,7 @@ export default function DestinationForm({
                 <Input
                   id="name"
                   value={values.name}
-                  onChange={e => handleChange(["name"], e.target.value)}
+                  onChange={(e) => handleChange(["name"], e.target.value)}
                   placeholder="My REST API"
                 />
               </div>
@@ -639,7 +1024,9 @@ export default function DestinationForm({
                 <Input
                   id="description"
                   value={values.description}
-                  onChange={e => handleChange(["description"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["description"], e.target.value)
+                  }
                   placeholder="Optional description"
                 />
               </div>
@@ -659,7 +1046,9 @@ export default function DestinationForm({
                 <Input
                   id="baseUrl"
                   value={values.api.baseUrl}
-                  onChange={e => handleChange(["api", "baseUrl"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["api", "baseUrl"], e.target.value)
+                  }
                   placeholder="https://api.example.com/data"
                 />
               </div>
@@ -669,7 +1058,9 @@ export default function DestinationForm({
                   id="method"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.api.method}
-                  onChange={e => handleChange(["api", "method"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["api", "method"], e.target.value)
+                  }
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -684,7 +1075,9 @@ export default function DestinationForm({
                   id="timeout"
                   type="number"
                   value={values.api.timeout}
-                  onChange={e => handleChange(["api", "timeout"], Number(e.target.value))}
+                  onChange={(e) =>
+                    handleChange(["api", "timeout"], Number(e.target.value))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -693,7 +1086,9 @@ export default function DestinationForm({
                   id="retries"
                   type="number"
                   value={values.api.retries}
-                  onChange={e => handleChange(["api", "retries"], Number(e.target.value))}
+                  onChange={(e) =>
+                    handleChange(["api", "retries"], Number(e.target.value))
+                  }
                 />
               </div>
             </div>
@@ -712,7 +1107,7 @@ export default function DestinationForm({
                 id="authType"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={values.auth.type}
-                onChange={e => handleChange(["auth", "type"], e.target.value)}
+                onChange={(e) => handleChange(["auth", "type"], e.target.value)}
               >
                 <option value="none">None</option>
                 <option value="basic">Basic</option>
@@ -728,7 +1123,12 @@ export default function DestinationForm({
                     <Input
                       id="username"
                       value={values.auth.credentials.username || ""}
-                      onChange={e => handleChange(["auth", "credentials", "username"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["auth", "credentials", "username"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -737,7 +1137,12 @@ export default function DestinationForm({
                       id="password"
                       type="password"
                       value={values.auth.credentials.password || ""}
-                      onChange={e => handleChange(["auth", "credentials", "password"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["auth", "credentials", "password"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -750,7 +1155,12 @@ export default function DestinationForm({
                   <Input
                     id="token"
                     value={values.auth.credentials.token || ""}
-                    onChange={e => handleChange(["auth", "credentials", "token"], e.target.value)}
+                    onChange={(e) =>
+                      handleChange(
+                        ["auth", "credentials", "token"],
+                        e.target.value
+                      )
+                    }
                   />
                 </div>
               </div>
@@ -763,7 +1173,12 @@ export default function DestinationForm({
                     <Input
                       id="apiKey"
                       value={values.auth.credentials.apiKey || ""}
-                      onChange={e => handleChange(["auth", "credentials", "apiKey"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["auth", "credentials", "apiKey"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -771,7 +1186,12 @@ export default function DestinationForm({
                     <Input
                       id="apiKeyHeader"
                       value={values.auth.credentials.apiKeyHeader || ""}
-                      onChange={e => handleChange(["auth", "credentials", "apiKeyHeader"], e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          ["auth", "credentials", "apiKeyHeader"],
+                          e.target.value
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -791,7 +1211,9 @@ export default function DestinationForm({
               <Input
                 id="urlTemplate"
                 value={values.dataMapping.urlTemplate}
-                onChange={e => handleChange(["dataMapping", "urlTemplate"], e.target.value)}
+                onChange={(e) =>
+                  handleChange(["dataMapping", "urlTemplate"], e.target.value)
+                }
                 placeholder="/api/data/{id}"
               />
             </div>
@@ -800,7 +1222,9 @@ export default function DestinationForm({
               <Textarea
                 id="bodyTemplate"
                 value={values.dataMapping.bodyTemplate}
-                onChange={e => handleChange(["dataMapping", "bodyTemplate"], e.target.value)}
+                onChange={(e) =>
+                  handleChange(["dataMapping", "bodyTemplate"], e.target.value)
+                }
                 placeholder='{"value": "{value}", "timestamp": "{timestamp}"}'
                 rows={3}
               />
@@ -810,7 +1234,9 @@ export default function DestinationForm({
               <Input
                 id="contentType"
                 value={values.dataMapping.contentType}
-                onChange={e => handleChange(["dataMapping", "contentType"], e.target.value)}
+                onChange={(e) =>
+                  handleChange(["dataMapping", "contentType"], e.target.value)
+                }
                 placeholder="application/json"
               />
             </div>
@@ -833,7 +1259,7 @@ export default function DestinationForm({
                 <Input
                   id="name"
                   value={values.name}
-                  onChange={e => handleChange(["name"], e.target.value)}
+                  onChange={(e) => handleChange(["name"], e.target.value)}
                   placeholder="My Virtual Map"
                 />
               </div>
@@ -842,7 +1268,9 @@ export default function DestinationForm({
                 <Input
                   id="description"
                   value={values.description}
-                  onChange={e => handleChange(["description"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["description"], e.target.value)
+                  }
                   placeholder="Optional description"
                 />
               </div>
@@ -862,7 +1290,9 @@ export default function DestinationForm({
                 <Input
                   id="address"
                   value={values.memory.address}
-                  onChange={e => handleChange(["memory", "address"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["memory", "address"], e.target.value)
+                  }
                   placeholder="0x1000"
                 />
               </div>
@@ -872,7 +1302,9 @@ export default function DestinationForm({
                   id="dataType"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.memory.dataType}
-                  onChange={e => handleChange(["memory", "dataType"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["memory", "dataType"], e.target.value)
+                  }
                 >
                   <option value="int16">int16</option>
                   <option value="int32">int32</option>
@@ -882,14 +1314,17 @@ export default function DestinationForm({
                   <option value="ascii">ascii</option>
                 </select>
               </div>
-              {(values.memory.dataType === "string" || values.memory.dataType === "ascii") && (
+              {(values.memory.dataType === "string" ||
+                values.memory.dataType === "ascii") && (
                 <div className="space-y-2">
                   <Label htmlFor="length">Length</Label>
                   <Input
                     id="length"
                     type="number"
                     value={values.memory.length}
-                    onChange={e => handleChange(["memory", "length"], Number(e.target.value))}
+                    onChange={(e) =>
+                      handleChange(["memory", "length"], Number(e.target.value))
+                    }
                   />
                 </div>
               )}
@@ -899,7 +1334,9 @@ export default function DestinationForm({
                   id="endianness"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.memory.endianness}
-                  onChange={e => handleChange(["memory", "endianness"], e.target.value)}
+                  onChange={(e) =>
+                    handleChange(["memory", "endianness"], e.target.value)
+                  }
                 >
                   <option value="little">Little Endian</option>
                   <option value="big">Big Endian</option>
@@ -920,7 +1357,12 @@ export default function DestinationForm({
                 type="checkbox"
                 id="scalingEnabled"
                 checked={values.memory.scaling.enabled}
-                onChange={e => handleChange(["memory", "scaling", "enabled"], e.target.checked)}
+                onChange={(e) =>
+                  handleChange(
+                    ["memory", "scaling", "enabled"],
+                    e.target.checked
+                  )
+                }
                 className="rounded"
               />
               <Label htmlFor="scalingEnabled">Enable Scaling</Label>
@@ -935,7 +1377,12 @@ export default function DestinationForm({
                       type="number"
                       step="0.1"
                       value={values.memory.scaling.factor}
-                      onChange={e => handleChange(["memory", "scaling", "factor"], Number(e.target.value))}
+                      onChange={(e) =>
+                        handleChange(
+                          ["memory", "scaling", "factor"],
+                          Number(e.target.value)
+                        )
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -945,7 +1392,12 @@ export default function DestinationForm({
                       type="number"
                       step="0.1"
                       value={values.memory.scaling.offset}
-                      onChange={e => handleChange(["memory", "scaling", "offset"], Number(e.target.value))}
+                      onChange={(e) =>
+                        handleChange(
+                          ["memory", "scaling", "offset"],
+                          Number(e.target.value)
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -961,21 +1413,13 @@ export default function DestinationForm({
     <div className="space-y-6">
       {formFields}
       <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>
+        <Button variant="outline" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button 
-          type="submit" 
-          disabled={saving || !values.name}
-          onClick={(e) => {
-            e.preventDefault();
-            setSaving(true);
-            onSubmit({ ...values, id: values.id || uuidv4(), type });
-          }}
-        >
-          {saving ? "Saving..." : "Save Destination"}
+        <Button onClick={handleSubmit} disabled={saving}>
+          {saving ? "Saving..." : "Save"}
         </Button>
       </div>
     </div>
   );
-} 
+}
