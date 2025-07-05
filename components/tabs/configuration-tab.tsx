@@ -1,24 +1,31 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Code2, Upload, Download, RefreshCw, Send } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { useConfigStore } from "@/lib/stores/configuration-store"
-import { toast } from "sonner"
-import { defaultConfig } from "@/lib/config/default-config"
-import MonacoEditor from '@/components/monaco-editor'
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import YAML from 'yaml'
+import { useState, useEffect } from "react";
+import { Code2, Upload, Download, RefreshCw, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
+import { useConfigStore } from "@/lib/stores/configuration-store";
+import { toast } from "sonner";
+import { defaultConfig } from "@/lib/config/default-config";
+import MonacoEditor from "@/components/monaco-editor";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import YAML from "yaml";
 
 export default function ConfigurationTab() {
-  const { getYamlString, getLastUpdated, updateConfig } = useConfigStore()
-  const [isDeploying, setIsDeploying] = useState(false)
-  const [isResetting, setIsResetting] = useState(false)
-  const [editorContent, setEditorContent] = useState("")
-  const [isEditorReady, setIsEditorReady] = useState(false)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [isConfigValid, setIsConfigValid] = useState(true)
+  const { getYamlString, getLastUpdated, updateConfig } = useConfigStore();
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [editorContent, setEditorContent] = useState("");
+  const [isEditorReady, setIsEditorReady] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isConfigValid, setIsConfigValid] = useState(true);
 
   useEffect(() => {
     setEditorContent(getYamlString());
@@ -26,96 +33,99 @@ export default function ConfigurationTab() {
   }, []);
 
   const handleEditorDidMount = () => {
-    setIsEditorReady(true)
-  }
+    setIsEditorReady(true);
+  };
 
   const handleEditorChange = (value: string | undefined) => {
-    setEditorContent(value || "")
-    setHasUnsavedChanges(true)
+    setEditorContent(value || "");
+    setHasUnsavedChanges(true);
     try {
-      YAML.parse(value || "")
-      setIsConfigValid(true)
+      YAML.parse(value || "");
+      setIsConfigValid(true);
     } catch (error) {
-      setIsConfigValid(false)
+      setIsConfigValid(false);
     }
-  }
+  };
 
   const handleDeploy = async () => {
-    setIsDeploying(true)
+    setIsDeploying(true);
     try {
-      const response = await fetch("/api/deploy-config", {
+      const response = await fetch("/api/config/import", {
         method: "POST",
         headers: { "Content-Type": "text/yaml" },
-        body: editorContent,
+        body: editorContent, // raw YAML string from editor
       });
+
       if (!response.ok) throw new Error("Failed to deploy");
-      toast.success("Configuration deployed and stored in database!");
+
+      toast.success("Configuration deployed and stored in memory!");
     } catch (error) {
       toast.error("Failed to deploy configuration", {
         description: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setIsDeploying(false)
+      setIsDeploying(false);
     }
-  }
+  };
 
   const handleReset = async () => {
-    setIsResetting(true)
+    setIsResetting(true);
     try {
       // Force reset to default configuration
-      updateConfig([], defaultConfig)
-      setEditorContent(getYamlString()) // Update editor content
-      
-      toast.success('Configuration reset to default state', {
+      updateConfig([], defaultConfig);
+      setEditorContent(getYamlString()); // Update editor content
+
+      toast.success("Configuration reset to default state", {
         description: "All settings have been restored to factory defaults",
         duration: 3000,
-      })
+      });
     } catch (error) {
-      console.error('Error resetting configuration:', error)
-      toast.error('Failed to reset configuration', {
-        description: "Please try again or contact support if the issue persists",
+      console.error("Error resetting configuration:", error);
+      toast.error("Failed to reset configuration", {
+        description:
+          "Please try again or contact support if the issue persists",
         duration: 5000,
-      })
+      });
     } finally {
-      setIsResetting(false)
+      setIsResetting(false);
     }
-  }
+  };
 
   const handleSave = async () => {
     try {
-      const parsedConfig = YAML.parse(editorContent)
-      updateConfig([], parsedConfig)
-      setHasUnsavedChanges(false)
-      
-      toast.success('Configuration saved successfully', {
+      const parsedConfig = YAML.parse(editorContent);
+      updateConfig([], parsedConfig);
+      setHasUnsavedChanges(false);
+
+      toast.success("Configuration saved successfully", {
         description: "Your changes have been applied",
         duration: 3000,
-      })
+      });
     } catch (error) {
-      console.error('Error saving configuration:', error)
-      toast.error('Invalid YAML configuration', {
+      console.error("Error saving configuration:", error);
+      toast.error("Invalid YAML configuration", {
         description: "Please check your syntax and try again",
         duration: 5000,
-      })
+      });
     }
-  }
+  };
 
   const handleFormat = () => {
     try {
-      const parsedYaml = YAML.parse(editorContent)
-      const formattedYaml = YAML.stringify(parsedYaml, { indent: 2 })
-      setEditorContent(formattedYaml)
-      
-      toast.success('YAML formatted successfully', {
+      const parsedYaml = YAML.parse(editorContent);
+      const formattedYaml = YAML.stringify(parsedYaml, { indent: 2 });
+      setEditorContent(formattedYaml);
+
+      toast.success("YAML formatted successfully", {
         duration: 2000,
-      })
+      });
     } catch (error) {
-      toast.error('Failed to format YAML', {
+      toast.error("Failed to format YAML", {
         description: "Invalid YAML syntax",
         duration: 3000,
-      })
+      });
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -129,8 +139,8 @@ export default function ConfigurationTab() {
         <CardContent className="space-y-4">
           <div className="flex justify-between items-center mb-4">
             <div className="space-x-2">
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={handleReset}
                 disabled={isResetting || isDeploying}
               >
@@ -140,21 +150,21 @@ export default function ConfigurationTab() {
                     Resetting...
                   </>
                 ) : (
-                  'Reset to Default'
+                  "Reset to Default"
                 )}
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => {
-                  const blob = new Blob([editorContent], { type: 'text/yaml' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = 'device-config.yaml'
-                  a.click()
-                  URL.revokeObjectURL(url)
-                  
-                  toast.success('Configuration downloaded')
+                  const blob = new Blob([editorContent], { type: "text/yaml" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "device-config.yaml";
+                  a.click();
+                  URL.revokeObjectURL(url);
+
+                  toast.success("Configuration downloaded");
                 }}
               >
                 <Download className="h-4 w-4 mr-2" />
@@ -162,7 +172,7 @@ export default function ConfigurationTab() {
               </Button>
             </div>
             <div className="space-x-2">
-              <Button 
+              <Button
                 variant="outline"
                 onClick={handleFormat}
                 disabled={!isEditorReady}
@@ -170,14 +180,16 @@ export default function ConfigurationTab() {
                 <Code2 className="h-4 w-4 mr-2" />
                 Format
               </Button>
-              <Button 
+              <Button
                 variant="default"
                 onClick={handleSave}
-                disabled={!isEditorReady || !hasUnsavedChanges || !isConfigValid}
+                disabled={
+                  !isEditorReady || !hasUnsavedChanges || !isConfigValid
+                }
               >
                 Save Changes
               </Button>
-              <Button 
+              <Button
                 variant="default"
                 onClick={handleDeploy}
                 disabled={isDeploying || !isConfigValid}
@@ -218,9 +230,13 @@ export default function ConfigurationTab() {
 
           <Alert>
             <AlertDescription className="flex justify-between items-center">
-              <span>Last updated: {new Date(getLastUpdated()).toLocaleString()}</span>
+              <span>
+                Last updated: {new Date(getLastUpdated()).toLocaleString()}
+              </span>
               {hasUnsavedChanges && (
-                <span className="text-yellow-500">You have unsaved changes</span>
+                <span className="text-yellow-500">
+                  You have unsaved changes
+                </span>
               )}
               {!isConfigValid && (
                 <span className="text-red-500">Invalid YAML configuration</span>
@@ -230,5 +246,5 @@ export default function ConfigurationTab() {
         </CardContent>
       </Card>
     </div>
-  )
-} 
+  );
+}
