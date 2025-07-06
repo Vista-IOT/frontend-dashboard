@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -94,7 +93,6 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
   );
   const [rts, setRts] = useState(existingConfig?.serialSettings?.rts ?? false);
   const [dtr, setDtr] = useState(existingConfig?.serialSettings?.dtr ?? false);
-  const [availablePorts, setAvailablePorts] = useState<string[]>([]);
 
   // Check if the selected type is a serial port type
   const isSerialType = useMemo(() => {
@@ -108,25 +106,6 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
     ].includes(type);
   }, [type]);
   const [errors, setErrors] = useState<{ name?: string; type?: string }>({});
-  useEffect(() => {
-    const fetchPorts = async () => {
-      try {
-        const res = await fetch("/api/ports");
-        const data = await res.json();
-        const ports = data.serial_ports.map((port: any) => port.device);
-        setAvailablePorts(ports);
-      } catch (err) {
-        console.error("Failed to fetch ports:", err);
-      }
-    };
-
-    // Call initially
-    fetchPorts();
-
-    // Watch for USB device changes
-    const interval = setInterval(fetchPorts, 2000); // refresh every 2 sec
-    return () => clearInterval(interval); // cleanup
-  }, []);
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -383,21 +362,15 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                 <div className="space-y-2">
                   <Label htmlFor="serialPort">Port</Label>
                   <Select value={serialPort} onValueChange={setSerialPort}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a port" />
+                    <SelectTrigger id="serialPort">
+                      <SelectValue placeholder="Select port" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availablePorts.length > 0 ? (
-                        availablePorts.map((port) => (
-                          <SelectItem key={port} value={port}>
-                            {port}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem disabled value="no-ports">
-                          No serial ports found
-                        </SelectItem>
-                      )}
+                      <SelectItem value="COM1">COM1</SelectItem>
+                      <SelectItem value="COM2">COM2</SelectItem>
+                      <SelectItem value="COM3">COM3</SelectItem>
+                      <SelectItem value="COM4">COM4</SelectItem>
+                      <SelectItem value="miniPCIe/USB">miniPCIe/USB</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

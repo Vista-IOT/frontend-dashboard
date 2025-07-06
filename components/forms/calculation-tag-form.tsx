@@ -276,22 +276,6 @@ export function CalculationTagForm({
       return;
     }
 
-    // 3.5 Prevent same tag used in multiple variables
-    const tagValues = variableFields
-      .map((field) => values[field as keyof FormValues]?.trim())
-      .filter((val) => val !== ""); // Remove empty strings
-
-    const duplicates = tagValues.filter(
-      (item, index) => tagValues.indexOf(item) !== index
-    );
-
-    if (duplicates.length > 0) {
-      toast.error("The same tag cannot be assigned to multiple variables.", {
-        duration: 5000,
-      });
-      return;
-    }
-
     //  All validations passed
     onSubmit(values);
     onCancel();
