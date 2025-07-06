@@ -111,37 +111,100 @@ function TagDialog({
   const handleSubmit = () => {
     setIsNameTouched(true);
 
+    const errors: string[] = [];
+
+    // --- Name Validation ---
     if (!tagName.trim()) {
-      return; // stop submission if name is empty
+      errors.push("Tag name is required.");
+    } else {
+      if (tagName.length < 3) {
+        errors.push("Tag name must be at least 3 characters.");
+      }
+      if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
+        errors.push(
+          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+        );
+      }
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("Tag name cannot start or end with spaces.");
+      }
+      if (/^\d+$/.test(tagName)) {
+        errors.push("Tag name cannot be only numbers.");
+      }
+
+      // Uniqueness
+      const allTags: UserTag[] = getConfig().user_tags;
+      const nameExists = allTags.some(
+        (tag) =>
+          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+          tag.id !== editTag?.id
+      );
+
+      if (nameExists) {
+        errors.push("A tag with this name already exists.");
+      }
     }
 
-    // Get all existing user tags from the store
-    const allTags: UserTag[] = getConfig().user_tags;
+    // --- Data Type Validation ---
+    const validTypes = ["Analog", "Discrete"];
+    if (!validTypes.includes(dataType)) {
+      errors.push("Invalid data type selected.");
+    }
 
-    // Check if the name already exists (excluding the current tag being edited)
-    const nameExists = allTags.some(
-      (tag) =>
-        tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
-        tag.id !== editTag?.id
-    );
+    // --- Analog-specific validations ---
+    if (dataType === "Analog") {
+      const high = parseFloat(spanHigh);
+      const low = parseFloat(spanLow);
+      const defaultVal = parseFloat(defaultValue);
 
-    if (nameExists) {
-      // Show some UI feedback, like an alert or toast
-      console.log("Triggering toast...");
-      toast.error("A tag with this name already exists.", {
-        duration: 5000,
-      });
+      if (isNaN(high) || isNaN(low)) {
+        errors.push("Span High and Span Low must be valid numbers.");
+      } else if (low >= high) {
+        errors.push("Span Low must be less than Span High.");
+      }
 
+      if (isNaN(defaultVal)) {
+        errors.push("Default value must be a valid number.");
+      }
+    }
+
+    // --- Discrete-specific validations ---
+    if (dataType === "Discrete") {
+      if (!descriptor0.trim() || !descriptor1.trim()) {
+        errors.push("Both descriptors are required for Discrete tags.");
+      }
+      if (descriptor0.length > 25 || descriptor1.length > 25) {
+        errors.push("Descriptors should be under 25 characters.");
+      }
+    }
+
+    // --- Description validation (optional) ---
+    if (description && description.length > 100) {
+      errors.push("Description should not exceed 100 characters.");
+    }
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      errors.push("Description must contain letters or numbers.");
+    }
+
+    // --- Display errors ---
+    if (errors.length > 0) {
+      errors.forEach((err) =>
+        toast.error(err, {
+          duration: 4000,
+        })
+      );
       return;
     }
 
+    // --- Construct Tag Object ---
     const tagData = {
       id: editTag ? editTag.id : Date.now(),
       name: tagName,
       dataType: dataType,
-      defaultValue: dataType === "Analog" ? defaultValue : discreteValue,
-      spanHigh: dataType === "Analog" ? spanHigh : "1",
-      spanLow: dataType === "Analog" ? spanLow : "0",
+      defaultValue:
+        dataType === "Analog" ? parseFloat(defaultValue) : discreteValue,
+      spanHigh: dataType === "Analog" ? parseFloat(spanHigh) : "1",
+      spanLow: dataType === "Analog" ? parseFloat(spanLow) : "0",
       descriptor0: dataType === "Discrete" ? descriptor0 : "",
       descriptor1: dataType === "Discrete" ? descriptor1 : "",
       readWrite: readWrite,

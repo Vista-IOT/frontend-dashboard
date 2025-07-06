@@ -91,25 +91,69 @@ function StatsTagDialog({
   };
 
   const handleSubmit = () => {
-    if (!tagName || !referTag) {
-      alert("Please fill in both the Name and Refer Tag fields.");
+    const errors: string[] = [];
+
+    // --- Tag name validation ---
+    if (!tagName.trim()) {
+      errors.push("Stats tag name is required.");
+    } else {
+      if (tagName.length < 3) {
+        errors.push("Stats tag name must be at least 3 characters.");
+      }
+      if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
+        errors.push(
+          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+        );
+      }
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("Tag name cannot start or end with spaces.");
+      }
+      if (/^\d+$/.test(tagName)) {
+        errors.push("Tag name cannot be only numbers.");
+      }
+
+      const nameExists = statsTags.some(
+        (tag) =>
+          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+          tag.id !== editTag?.id
+      );
+      if (nameExists) {
+        errors.push("A stats tag with this name already exists.");
+      }
+    }
+
+    // --- Refer tag validation ---
+    if (!referTag.trim()) {
+      errors.push("Refer Tag is required.");
+    }
+
+    // --- Update Cycle validation ---
+    if (
+      updateCycle !== "" &&
+      (!/^\d+$/.test(updateCycle) || parseInt(updateCycle) <= 0)
+    ) {
+      errors.push("Update cycle must be a positive number.");
+    }
+
+    // --- Description validation ---
+    if (description && description.length > 100) {
+      errors.push("Description should not exceed 100 characters.");
+    }
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      errors.push("Description should contain letters or numbers.");
+    }
+
+    // --- Display errors if any ---
+    if (errors.length > 0) {
+      errors.forEach((err) =>
+        toast.error(err, {
+          duration: 4000,
+        })
+      );
       return;
     }
 
-    // Check if the name already exists (excluding the current tag being edited)
-    const nameExists = statsTags.some(
-      (tag) =>
-        tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
-        tag.id !== editTag?.id
-    );
-
-    if (nameExists) {
-      toast.error("A stats tag with this name already exists.", {
-        duration: 5000,
-      });
-      return;
-    }
-
+    // --- All validations passed ---
     const tagData = {
       id: editTag ? editTag.id : Date.now(),
       name: tagName,
@@ -119,6 +163,7 @@ function StatsTagDialog({
       updateUnit: updateUnit,
       description: description,
     };
+
     onSaveTag(tagData, !!editTag);
     onOpenChange(false);
   };

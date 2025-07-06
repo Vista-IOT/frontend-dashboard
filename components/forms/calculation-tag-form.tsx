@@ -257,11 +257,25 @@ export function CalculationTagForm({
       return;
     }
 
-    // 4. (Optional) Formula basic validation - can be extended to regex
-    const hasInvalidCharacters = /[^a-zA-Z0-9+\-*/().]/.test(values.formula);
+    // 4. Formula validation
+    const formula = values.formula.trim();
 
-    if (hasInvalidCharacters) {
-      toast.error("Formula contains invalid characters.", {
+    // Reject any characters that are NOT: a–h (case-insensitive), numbers, + - * / . ( )
+    const invalidFormula = /[^a-hA-H0-9+\-*/().]/.test(formula);
+    if (invalidFormula) {
+      toast.error(
+        "Formula can only contain letters A–H, numbers, and operators (+, -, *, /, (, )).",
+        {
+          duration: 5000,
+        }
+      );
+      return;
+    }
+
+    // Reject letters outside A–H (e.g., x, y, z, m, etc.)
+    const disallowedLetters = formula.match(/[i-zI-Z]/g);
+    if (disallowedLetters) {
+      toast.error("Formula can only include variables A–H.", {
         duration: 5000,
       });
       return;

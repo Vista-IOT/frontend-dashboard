@@ -58,40 +58,6 @@ export const deviceConfigSchema = z.object({
   ),
 });
 
-// Example object that follows the DeviceConfig shape
-// const config = {
-//   id: "dev001",
-//   enabled: true,
-//   name: "Sensor A",
-//   deviceType: "Modbus RTU",
-//   unitNumber: 5,
-//   tagWriteType: "Bit",
-//   description: "Main Modbus sensor",
-//   addDeviceNameAsPrefix: true,
-//   useAsciiProtocol: 1,
-//   packetDelay: 10,
-//   digitalBlockSize: 32,
-//   analogBlockSize: 16,
-//   tags: [
-//     {
-//       id: "tag001",
-//       name: "Voltage",
-//       dataType: "Analog",
-//       address: "40001",
-//       description: "Reads voltage",
-//     },
-//   ],
-// };
-
-// const result = deviceConfigSchema.safeParse(config);
-
-// if (!result.success) {
-//   console.error("❌ Validation failed:", result.error.format());
-// } else {
-//   console.log("✅ Valid config:", result.data);
-//   // Save to localStorage, DB, or send to backend
-// }
-
 export interface DeviceConfig {
   id: string;
   enabled: boolean;
@@ -207,13 +173,69 @@ export function DeviceForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (nameError) {
-      toast.error("Provide a valid and unique device name", {
+    // --- Name validation ---
+    if (nameError || !name.trim()) {
+      toast.error("Provide a valid and unique device name.", {
         duration: 5000,
       });
       return;
     }
 
+    if (name.length < 3) {
+      toast.error("Device name must be at least 3 characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9-_]+$/.test(name)) {
+      toast.error(
+        "Device name can only contain letters, numbers, hyphens (-), and underscores (_).",
+        {
+          duration: 5000,
+        }
+      );
+      return;
+    }
+
+    if (/^\s|\s$/.test(name)) {
+      toast.error("Device name cannot start or end with a space.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (/^\d+$/.test(name)) {
+      toast.error("Device name cannot be all numbers.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Unit Number validation ---
+    if (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247) {
+      toast.error("Unit number must be an integer between 1 and 247.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Description validation ---
+    if (description && description.length > 100) {
+      toast.error("Description should not exceed 100 characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      toast.error("Description should include some letters or numbers.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Port existence check ---
     const ports = getConfig().io_setup?.ports || [];
     const thisPort = ports.find((p) => p.id === portId);
 
@@ -224,8 +246,9 @@ export function DeviceForm({
       return;
     }
 
+    // --- Unit number conflict check ---
     const unitConflict = thisPort.devices.some(
-      (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id // allow if editing same device
+      (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id
     );
 
     if (unitConflict) {
@@ -235,6 +258,7 @@ export function DeviceForm({
       return;
     }
 
+    // --- Construct new device config ---
     const newDeviceConfig: DeviceConfig = {
       id: existingConfig?.id || `device-${Date.now()}`,
       enabled,
@@ -248,7 +272,7 @@ export function DeviceForm({
       packetDelay,
       digitalBlockSize,
       analogBlockSize,
-      tags: existingConfig?.tags || [], // Initialize tags array
+      tags: existingConfig?.tags || [],
     };
 
     if (onSubmit) {

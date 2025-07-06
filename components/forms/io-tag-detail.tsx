@@ -223,6 +223,40 @@ export function IOTagDetailView({
 
   const handleSaveTag = (newTag: IOTag) => {
     const existingTags = tagsToDisplay || [];
+
+    // --- Tag name validations ---
+    if (!newTag.name.trim()) {
+      toast.error("Tag name is required.", { duration: 5000 });
+      return;
+    }
+
+    if (newTag.name.length < 3) {
+      toast.error("Tag name must be at least 3 characters long.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9-_]+$/.test(newTag.name)) {
+      toast.error(
+        "Tag name can only contain letters, numbers, hyphens (-), and underscores (_).",
+        { duration: 5000 }
+      );
+      return;
+    }
+
+    if (/^\d+$/.test(newTag.name)) {
+      toast.error("Tag name cannot be all numbers.", { duration: 5000 });
+      return;
+    }
+
+    if (/^\s|\s$/.test(newTag.name)) {
+      toast.error("Tag name cannot start or end with spaces.", {
+        duration: 5000,
+      });
+      return;
+    }
+
     const duplicateNameExists = existingTags.some(
       (tag: IOTag) =>
         tag.name.trim().toLowerCase() === newTag.name.trim().toLowerCase() &&
@@ -236,56 +270,65 @@ export function IOTagDetailView({
       return;
     }
 
+    const addressNum = Number(newTag.address);
+
+    // --- Address validation ---
+    if (!Number.isInteger(addressNum) || addressNum < 0) {
+      toast.error("Address must be a non-negative integer.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // // --- Data Type validation ---
+    // const validDataTypes = ["BOOL", "INT", "FLOAT", "UINT", "STRING"]; // Update to match your app
+    // if (!validDataTypes.includes(newTag.dataType)) {
+    //   toast.error(`Invalid data type: ${newTag.dataType}`, { duration: 5000 });
+    //   return;
+    // }
+
+    // --- Description validation ---
+    if (newTag.description && newTag.description.length > 100) {
+      toast.error("Description should not exceed 100 characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Proceed with update ---
     let updatedTags: IOTag[];
 
     if (editingTag) {
-      // Duplicate name check before updating or adding
-
-      // Update existing tag
       updatedTags = (tagsToDisplay || []).map((tag: IOTag) =>
         tag.id === editingTag.id ? newTag : tag
       );
 
-      toast.success(`Sucessfully updated tag`, {
-        duration: 5000,
-      });
+      toast.success("Successfully updated tag", { duration: 5000 });
     } else {
-      // Add new tag
       updatedTags = [...(tagsToDisplay || []), newTag];
 
-      toast.success(`Sucessfully added tag`, {
-        duration: 5000,
-      });
+      toast.success("Successfully added tag", { duration: 5000 });
     }
 
-    // Update global store
     const allPortsFromStore: IOPortConfig[] = getConfig().io_setup?.ports || [];
-    const portIndex = allPortsFromStore.findIndex(
-      (p: IOPortConfig) => p.id === portId
-    );
+    const portIndex = allPortsFromStore.findIndex((p) => p.id === portId);
 
     if (portIndex === -1) {
-      toast.error(`Port ${portId} not found.`, {
-        duration: 5000,
-      });
-
+      toast.error(`Port ${portId} not found.`, { duration: 5000 });
       setTagFormOpen(false);
       return;
     }
 
     const targetPort = { ...allPortsFromStore[portIndex] };
     const deviceIndex = targetPort.devices.findIndex(
-      (d: DeviceConfig) => d.id === deviceToDisplay.id
+      (d) => d.id === deviceToDisplay.id
     );
 
     if (deviceIndex === -1) {
       toast.error(
         `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
-        {
-          duration: 5000,
-        }
+        { duration: 5000 }
       );
-
       setTagFormOpen(false);
       return;
     }
@@ -296,9 +339,11 @@ export function IOTagDetailView({
     targetPort.devices = targetPort.devices.map((d: DeviceConfig) =>
       d.id === deviceToDisplay.id ? targetDeviceToUpdate : d
     );
+
     const finalUpdatedPorts = allPortsFromStore.map((p: IOPortConfig) =>
       p.id === portId ? targetPort : p
     );
+
     updateConfig(["io_setup", "ports"], finalUpdatedPorts);
     localStorage.setItem("io_ports_data", JSON.stringify(finalUpdatedPorts));
 
