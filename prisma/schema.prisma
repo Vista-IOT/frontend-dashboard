@@ -11,126 +11,126 @@ datasource db {
 }
 
 model IOPort {
-  id             String   @id @default(cuid())
-  type           String
-  name           String
-  description    String?
-  scanTime       Int?
-  timeOut        Int?
-  retryCount     Int?
+  id              String   @id @default(cuid())
+  type            String
+  name            String
+  description     String?
+  scanTime        Int?
+  timeOut         Int?
+  retryCount      Int?
   autoRecoverTime Int?
-  scanMode       String?
-  enabled        Boolean  @default(true)
-  serialSettings String?  // JSON string for serial settings
-  devices        Device[]
+  scanMode        String?
+  enabled         Boolean  @default(true)
+  serialSettings  String? // JSON string for serial settings
+  devices         Device[]
 }
 
 model Device {
-  id                    String   @id @default(cuid())
+  id                    String  @id @default(cuid())
   ioPortId              String
-  ioPort                IOPort   @relation(fields: [ioPortId], references: [id])
-  enabled               Boolean  @default(true)
+  ioPort                IOPort  @relation(fields: [ioPortId], references: [id])
+  enabled               Boolean @default(true)
   name                  String
   deviceType            String
   unitNumber            Int
   tagWriteType          String
   description           String?
-  addDeviceNameAsPrefix Boolean  @default(true)
-  useAsciiProtocol      Int      @default(0)
-  packetDelay           Int      @default(20)
-  digitalBlockSize      Int      @default(512)
-  analogBlockSize       Int      @default(64)
+  addDeviceNameAsPrefix Boolean @default(true)
+  useAsciiProtocol      Int     @default(0)
+  packetDelay           Int     @default(20)
+  digitalBlockSize      Int     @default(512)
+  analogBlockSize       Int     @default(64)
   tags                  IOTag[]
 }
 
 model IOTag {
-  id              String   @id
-  deviceId        String
-  device          Device   @relation(fields: [deviceId], references: [id])
-  name            String
-  dataType        String
-  registerType    String?
-  conversionType  String?
-  address         String
-  startBit        Int?
-  lengthBit       Int?
-  spanLow         Int?
-  spanHigh        Int?
-  defaultValue    Int?
-  scanRate        Int?
-  readWrite       String?
-  description     String?
-  scaleType       String?
-  formula         String?
-  scale           Float?
-  offset          Float?
-  clampToLow      Boolean?
-  clampToHigh     Boolean?
-  clampToZero     Boolean?
-  aRefs           CalculationTag[] @relation("ARef")
-  bRefs           CalculationTag[] @relation("BRef")
-  cRefs           CalculationTag[] @relation("CRef")
-  dRefs           CalculationTag[] @relation("DRef")
-  eRefs           CalculationTag[] @relation("ERef")
-  fRefs           CalculationTag[] @relation("FRef")
-  gRefs           CalculationTag[] @relation("GRef")
-  hRefs           CalculationTag[] @relation("HRef")
-  statsTagRefs    StatsTag[]
+  id             String           @id
+  deviceId       String
+  device         Device           @relation(fields: [deviceId], references: [id])
+  name           String
+  dataType       String
+  registerType   String?
+  conversionType String?
+  address        String
+  startBit       Int?
+  lengthBit      Int?
+  spanLow        Int?
+  spanHigh       Int?
+  defaultValue   Int?
+  scanRate       Int?
+  readWrite      String?
+  description    String?
+  scaleType      String?
+  formula        String?
+  scale          Float?
+  offset         Float?
+  clampToLow     Boolean?
+  clampToHigh    Boolean?
+  clampToZero    Boolean?
+  aRefs          CalculationTag[] @relation("ARef")
+  bRefs          CalculationTag[] @relation("BRef")
+  cRefs          CalculationTag[] @relation("CRef")
+  dRefs          CalculationTag[] @relation("DRef")
+  eRefs          CalculationTag[] @relation("ERef")
+  fRefs          CalculationTag[] @relation("FRef")
+  gRefs          CalculationTag[] @relation("GRef")
+  hRefs          CalculationTag[] @relation("HRef")
+  statsTagRefs   StatsTag[]
 }
 
 model UserTag {
-  id          String   @id @default(cuid())
-  name        String
-  dataType    String
+  id           String  @id @default(cuid())
+  name         String
+  dataType     String
   defaultValue Int
-  spanHigh    Int
-  spanLow     Int
-  readWrite   String
-  description String?
+  spanHigh     Int
+  spanLow      Int
+  readWrite    String
+  description  String?
 }
 
 model CalculationTag {
-  id          String   @id
-  name        String
+  id           String   @id
+  name         String
   defaultValue Int?
-  formula     String?
-  a           String?  // Original reference string (e.g., "Device:Tag")
-  b           String?
-  c           String?
-  d           String?
-  e           String?
-  f           String?
-  g           String?
-  h           String?
-  aTagId      String?  // Normalized FK to IOTag
-  bTagId      String?
-  cTagId      String?
-  dTagId      String?
-  eTagId      String?
-  fTagId      String?
-  gTagId      String?
-  hTagId      String?
-  aTag        IOTag?   @relation("ARef", fields: [aTagId], references: [id])
-  bTag        IOTag?   @relation("BRef", fields: [bTagId], references: [id])
-  cTag        IOTag?   @relation("CRef", fields: [cTagId], references: [id])
-  dTag        IOTag?   @relation("DRef", fields: [dTagId], references: [id])
-  eTag        IOTag?   @relation("ERef", fields: [eTagId], references: [id])
-  fTag        IOTag?   @relation("FRef", fields: [fTagId], references: [id])
-  gTag        IOTag?   @relation("GRef", fields: [gTagId], references: [id])
-  hTag        IOTag?   @relation("HRef", fields: [hTagId], references: [id])
-  period      Int?
-  readWrite   String?
-  spanHigh    Int?
-  spanLow     Int?
-  isParent    Boolean?
-  description String?
+  formula      String?
+  a            String? // Original reference string (e.g., "Device:Tag")
+  b            String?
+  c            String?
+  d            String?
+  e            String?
+  f            String?
+  g            String?
+  h            String?
+  aTagId       String? // Normalized FK to IOTag
+  bTagId       String?
+  cTagId       String?
+  dTagId       String?
+  eTagId       String?
+  fTagId       String?
+  gTagId       String?
+  hTagId       String?
+  aTag         IOTag?   @relation("ARef", fields: [aTagId], references: [id])
+  bTag         IOTag?   @relation("BRef", fields: [bTagId], references: [id])
+  cTag         IOTag?   @relation("CRef", fields: [cTagId], references: [id])
+  dTag         IOTag?   @relation("DRef", fields: [dTagId], references: [id])
+  eTag         IOTag?   @relation("ERef", fields: [eTagId], references: [id])
+  fTag         IOTag?   @relation("FRef", fields: [fTagId], references: [id])
+  gTag         IOTag?   @relation("GRef", fields: [gTagId], references: [id])
+  hTag         IOTag?   @relation("HRef", fields: [hTagId], references: [id])
+  period       Int?
+  readWrite    String?
+  spanHigh     Int?
+  spanLow      Int?
+  isParent     Boolean?
+  description  String?
 }
 
 model StatsTag {
-  id               String   @id
+  id               String  @id
   name             String
-  referTagId       String   // Required FK to IOTag
-  referTagObj      IOTag    @relation(fields: [referTagId], references: [id])
+  referTagId       String // Required FK to IOTag
+  referTagObj      IOTag   @relation(fields: [referTagId], references: [id])
   type             String
   updateCycleValue Int
   updateCycleUnit  String
@@ -138,7 +138,7 @@ model StatsTag {
 }
 
 model SystemTag {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   dataType    String
   unit        String
@@ -149,7 +149,7 @@ model SystemTag {
 
 model ConfigSnapshot {
   id        String   @id @default(cuid())
-  raw       String   // Raw YAML or JSON config
+  raw       String // Raw YAML or JSON config
   createdAt DateTime @default(now())
   // Optionally, add userId, version, or other metadata fields
 }
@@ -161,35 +161,48 @@ model CommunicationBridge {
 }
 
 model BridgeBlock {
-  id            String              @id
-  bridgeId      String
-  bridge        CommunicationBridge @relation(fields: [bridgeId], references: [id], onDelete: Cascade)
-  type          String
-  subType       String?
-  label         String
-  configJson    String // Storing config for source, intermediate, or custom destination
-  createdAt     DateTime            @default(now())
+  id         String              @id
+  bridgeId   String
+  bridge     CommunicationBridge @relation(fields: [bridgeId], references: [id], onDelete: Cascade)
+  type       String
+  subType    String?
+  label      String
+  configJson String // Storing config for source, intermediate, or custom destination
+  createdAt  DateTime            @default(now())
 
   // Relation to a reusable destination
   destinationId String?
-  destination   Destination?        @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+  destination   Destination? @relation(fields: [destinationId], references: [id], onDelete: SetNull)
 }
 
 model Destination {
-  id           String        @id @default(cuid())
-  name         String
-  type         String
-  description  String?
-  configJson   String // The destination-specific configuration as a JSON string
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  bridgeBlocks BridgeBlock[]
+  id                String             @id @default(cuid())
+  name              String
+  type              String
+  description       String?
+  configJson        String // The destination-specific configuration as a JSON string
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  bridgeBlocks      BridgeBlock[]
+  virtualMemoryMaps VirtualMemoryMap[]
 }
 
 model HardwareMapping {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   type        String
   path        String
   description String?
-} 
+}
+
+model VirtualMemoryMap {
+  id            String      @id @default(cuid())
+  destinationId String
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  address       String
+  dataType      String
+  value         String? // Store as string, can be parsed as needed
+  buffer        String? // JSON or binary buffer as string
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
