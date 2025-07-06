@@ -12,8 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.gateway import IoTGateway
-from .api.router import router as api_router
-from .api.router import gateway_dependency
+from .api.router import api_router, gateway_dependency
 
 # Configure logging
 logging.basicConfig(

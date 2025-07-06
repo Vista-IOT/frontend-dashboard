@@ -112,6 +112,8 @@ export interface Port {
   autoRecoverTime: number;
   scanMode: string;
   serialSettings?: any;
+  hardwareMappingId?: string;
+  hardwareInterface?: string;
 }
 
 import type { IOTag } from "@/lib/stores/configuration-store";
@@ -130,6 +132,7 @@ export default function IOTagManagement({
 }: IOTagManagementProps) {
   const { toast } = useToast();
   const { updateConfig, getConfig } = useConfigStore();
+  const hardwareMappings = getConfig().hardware_mappings || [];
   const [showAddPortForm, setShowAddPortForm] = useState(false);
   const [editingPort, setEditingPort] = useState<Port | null>(null);
   const [showAddDeviceForm, setShowAddDeviceForm] = useState(false);
@@ -614,6 +617,18 @@ export default function IOTagManagement({
                     <div>
                       <p className="text-sm font-medium">Scan Mode</p>
                       <p className="text-sm mt-1">{selectedPort.scanMode}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium">Hardware Source</p>
+                      <p className="text-sm mt-1">
+                        {selectedPort.hardwareMappingId
+                          ? (() => {
+                              const mapping = hardwareMappings.find((m: any) => String(m.id) === selectedPort.hardwareMappingId);
+                              return mapping ? `${mapping.name} (${mapping.type}: ${mapping.path})` : selectedPort.hardwareMappingId;
+                            })()
+                          : selectedPort.hardwareInterface || "-"}
+                      </p>
                     </div>
                   </div>
 

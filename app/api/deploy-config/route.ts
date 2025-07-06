@@ -55,24 +55,50 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Insert Hardware Mappings FIRST
+    if (config?.hardware_mappings && Array.isArray(config.hardware_mappings)) {
+      for (const mapping of config.hardware_mappings) {
+        await prisma.hardwareMapping.create({
+          data: {
+            id: mapping.id?.toString() ?? undefined,
+            name: mapping.name,
+            type: mapping.type,
+            path: mapping.path,
+            description: mapping.description ?? null,
+          },
+        });
+      }
+    }
+
     // Insert IO Ports, Devices, and Tags
     if (config?.io_setup?.ports && Array.isArray(config.io_setup.ports)) {
       for (const port of config.io_setup.ports) {
-        const createdPort = await prisma.iOPort.create({
-          data: {
-            id: port.id,
-            type: port.type,
-            name: port.name,
-            description: port.description ?? '',
-            scanTime: port.scanTime ?? 0,
-            timeOut: port.timeOut ?? 0,
-            retryCount: port.retryCount ?? 0,
-            autoRecoverTime: port.autoRecoverTime ?? 0,
-            scanMode: port.scanMode ?? '',
-            enabled: port.enabled ?? true,
-            serialSettings: port.serialSettings ? JSON.stringify(port.serialSettings) : null,
-          },
-        });
+        const ioPortData: any = {
+          id: port.id,
+          type: port.type,
+          name: port.name,
+          description: port.description ?? '',
+          scanTime: port.scanTime ?? 0,
+          timeOut: port.timeOut ?? 0,
+          retryCount: port.retryCount ?? 0,
+          autoRecoverTime: port.autoRecoverTime ?? 0,
+          scanMode: port.scanMode ?? '',
+          enabled: port.enabled ?? true,
+        };
+
+        if (port.serialSettings) {
+          ioPortData.serialSettings = JSON.stringify(port.serialSettings);
+        }
+        if (port.hardwareMappingId) {
+          // Use hardwareMappingId as the primary hardware source
+          ioPortData.hardwareMappingId = port.hardwareMappingId;
+          ioPortData.hardwareInterface = undefined;
+        } else if (port.hardwareInterface) {
+          // Only use hardwareInterface for custom/manual entries
+          ioPortData.hardwareInterface = port.hardwareInterface;
+        }
+
+        const createdPort = await prisma.iOPort.create({ data: ioPortData });
         ioPortCount++;
         if (port.devices && Array.isArray(port.devices)) {
           for (const device of port.devices) {
@@ -233,23 +259,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Insert Hardware Mappings
-    if (config?.hardware_mappings && Array.isArray(config.hardware_mappings)) {
-      for (const mapping of config.hardware_mappings) {
-        await prisma.hardwareMapping.create({
-          data: {
-            name: mapping.name,
-            type: mapping.type,
-            path: mapping.path,
-            description: mapping.description ?? null,
-          },
-        });
-      }
-    }
-
-    // Trigger backend reload/restart (hardcoded to localhost:8000)
+    // Trigger backend reload/restart (use env var for backend URL)
     try {
-      const resp = await fetch('http://localhost:8000/api/restart', {
+      const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const resp = await fetch(`${backendUrl}/api/restart`, {
         method: 'POST',
       });
       // Optionally log the response for debugging

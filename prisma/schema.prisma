@@ -11,18 +11,21 @@ datasource db {
 }
 
 model IOPort {
-  id              String   @id @default(cuid())
-  type            String
-  name            String
-  description     String?
-  scanTime        Int?
-  timeOut         Int?
-  retryCount      Int?
-  autoRecoverTime Int?
-  scanMode        String?
-  enabled         Boolean  @default(true)
-  serialSettings  String? // JSON string for serial settings
-  devices         Device[]
+  id                String   @id @default(cuid())
+  type              String
+  name              String
+  description       String?
+  scanTime          Int?
+  timeOut           Int?
+  retryCount        Int?
+  autoRecoverTime   Int?
+  scanMode          String?
+  enabled           Boolean  @default(true)
+  serialSettings    String?
+  hardwareInterface String?
+  hardwareMappingId String?
+  hardwareMapping   HardwareMapping? @relation(fields: [hardwareMappingId], references: [id])
+  devices           Device[]
 }
 
 model Device {
@@ -193,6 +196,7 @@ model HardwareMapping {
   type        String
   path        String
   description String?
+  ioPorts     IOPort[]
 }
 
 model VirtualMemoryMap {

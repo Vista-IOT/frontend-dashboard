@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,6 +30,11 @@ export function HardwareMappingsTab() {
     path: "",
     description: "",
   });
+  const [hardware, setHardware] = useState<any>(null);
+  const [loadingHardware, setLoadingHardware] = useState(false);
+  const [hardwareError, setHardwareError] = useState<string | null>(null);
+  const [customPathInput, setCustomPathInput] = useState<{ [id: string]: string }>({});
+  const [newTagCustomPath, setNewTagCustomPath] = useState<string>("");
 
   const handleEdit = (id: number) => setEditingId(id);
   const handleCancel = () => setEditingId(null);
@@ -47,6 +52,35 @@ export function HardwareMappingsTab() {
     const updatedMappings = [...hardwareMappings, { ...newTag, id: Date.now() }];
     updateConfig(["hardware_mappings"], updatedMappings);
     setNewTag({ id: Date.now(), name: "", type: "network", path: "", description: "" });
+  };
+
+  useEffect(() => {
+    setLoadingHardware(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    fetch(`${apiBase}/api/hardware/detect`)
+      .then(res => res.json())
+      .then(data => {
+        setHardware(data.data);
+        setLoadingHardware(false);
+      })
+      .catch(err => {
+        setHardwareError("Failed to fetch hardware");
+        setLoadingHardware(false);
+      });
+  }, []);
+
+  const getPathOptions = (type: string): string[] => {
+    if (!hardware) return Array.from(new Set(hardwareMappings.filter(tag => tag.type === type).map(tag => tag.path)));
+    // Detected options
+    let detected: string[] = [];
+    if (type === "network") detected = (hardware.network_interfaces as Array<any>)?.map((iface) => iface.name) || [];
+    if (type === "serial") detected = (hardware.serial_ports as Array<any>)?.map((port) => port.path) || [];
+    if (type === "gpio") detected = (hardware.gpio?.gpio_chips as Array<any>)?.map((chip) => chip.path) || [];
+    if (type === "usb") detected = (hardware.usb_devices as Array<any>)?.map((dev) => dev.path) || [];
+    // Already-used config values for this type
+    const used = hardwareMappings.filter(tag => tag.type === type).map(tag => tag.path);
+    // Merge and deduplicate
+    return Array.from(new Set([...detected, ...used]));
   };
 
   return (
@@ -100,12 +134,42 @@ export function HardwareMappingsTab() {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          value={tag.path}
-                          onChange={e => handleSave(tag.id, { ...tag, path: e.target.value })}
-                          className="h-8"
-                          placeholder="e.g. eth0, /dev/ttyUSB0"
-                        />
+                        {loadingHardware ? (
+                          <span>Loading...</span>
+                        ) : (
+                          <Select
+                            value={tag.path === "__custom__" ? "__custom__" : tag.path}
+                            onValueChange={value => {
+                              if (value === "__custom__") {
+                                handleSave(tag.id, { ...tag, path: value });
+                              } else {
+                                handleSave(tag.id, { ...tag, path: value });
+                                setCustomPathInput((prev) => ({ ...prev, [tag.id]: "" }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Select or enter path" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getPathOptions(tag.type).map((opt: string) => (
+                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                              ))}
+                              <SelectItem value="__custom__">Custom...</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {tag.path === "__custom__" && (
+                          <Input
+                            value={customPathInput[tag.id] || ""}
+                            onChange={e => {
+                              setCustomPathInput(prev => ({ ...prev, [tag.id]: e.target.value }));
+                              handleSave(tag.id, { ...tag, path: e.target.value });
+                            }}
+                            placeholder="Enter custom path"
+                            className="h-8 mt-1"
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         <Input
@@ -198,12 +262,42 @@ export function HardwareMappingsTab() {
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Input
-                    value={newTag.path}
-                    onChange={e => setNewTag(t => ({ ...t, path: e.target.value }))}
-                    placeholder="e.g. eth0, /dev/ttyUSB0"
-                    className="h-8 border-dashed"
-                  />
+                  {loadingHardware ? (
+                    <span>Loading...</span>
+                  ) : (
+                    <Select
+                      value={newTag.path === "__custom__" ? "__custom__" : newTag.path}
+                      onValueChange={value => {
+                        if (value === "__custom__") {
+                          setNewTag(t => ({ ...t, path: value }));
+                        } else {
+                          setNewTag(t => ({ ...t, path: value }));
+                          setNewTagCustomPath("");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 border-dashed">
+                        <SelectValue placeholder="Select or enter path" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getPathOptions(newTag.type).map((opt: string) => (
+                          <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">Custom...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {newTag.path === "__custom__" && (
+                    <Input
+                      value={newTagCustomPath}
+                      onChange={e => {
+                        setNewTagCustomPath(e.target.value);
+                        setNewTag(t => ({ ...t, path: e.target.value }));
+                      }}
+                      placeholder="Enter custom path"
+                      className="h-8 mt-1"
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   <Input

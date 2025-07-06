@@ -299,6 +299,36 @@ export const comprehensiveConfig: ConfigSchema = {
       location: "remote",
     },
   },
+  hardware_mappings: [
+    {
+      id: "hm-serial-1",
+      name: "Serial Main",
+      type: "serial",
+      path: "/dev/ttyS1",
+      description: "Main RS-232 port"
+    },
+    {
+      id: "hm-serial-2",
+      name: "Serial Secondary",
+      type: "serial",
+      path: "/dev/ttyUSB0",
+      description: "USB Serial Adapter"
+    },
+    {
+      id: "hm-net-1",
+      name: "Network Main",
+      type: "network",
+      path: "eth0",
+      description: "Primary Ethernet interface"
+    },
+    {
+      id: "hm-wifi-1",
+      name: "WiFi",
+      type: "network",
+      path: "wlan0",
+      description: "WiFi interface"
+    }
+  ],
   io_setup: {
     ports: [
       {
@@ -312,8 +342,9 @@ export const comprehensiveConfig: ConfigSchema = {
         autoRecoverTime: 10,
         scanMode: "serial",
         enabled: true,
+        hardwareMappingId: "hm-serial-1",
         serialSettings: {
-          port: "COM1",
+          port: "/dev/ttyS1",
           baudRate: 9600,
           dataBit: 8,
           stopBit: 1,
@@ -460,6 +491,7 @@ export const comprehensiveConfig: ConfigSchema = {
         autoRecoverTime: 5,
         scanMode: "tcp",
         enabled: true,
+        hardwareMappingId: "hm-net-1",
         devices: [
           {
             id: "device-3",
@@ -501,6 +533,68 @@ export const comprehensiveConfig: ConfigSchema = {
             ]
           }
         ]
+      },
+      {
+        id: "ioport-3",
+        type: "builtin",
+        name: "Secondary Serial Port",
+        description: "Backup serial port for redundancy",
+        scanTime: 1000,
+        timeOut: 3000,
+        retryCount: 3,
+        autoRecoverTime: 10,
+        scanMode: "serial",
+        enabled: true,
+        hardwareMappingId: "hm-serial-2",
+        serialSettings: {
+          port: "/dev/ttyUSB0",
+          baudRate: 19200,
+          dataBit: 8,
+          stopBit: 1,
+          parity: "Even",
+          rts: false,
+          dtr: false,
+          enabled: true,
+        },
+        devices: []
+      },
+      {
+        id: "ioport-4",
+        type: "tcpip",
+        name: "WiFi Devices",
+        description: "Devices connected over WiFi",
+        scanTime: 1000,
+        timeOut: 3000,
+        retryCount: 3,
+        autoRecoverTime: 10,
+        scanMode: "tcp",
+        enabled: true,
+        hardwareMappingId: "hm-wifi-1",
+        devices: []
+      },
+      {
+        id: "ioport-5",
+        type: "builtin",
+        name: "Custom Serial Port",
+        description: "Manual entry for custom serial port",
+        scanTime: 1000,
+        timeOut: 3000,
+        retryCount: 3,
+        autoRecoverTime: 10,
+        scanMode: "serial",
+        enabled: true,
+        hardwareInterface: "/dev/ttyCUSTOM1",
+        serialSettings: {
+          port: "/dev/ttyCUSTOM1",
+          baudRate: 38400,
+          dataBit: 8,
+          stopBit: 1,
+          parity: "Odd",
+          rts: false,
+          dtr: false,
+          enabled: true,
+        },
+        devices: []
       }
     ],
   },

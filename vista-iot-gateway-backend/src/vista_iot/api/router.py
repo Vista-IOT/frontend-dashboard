@@ -7,6 +7,8 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from pydantic import BaseModel
 
+from .hardware_router import router as hardware_router
+
 logger = logging.getLogger(__name__)
 
 # API models for request/response
@@ -35,12 +37,22 @@ class SystemStatusResponse(BaseModel):
     modules: Dict[str, str]
     last_update: str
 
-# Create router
-router = APIRouter(
-    prefix="/api",
+# Create the main API router with /api prefix
+api_router = APIRouter(prefix="/api")
+
+# Create sub-router for gateway endpoints
+gateway_router = APIRouter(
+    prefix="",
     tags=["gateway"],
     responses={404: {"description": "Not found"}},
 )
+
+# Include sub-routers
+api_router.include_router(gateway_router)
+api_router.include_router(hardware_router)
+
+# Alias for backward compatibility
+router = gateway_router
 
 # Gateway instance will be injected as a dependency
 class GatewayDependency:
@@ -69,12 +81,12 @@ def get_gateway():
     return gateway_dependency.get_gateway()
 
 # API endpoints
-@router.get("/status", response_model=SystemStatusResponse)
+@gateway_router.get("/status", response_model=SystemStatusResponse)
 async def get_status(gateway=Depends(get_gateway)):
     """Get the current status of the gateway"""
     return gateway.get_status()
 
-@router.post("/launch")
+@gateway_router.post("/launch")
 async def launch_backend(background_tasks: BackgroundTasks, request: Request):
     """Launch the backend with the specified configuration"""
     data = await request.json()
@@ -90,12 +102,12 @@ async def launch_backend(background_tasks: BackgroundTasks, request: Request):
     
     return {"status": "success", "message": "Backend launch initiated"}
 
-@router.get("/config")
+@gateway_router.get("/config")
 async def get_config(gateway=Depends(get_gateway)):
     """Get the current configuration"""
     return gateway.get_config()
 
-@router.post("/config")
+@gateway_router.put("/config")
 async def update_config(
     request: ConfigUpdateRequest,
     background_tasks: BackgroundTasks,
@@ -116,14 +128,14 @@ async def update_config(
             detail="Failed to update configuration"
         )
 
-@router.post("/restart")
+@gateway_router.post("/restart")
 async def restart_gateway(background_tasks: BackgroundTasks, gateway=Depends(get_gateway)):
     """Restart the gateway"""
     # Schedule restart in background to allow API to respond
     background_tasks.add_task(gateway.restart)
     return {"status": "success", "message": "Gateway restart scheduled"}
 
-@router.get("/tags")
+@gateway_router.get("/tags")
 async def get_all_tags(gateway=Depends(get_gateway)):
     """Get all tags and their current values"""
     # Assuming the gateway has an IO module with a get_all_tags method
@@ -136,7 +148,7 @@ async def get_all_tags(gateway=Depends(get_gateway)):
     io_module = gateway.modules["io"]
     return io_module.get_all_tags()
 
-@router.get("/tags/{tag_id}", response_model=TagValueResponse)
+@gateway_router.get("/tags/{tag_id}", response_model=TagValueResponse)
 async def get_tag(tag_id: str, gateway=Depends(get_gateway)):
     """Get a specific tag value"""
     # Assuming the gateway has an IO module with a get_tag method
@@ -157,7 +169,7 @@ async def get_tag(tag_id: str, gateway=Depends(get_gateway)):
     
     return tag
 
-@router.put("/tags/{tag_id}")
+@gateway_router.put("/tags/{tag_id}")
 async def update_tag(tag_id: str, request: TagValueRequest, gateway=Depends(get_gateway)):
     """Update a tag value"""
     # Assuming the gateway has an IO module with an update_tag method
@@ -179,7 +191,7 @@ async def update_tag(tag_id: str, request: TagValueRequest, gateway=Depends(get_
         )
 
 # Protocol-specific endpoints
-@router.get("/protocols")
+@gateway_router.get("/protocols")
 async def get_protocols(gateway=Depends(get_gateway)):
     """Get information about active protocols"""
     protocols = {}
@@ -191,7 +203,7 @@ async def get_protocols(gateway=Depends(get_gateway)):
     
     return protocols
 
-@router.get("/protocols/modbus/registers")
+@gateway_router.get("/protocols/modbus/registers")
 async def get_modbus_registers(gateway=Depends(get_gateway)):
     """Get Modbus register values"""
     if "modbus" not in gateway.modules:
@@ -208,7 +220,7 @@ async def get_modbus_registers(gateway=Depends(get_gateway)):
         "input": modbus_module.registers["input"]
     }
 
-@router.put("/protocols/modbus/registers/{register_type}/{address}")
+@gateway_router.put("/protocols/modbus/registers/{register_type}/{address}")
 async def update_modbus_register(
     register_type: str,
     address: int,

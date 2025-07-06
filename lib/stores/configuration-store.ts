@@ -152,6 +152,8 @@ export interface IOPortConfig {
   enabled: boolean;
   serialSettings?: SerialPortSettings;
   devices: DeviceConfig[];
+  hardwareMappingId?: string; // Reference to HardwareMapping (primary hardware source)
+  hardwareInterface?: string; // Only used for custom/manual entries
 }
 
 // --- Sub-interfaces for ConfigSchema (derived from defaultConfig.ts) ---
@@ -638,7 +640,7 @@ export interface CommunicationForwardConfig {
 
 // Add HardwareMappingTag interface for hardware mappings
 export interface HardwareMappingTag {
-  id: number;
+  id: string;
   name: string;
   type: string; // network, serial, gpio, etc.
   path: string; // e.g., eth0, /dev/ttyUSB0, etc.

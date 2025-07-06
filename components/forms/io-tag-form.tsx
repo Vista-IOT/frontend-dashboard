@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { DeviceConfig } from "./device-form"; // Import consolidated types. IOTag is part of DeviceConfig.
 import { toast } from "sonner";
+
 export interface SerialPortSettings {
   port: string;
   baudRate: number;
@@ -50,6 +51,8 @@ export interface IOPortConfig {
   enabled: boolean;
   serialSettings?: SerialPortSettings;
   devices: DeviceConfig[];
+  hardwareMappingId?: string;
+  hardwareInterface?: string;
 }
 
 interface IOPortFormProps {
@@ -79,6 +82,9 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
   const [serialPort, setSerialPort] = useState(
     existingConfig?.serialSettings?.port || "COM1"
   );
+  const [serialPortCustom, setSerialPortCustom] = useState(
+    existingConfig?.serialSettings?.port && !["COM1","COM2","COM3","COM4"].includes(existingConfig.serialSettings.port) ? existingConfig.serialSettings.port : ""
+  );
   const [baudRate, setBaudRate] = useState(
     existingConfig?.serialSettings?.baudRate || 9600
   );
@@ -94,6 +100,32 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
   const [rts, setRts] = useState(existingConfig?.serialSettings?.rts ?? false);
   const [dtr, setDtr] = useState(existingConfig?.serialSettings?.dtr ?? false);
 
+  // Add state for detected hardware
+  const [hardware, setHardware] = useState<any>(null);
+  const [loadingHardware, setLoadingHardware] = useState(false);
+  const [hardwareError, setHardwareError] = useState<string | null>(null);
+
+  // Add state for hardware mapping selection
+  const hardwareMappings = useConfigStore(state => state.config.hardware_mappings || []);
+  const [hardwareMappingId, setHardwareMappingId] = useState(existingConfig?.hardwareMappingId || "");
+  const [customHardwareInterface, setCustomHardwareInterface] = useState(existingConfig?.hardwareInterface || "");
+  const selectedMapping = hardwareMappings.find((m: any) => String(m.id) === hardwareMappingId);
+
+  useEffect(() => {
+    setLoadingHardware(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    fetch(`${apiBase}/api/hardware/detect`)
+      .then(res => res.json())
+      .then(data => {
+        setHardware(data.data);
+        setLoadingHardware(false);
+      })
+      .catch(err => {
+        setHardwareError("Failed to fetch hardware");
+        setLoadingHardware(false);
+      });
+  }, []);
+
   // Check if the selected type is a serial port type
   const isSerialType = useMemo(() => {
     return [
@@ -105,6 +137,12 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       "xbee",
     ].includes(type);
   }, [type]);
+
+  // Check if the selected type is a TCP/IP type
+  const isTcpIpType = useMemo(() => {
+    return ["tcpip", "tcpip-serial"].includes(type);
+  }, [type]);
+
   const [errors, setErrors] = useState<{ name?: string; type?: string }>({});
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,9 +207,21 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       devices: existingConfig?.devices || [],
     };
 
+    if (isSerialType || isTcpIpType) {
+      if (hardwareMappingId && hardwareMappingId !== "__custom__") {
+        newPortConfig.hardwareMappingId = hardwareMappingId;
+        newPortConfig.hardwareInterface = undefined;
+      } else if (customHardwareInterface) {
+        newPortConfig.hardwareMappingId = undefined;
+        newPortConfig.hardwareInterface = customHardwareInterface;
+      }
+    }
     if (isSerialType) {
+      const selectedMapping = hardwareMappings.find((m: any) => String(m.id) === hardwareMappingId);
       newPortConfig.serialSettings = {
-        port: serialPort,
+        port: hardwareMappingId && hardwareMappingId !== "__custom__"
+          ? (selectedMapping?.path || "")
+          : (serialPort === "__custom__" ? serialPortCustom : serialPort),
         baudRate,
         dataBit,
         stopBit,
@@ -195,15 +245,58 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
         setScanMode("serial");
         setEnabled(true);
         setSerialPort("COM1");
+        setSerialPortCustom("");
         setBaudRate(9600);
         setDataBit(8);
         setStopBit(1);
         setParity("None");
         setRts(false);
         setDtr(false);
+        setHardwareMappingId("");
+        setCustomHardwareInterface("");
       }
     }
   };
+
+  // Helper to get relevant hardware mapping types for each IO port type
+  const getRelevantMappingTypes = (ioType: string): string[] => {
+    switch (ioType) {
+      case "bacnet":
+      case "builtin":
+      case "zigbee":
+      case "minipcie":
+      case "tcpip-serial":
+      case "xbee":
+        return ["serial"];
+      case "tcpip":
+        return ["network"];
+      case "usb":
+        return ["usb"];
+      // Add more cases as needed
+      default:
+        return ["serial", "network", "usb", "gpio"];
+    }
+  };
+
+  // Filter hardware mappings for the selected type
+  const filteredHardwareMappings = hardwareMappings.filter((mapping: any) =>
+    getRelevantMappingTypes(type).includes(mapping.type)
+  );
+
+  // If no mappings, show a disabled dropdown with a message
+  const noMappingsAvailable = filteredHardwareMappings.length === 0;
+
+  // Debug logs for hardware mappings
+  console.log('IO Port type:', type);
+  console.log('All hardwareMappings:', hardwareMappings);
+  console.log('Filtered hardwareMappings:', filteredHardwareMappings);
+
+  // Auto-select the first available mapping if not set
+  useEffect(() => {
+    if (!hardwareMappingId && filteredHardwareMappings.length > 0) {
+      setHardwareMappingId(String(filteredHardwareMappings[0].id));
+    }
+  }, [type, filteredHardwareMappings, hardwareMappingId]);
 
   return (
     <Card>
@@ -362,6 +455,37 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
             </div>
           </div>
 
+          {/* Hardware Source selection for all types */}
+          <div className="space-y-2">
+            <Label htmlFor="hardwareMapping">Hardware Source</Label>
+            <Select
+              value={hardwareMappingId || ""}
+              onValueChange={value => setHardwareMappingId(value)}
+              disabled={noMappingsAvailable}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue placeholder={noMappingsAvailable ? "No hardware mappings found for this type" : "Select hardware mapping or custom"} />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredHardwareMappings.map((mapping: any) => (
+                  <SelectItem key={mapping.id} value={String(mapping.id)}>{mapping.name} ({mapping.type}: {mapping.path})</SelectItem>
+                ))}
+                <SelectItem value="__custom__">Custom...</SelectItem>
+              </SelectContent>
+            </Select>
+            {noMappingsAvailable && (
+              <div className="text-xs text-gray-500 mt-1">No hardware mappings found for this IO port type. Please add one in the Hardware Mappings tab.</div>
+            )}
+            {hardwareMappingId === "__custom__" && (
+              <Input
+                value={customHardwareInterface}
+                onChange={e => setCustomHardwareInterface(e.target.value)}
+                placeholder="Enter custom interface or port name"
+                className="h-8 mt-1"
+              />
+            )}
+          </div>
+
           {/* Serial Port Settings Panel */}
           {isSerialType && (
             <div className="border rounded-md p-4 mt-6">
@@ -370,19 +494,24 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="serialPort">Port</Label>
-                  <Select value={serialPort} onValueChange={setSerialPort}>
-                    <SelectTrigger id="serialPort">
-                      <SelectValue placeholder="Select port" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="COM1">COM1</SelectItem>
-                      <SelectItem value="COM2">COM2</SelectItem>
-                      <SelectItem value="COM3">COM3</SelectItem>
-                      <SelectItem value="COM4">COM4</SelectItem>
-                      <SelectItem value="miniPCIe/USB">miniPCIe/USB</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="serialPort">Serial Port</Label>
+                  <>
+                    {hardwareMappingId && hardwareMappingId !== "__custom__" ? (
+                      <Input
+                        value={selectedMapping?.path || ""}
+                        readOnly
+                        className="h-8 mt-1 bg-gray-100 cursor-not-allowed"
+                      />
+                    ) : (
+                      <Input
+                        value={serialPortCustom || ""}
+                        onChange={e => setSerialPortCustom(e.target.value)}
+                        placeholder={noMappingsAvailable ? "No hardware source selected" : "Enter custom serial port"}
+                        className="h-8 mt-1"
+                        disabled={noMappingsAvailable && !hardwareMappingId}
+                      />
+                    )}
+                  </>
                 </div>
 
                 <div className="space-y-2">
@@ -502,6 +631,9 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                       setSerialPort(
                         existingConfig.serialSettings.port || "COM1"
                       );
+                      setSerialPortCustom(
+                        existingConfig.serialSettings.port && !["COM1","COM2","COM3","COM4"].includes(existingConfig.serialSettings.port) ? existingConfig.serialSettings.port : ""
+                      );
                       setBaudRate(
                         existingConfig.serialSettings.baudRate || 9600
                       );
@@ -511,6 +643,8 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                       setRts(existingConfig.serialSettings.rts ?? false);
                       setDtr(existingConfig.serialSettings.dtr ?? false);
                     }
+                    setHardwareMappingId(existingConfig.hardwareMappingId || "");
+                    setCustomHardwareInterface(existingConfig.hardwareInterface || "");
                   } else {
                     // Reset form to defaults
                     setType("");
@@ -523,12 +657,15 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                     setScanMode("serial");
                     setEnabled(true);
                     setSerialPort("COM1");
+                    setSerialPortCustom("");
                     setBaudRate(9600);
                     setDataBit(8);
                     setStopBit(1);
                     setParity("None");
                     setRts(false);
                     setDtr(false);
+                    setHardwareMappingId("");
+                    setCustomHardwareInterface("");
                   }
                 }}
               >

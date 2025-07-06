@@ -43,7 +43,8 @@ export default function ConfigurationTab() {
   const handleDeploy = async () => {
     setIsDeploying(true)
     try {
-      const response = await fetch("/api/deploy-config", {
+      const apiBase = process.env.NEXT_PUBLIC_FRONTEND_URL || "";
+      const response = await fetch(`${apiBase}/api/deploy-config`, {
         method: "POST",
         headers: { "Content-Type": "text/yaml" },
         body: editorContent,
