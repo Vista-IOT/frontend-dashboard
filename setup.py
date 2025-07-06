@@ -1,0 +1,29 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="vista-iot-gateway",
+    version="0.1.0",
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
+    install_requires=[
+        "pymodbus>=3.5.4",
+        "fastapi>=0.104.1",
+        "uvicorn>=0.24.0",
+        "websockets>=12.0",
+        "sqlalchemy>=2.0.23",
+        "pydantic>=2.5.2",
+        "pyyaml>=6.0.1",
+        "python-dotenv>=1.0.0",
+        "asyncio>=3.4.3",
+        "aiohttp>=3.9.1",
+        "aiomqtt>=1.2.1",
+        "boto3>=1.33.6",
+        "python-multipart>=0.0.6",
+    ],
+    python_requires=">=3.8",
+    entry_points={
+        "console_scripts": [
+            "vista-iot-gateway=vista_iot.__main__:main",
+        ],
+    },
+) 

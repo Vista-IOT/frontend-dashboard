@@ -635,6 +635,15 @@ export interface CommunicationForwardConfig {
   bridges: Bridge[];
 }
 
+// Add HardwareMappingTag interface for hardware mappings
+export interface HardwareMappingTag {
+  id: number;
+  name: string;
+  type: string; // network, serial, gpio, etc.
+  path: string; // e.g., eth0, /dev/ttyUSB0, etc.
+  description: string;
+}
+
 // The main configuration schema
 export interface ConfigSchema {
   device: DeviceInfo;
@@ -650,6 +659,7 @@ export interface ConfigSchema {
   stats_tags: StatsTag[];
   system_tags: SystemTag[];
   communication_forward?: CommunicationForwardConfig;
+  hardware_mappings?: HardwareMappingTag[];
 }
 
 // --- END: Inserted Interface Definitions ---

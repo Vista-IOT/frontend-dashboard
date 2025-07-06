@@ -40,10 +40,10 @@ export function DynamicDNSForm() {
       
       updateConfig(['network', 'dynamic_dns'], ddnsData)
       
-      toast({
-        title: "Settings saved",
-        description: "Dynamic DNS settings have been updated.",
-      })
+    toast({
+      title: "Settings saved",
+      description: "Dynamic DNS settings have been updated.",
+    })
     } catch (error) {
       console.error('Error saving DDNS settings:', error)
       toast({

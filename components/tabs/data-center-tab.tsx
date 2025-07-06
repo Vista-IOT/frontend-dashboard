@@ -6,7 +6,7 @@ import { Tag, UserCircle, FileDigit, BarChart, Cog } from "lucide-react";
 import IOTagManagement from "@/components/tabs/io-tag-tab";
 import { UserTagsForm } from "@/components/forms/user-tags-form";
 import { StatsTagsForm } from "@/components/forms/stats-tags-form";
-import { SystemTagsForm } from "@/components/forms/system-tags-form";
+import { SystemConfigTabs } from "@/components/forms/system-tags-form";
 import CalculationTagTab from "@/components/tabs/calculation-tag-tab";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
@@ -125,7 +125,7 @@ export default function DataCenterTab({
         {section === "user-tag" && <UserTagsForm />}
         {section === "calc-tag" && <CalculationTagTab ioPorts={ioPorts} />}
         {section === "stats-tag" && <StatsTagsForm />}
-        {section === "system-tag" && <SystemTagsForm />}
+        {section === "system-tag" && <SystemConfigTabs />}
       </div>
     </div>
   );

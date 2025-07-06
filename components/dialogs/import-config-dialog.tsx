@@ -81,8 +81,8 @@ export function ImportConfigDialog({ open, onOpenChange }: ImportConfigDialogPro
         updateConfig([key], previewData[key])
       })
       
-      toast({
-        title: "Configuration imported",
+    toast({
+      title: "Configuration imported",
         description: "The configuration has been imported successfully. Some changes may require a restart.",
       })
       onOpenChange(false)
@@ -100,7 +100,7 @@ export function ImportConfigDialog({ open, onOpenChange }: ImportConfigDialogPro
         title: "Import failed",
         description: "Failed to import configuration. Please check the file format.",
         variant: "destructive",
-      })
+    })
     } finally {
       setIsImporting(false)
     }

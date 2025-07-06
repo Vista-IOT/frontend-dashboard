@@ -55,8 +55,8 @@ export default function ConfigurationTab() {
         description: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setIsDeploying(false)
-    }
+          setIsDeploying(false)
+      }
   }
 
   const handleReset = async () => {

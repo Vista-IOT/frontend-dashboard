@@ -30,11 +30,11 @@ export function ResetConfigDialog({ open, onOpenChange }: ResetConfigDialogProps
       // Reset to default configuration
       resetConfig()
       
-      toast({
-        title: "Configuration reset",
+    toast({
+      title: "Configuration reset",
         description: "The gateway has been reset to factory defaults. Some services may restart.",
-      })
-      onOpenChange(false)
+    })
+    onOpenChange(false)
     } catch (error) {
       console.error('Error resetting configuration:', error)
       toast({

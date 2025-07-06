@@ -39,10 +39,10 @@ export function DHCPServerForm() {
       
       updateConfig(['network', 'dhcp_server'], dhcpData)
       
-      toast({
-        title: "Settings saved",
-        description: "DHCP server settings have been updated.",
-      })
+    toast({
+      title: "Settings saved",
+      description: "DHCP server settings have been updated.",
+    })
     } catch (error) {
       console.error('Error saving DHCP settings:', error)
       toast({

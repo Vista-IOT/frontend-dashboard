@@ -180,11 +180,13 @@ export async function POST(req: NextRequest) {
         const key = ref.toLowerCase();
         return ioTagLookup[key] || null;
       };
+      const referTagId = resolveTagId(tag.referTag);
+      if (typeof referTagId !== 'string') continue; // Skip if referTagId is not a string
       await prisma.statsTag.create({
         data: {
           id: tag.id?.toString() ?? undefined,
           name: tag.name,
-          referTagId: resolveTagId(tag.referTag),
+          referTagId,
           type: tag.type,
           updateCycleValue: tag.updateCycle !== undefined && tag.updateCycle !== null
             ? (typeof tag.updateCycle === 'string' ? parseInt(tag.updateCycle, 10) : tag.updateCycle)
@@ -227,6 +229,18 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+  }
+
+  // Trigger backend reload/restart (hardcoded to localhost:8000)
+  try {
+    const resp = await fetch('http://localhost:8000/api/restart', {
+      method: 'POST',
+    });
+    // Optionally log the response for debugging
+    const respText = await resp.text();
+    console.log('Backend restart response:', resp.status, respText);
+  } catch (err) {
+    console.error('Failed to trigger backend restart:', err);
   }
 
   return NextResponse.json({

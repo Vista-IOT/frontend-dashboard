@@ -238,8 +238,8 @@ export function SNMPForm() {
             const objId = parseInt(t.objectId)
             if (!isNaN(objId) && objId >= nextObjectId) {
               nextObjectId = objId + 1
-            }
           }
+        }
         })
       } else {
         // Find the highest object ID within this specific group
@@ -248,8 +248,8 @@ export function SNMPForm() {
             const objId = parseInt(t.objectId)
           if (!isNaN(objId) && objId >= nextObjectId) {
             nextObjectId = objId + 1
-            }
           }
+        }
         })
       }
       

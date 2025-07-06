@@ -104,10 +104,10 @@ export function EthernetInterfaceForm() {
       
       updateConfig(['network', 'interfaces', 'wlan0'], wlan0Data)
       
-      toast({
-        title: "Settings saved",
+    toast({
+      title: "Settings saved",
         description: "Wireless interface (wlan0) settings have been updated.",
-      })
+    })
     } catch (error) {
       console.error('Error saving wlan0 settings:', error)
       toast({
@@ -121,7 +121,7 @@ export function EthernetInterfaceForm() {
   }
 
   return (
-    <div className="space-y-4">
+      <div className="space-y-4">
       {/* Ethernet Interface (eth0) */}
       <form onSubmit={handleEth0Submit}>
         <Card>
@@ -208,14 +208,14 @@ export function EthernetInterfaceForm() {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label htmlFor="eth0-speed">Speed</Label>
                 <Select defaultValue={eth0Config.link.speed} name="eth0-speed">
                   <SelectTrigger id="eth0-speed">
-                    <SelectValue placeholder="Select speed" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto-negotiate</SelectItem>
+                  <SelectValue placeholder="Select speed" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-negotiate</SelectItem>
                     <SelectItem value="10">10 Mbps</SelectItem>
                     <SelectItem value="100">100 Mbps</SelectItem>
                     <SelectItem value="1000">1000 Mbps</SelectItem>
@@ -232,8 +232,8 @@ export function EthernetInterfaceForm() {
                     <SelectItem value="auto">Auto</SelectItem>
                     <SelectItem value="full">Full Duplex</SelectItem>
                     <SelectItem value="half">Half Duplex</SelectItem>
-                  </SelectContent>
-                </Select>
+                </SelectContent>
+              </Select>
               </div>
             </div>
           </CardContent>
@@ -428,7 +428,7 @@ export function EthernetInterfaceForm() {
           </CardFooter>
         </Card>
       </form>
-    </div>
+      </div>
   )
 }
 

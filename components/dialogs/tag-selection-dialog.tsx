@@ -22,7 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ChevronRight,
   ChevronDown,
-  Tag,
+  Tag as TagIcon,
   FileDigit,
   UserCircle,
   Cog,
@@ -30,6 +30,10 @@ import {
   Server,
   Cpu,
 } from "lucide-react";
+import { buildIoTagTree } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import type { ConfigSchema, IOPortConfig, DeviceConfig, CalculationTag, StatsTag } from "@/lib/stores/configuration-store";
+import { useConfigStore } from "@/lib/stores/configuration-store";
 
 // Define the IO Tag interface
 interface IOTag {
@@ -90,550 +94,192 @@ interface TagSelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectTag: (tag: Tag) => void;
+  excludeCalculationTagId?: string;
+  excludeCalculationTags?: boolean;
 }
-import type { ConfigSchema } from "@/lib/stores/configuration-store"; // adjust the path as needed
-import { useConfigStore } from "@/lib/stores/configuration-store";
 
 export default function TagSelectionDialog({
   open,
   onOpenChange,
   onSelectTag,
+  excludeCalculationTagId,
+  excludeCalculationTags,
 }: TagSelectionDialogProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [ioPorts, setIoPorts] = useState<Port[]>([]);
-
-  // Track expanded items in the tree
-  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
-    {}
-  );
   const { config } = useConfigStore();
+  const [selectedTab, setSelectedTab] = useState<string>('io-tag');
+  const [collapsedPorts, setCollapsedPorts] = useState<Record<string, boolean>>({});
 
-  const { user_tags, stats_tags, calculation_tags, system_tags } = config;
+  // Use the shared tree builder for IO ports
+  const ioTagTree = buildIoTagTree(config, { excludeCalculationTagId, excludeCalculationTags });
 
-  // Track selected port, device, and tag
-  const [selectedPort, setSelectedPort] = useState<string | null>(null);
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<IOTag[]>([]);
-  const [selectedTag, setSelectedTag] = useState<IOTag | null>(null);
-
-  const tagCategories = [
-    {
-      id: "io-tag",
-      name: "IO Tag",
-      icon: <Tag className="h-4 w-4" />,
-    },
-    {
-      id: "calculation-tag",
-      name: "Calculation Tag",
-      icon: <FileDigit className="h-4 w-4" />,
-    },
-    {
-      id: "user-tag",
-      name: "User Tag",
-      icon: <UserCircle className="h-4 w-4" />,
-    },
-    {
-      id: "system-tag",
-      name: "System Tag",
-      icon: <Cog className="h-4 w-4" />,
-    },
-    {
-      id: "stats-tag",
-      name: "Stats Tag",
-      icon: <BarChart className="h-4 w-4" />,
-    },
-  ];
-
-  // Load IO ports data from localStorage
-  useEffect(() => {
-    console.log("Load IO ports useEffect triggered");
-
-    if (typeof window !== "undefined" && open) {
-      try {
-        // Process IO ports data
-        const ioPortsData = localStorage.getItem("io_ports_data");
-        if (ioPortsData) {
-          const parsedPorts = JSON.parse(ioPortsData) as Port[];
-          setIoPorts(parsedPorts);
-
-          // Set IO Tag category as expanded by default
-          setExpandedItems((prev) => ({ ...prev, "io-tag": true }));
-        }
-      } catch (error) {
-        console.error("Error loading data from localStorage:", error);
-      }
-    }
-  }, [open]); // Reload when dialog opens
-
-  console.log("🔍 Dialog open prop:", open);
-
-  console.log("Render", {
-    selectedCategory,
-    selectedPort,
-    selectedDevice,
-    ioPorts,
-  });
-
-  // Effect to update selected tags when port and device are selected
-  useEffect(() => {
-    console.log("=== useEffect Triggered ===");
-    console.log("Selected Category:", selectedCategory);
-    console.log("Selected Port:", selectedPort);
-    console.log("Selected Device:", selectedDevice);
-
-    if (selectedCategory === "io-tag" && selectedPort && selectedDevice) {
-      const port = ioPorts.find((p) => p.id === selectedPort);
-      console.log("Found Port:", port);
-
-      if (port && port.devices) {
-        const device = port.devices.find((d) => d.id === selectedDevice);
-        console.log("Found Device:", device);
-
-        if (device && device.tags) {
-          console.log("Device Tags:", device.tags);
-          setSelectedTags(device.tags);
-        } else {
-          console.warn("Device has no tags or tags undefined");
-          setSelectedTags([]);
-        }
-      } else {
-        console.warn("No devices found in selected port");
-        setSelectedTags([]);
-      }
-    } else {
-      console.warn("Category/Port/Device not selected properly");
-      setSelectedTags([]);
-    }
-  }, [selectedCategory, selectedPort, selectedDevice, ioPorts]);
-
-  // Toggle expanded state for a tree item
-  const toggleExpanded = (id: string) => {
-    setExpandedItems((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
-  const handleSelectTag = (tag: IOTag) => {
-    // Get the port and device names for the selected tag
-    const port = ioPorts.find((p) => p.id === selectedPort);
-    const device = port?.devices?.find((d) => d.id === selectedDevice);
-
-    if (port && device) {
-      // Format the tag with device name as prefix
-      const formattedTag = {
-        id: tag.id,
-        name: `${device.name}:${tag.name}`,
-        type: tag.dataType,
-        value: tag.address,
-        description: tag.description,
-      };
-      onSelectTag(formattedTag);
-      onOpenChange(false);
-    }
-  };
-
-  // Render a tree item with toggle functionality
-  const renderTreeItem = (
-    id: string,
-
-    name: string,
-    icon: React.ReactNode,
-    depth: number = 0,
-    hasChildren: boolean = false
-  ) => {
-    const isExpanded = expandedItems[id] || false;
-    const paddingLeft = `${depth * 16}px`;
-
-    return (
-      <div
-        key={id}
-        className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50 ${
-          selectedCategory === id ||
-          selectedPort === id ||
-          selectedDevice === id
-            ? "bg-muted"
-            : ""
-        }`}
-        style={{ paddingLeft }}
-        onClick={() => {
-          setSelectedCategory(id); // Select the category
-          if (hasChildren) {
-            toggleExpanded(id); // Only expand if applicable (IO Tag)
-          }
-        }}
-      >
-        {hasChildren && (
-          <div className="flex-shrink-0">
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </div>
-        )}
-        <div className="flex-shrink-0">{icon}</div>
-        <span>{name}</span>
-      </div>
-    );
-  };
+  // Helper to handle tag selection and close dialog
+  function handleTagSelect(tag: Tag) {
+    onSelectTag(tag);
+    onOpenChange(false);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="w-screen max-w-[98vw] max-h-[90vh] overflow-auto flex flex-col p-0">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle>Select Tag</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-[250px_1fr] gap-4 flex-grow overflow-hidden">
-          {/* Left sidebar with categories and tree structure */}
-          <Card className="overflow-hidden">
-            <ScrollArea className="h-[400px]">
-              <div className="p-2">
-                <div className="text-sm font-medium mb-2">Data Center</div>
+        <div className="flex-1 px-6 py-4 min-h-0 min-w-0 overflow-auto">
+          <Tabs value={selectedTab} onValueChange={setSelectedTab} className="flex flex-col h-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="io-tag">IO Tags</TabsTrigger>
+              <TabsTrigger value="calc-tag">Calculation Tags</TabsTrigger>
+              <TabsTrigger value="stats-tag">Stats Tags</TabsTrigger>
+              <TabsTrigger value="user-tag">User Tags</TabsTrigger>
+              <TabsTrigger value="system-tag">System Tags</TabsTrigger>
+            </TabsList>
 
-                {/* Render tag categories */}
-                {tagCategories.map((category) => {
-                  const isExpanded = expandedItems[category.id] || false;
-
-                  return (
-                    <div key={category.id}>
-                      {renderTreeItem(
-                        category.id,
-                        category.name,
-                        category.icon,
-                        0,
-                        category.id === "io-tag" // Only IO Tag has children
-                      )}
-
-                      {/* If IO Tag category is expanded, show ports */}
-                      {category.id === "io-tag" &&
-                        isExpanded &&
-                        ioPorts.map((port) => {
-                          const isPortExpanded =
-                            expandedItems[port.id] || false;
-
-                          return (
-                            <div key={port.id}>
-                              <div
-                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50 ${
-                                  selectedPort === port.id ? "bg-muted" : ""
-                                }`}
-                                style={{ paddingLeft: "16px" }}
-                                onClick={() => {
-                                  setSelectedPort(port.id);
-
-                                  // Auto-select the first device if available
-                                  const firstDevice = port.devices?.[0];
-                                  if (firstDevice) {
-                                    setSelectedDevice(firstDevice.id);
-                                    setTimeout(
-                                      () => setSelectedCategory("io-tag"),
-                                      0
-                                    );
-                                  } else {
-                                    setSelectedDevice(null);
-                                  }
-
-                                  toggleExpanded(port.id);
-                                  setSelectedTag(null);
-                                }}
-                              >
-                                {port.devices && port.devices.length > 0 ? (
-                                  isPortExpanded ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4" />
-                                  )
-                                ) : null}
-                                <Server className="h-4 w-4" />
-                                <span>{port.name}</span>
-                              </div>
-
-                              {/* If port is expanded, show devices */}
-                              {isPortExpanded &&
-                                port.devices &&
-                                port.devices.map((device) => (
-                                  <div
-                                    key={device.id}
-                                    className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50 ${
-                                      selectedDevice === device.id
-                                        ? "bg-muted"
-                                        : ""
-                                    }`}
-                                    style={{ paddingLeft: "32px" }}
-                                    onClick={() => {
-                                      setSelectedDevice(device.id);
-                                      setSelectedCategory("io-tag");
-                                    }}
-                                  >
-                                    <Cpu className="h-4 w-4" />
-                                    <span>{device.name}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          );
-                        })}
+            <TabsContent value="io-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
+              <div className="space-y-2 p-1">
+                {ioTagTree.map((port: IOPortConfig) => (
+                  <div key={port.id} className="relative pl-2">
+                    <div className="absolute left-0 top-2 bottom-0 w-px bg-blue-200" />
+                    <div 
+                      className="flex items-center font-medium text-primary mb-1 relative cursor-pointer select-none" 
+                      onClick={() => setCollapsedPorts((prev: Record<string, boolean>) => ({...prev, [port.id]: !prev[port.id]}))}
+                    >
+                      {collapsedPorts[port.id] ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                      <Server size={16} className="mx-1 text-blue-700" /> {port.name}
                     </div>
-                  );
-                })}
+                    {!collapsedPorts[port.id] && port.devices?.map((device: DeviceConfig) => (
+                      <div key={device.id} className="ml-4 relative pl-4">
+                        <div className="flex items-center font-normal text-sm text-blue-900 mb-1 relative">
+                          <Cpu size={16} className="mr-1 text-blue-500" /> {device.name}
+                        </div>
+                        {device.tags?.map((tag: IOTag) => (
+                          <div
+                            key={tag.id}
+                            className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ml-6 hover:bg-accent"
+                            onClick={() => handleTagSelect({
+                              id: tag.id,
+                              name: `${device.name}:${tag.name}`,
+                              type: tag.dataType,
+                              value: tag.address,
+                              description: tag.description,
+                            })}
+                          >
+                            <TagIcon className="h-4 w-4 text-purple-600" />
+                            {tag.name}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
-            </ScrollArea>
-          </Card>
+            </TabsContent>
 
-          {/* Right panel with available tags */}
-          <Card className="overflow-hidden">
-            <ScrollArea className="h-[400px]">
-              <div className="p-4">
-                {selectedCategory === "io-tag" && selectedDevice ? (
-                  <>
-                    {ioPorts.map((port) => {
-                      if (port.devices) {
-                        const device = port.devices.find(
-                          (d) => d.id === selectedDevice
-                        );
-                        if (device) {
-                          return (
-                            <div key={device.id} className="mb-4">
-                              <h3 className="text-lg font-semibold mb-2">
-                                {device.name}
-                              </h3>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Tag Name</TableHead>
-                                    <TableHead>Data Type</TableHead>
-                                    <TableHead>Address</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead></TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {selectedTags.length === 0 ? (
-                                    <TableRow>
-                                      <TableCell
-                                        colSpan={5}
-                                        className="text-center py-4 text-muted-foreground"
-                                      >
-                                        No tags available for this device
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : (
-                                    selectedTags.map((tag) => (
-                                      <TableRow key={tag.id}>
-                                        <TableCell>{tag.name}</TableCell>
-                                        <TableCell>{tag.dataType}</TableCell>
-                                        <TableCell>{tag.address}</TableCell>
-                                        <TableCell>{tag.description}</TableCell>
-                                        <TableCell>
-                                          <Button
-                                            size="sm"
-                                            onClick={() => handleSelectTag(tag)}
-                                          >
-                                            Select
-                                          </Button>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          );
-                        }
-                      }
-                      return null;
+            <TabsContent value="calc-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
+              <div className="space-y-1 p-1">
+                {config.calculation_tags?.map((tag: CalculationTag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm hover:bg-accent"
+                    onClick={() => handleTagSelect({
+                      id: tag.id,
+                      name: tag.name,
+                      type: 'calculation',
+                      value: tag.formula,
+                      description: tag.description,
                     })}
-                  </>
-                ) : selectedCategory === "user-tag" ? (
-                  <>
-                    <h3 className="text-lg font-semibold mb-2">User Tags</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Value</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {user_tags.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center py-4 text-muted-foreground"
-                            >
-                              No user tags available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          user_tags.map((tag) => (
-                            <TableRow key={tag.id}>
-                              <TableCell>{tag.name}</TableCell>
-                              {/* <TableCell>{tag.type}</TableCell>
-                              <TableCell>{tag.value}</TableCell> */}
-                              <TableCell>{tag.description}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSelectTag(tag)}
-                                >
-                                  Select
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </>
-                ) : selectedCategory === "stats-tag" ? (
-                  <>
-                    <h3 className="text-lg font-semibold mb-2">Stats Tags</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Refer Tag</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {stats_tags.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center py-4 text-muted-foreground"
-                            >
-                              No stats tags available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          stats_tags.map((tag) => (
-                            <TableRow key={tag.id}>
-                              <TableCell>{tag.name}</TableCell>
-                              <TableCell>{tag.type}</TableCell>
-                              {/* <TableCell>{tag.value}</TableCell> */}
-                              <TableCell>{tag.description}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSelectTag(tag)}
-                                >
-                                  Select
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </>
-                ) : selectedCategory === "calculation-tag" ? (
-                  <>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Calculation Tags
-                    </h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Formula</TableHead>
-                          <TableHead>Output Type</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {calculation_tags.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center py-4 text-muted-foreground"
-                            >
-                              No calculation tags available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          calculation_tags.map((tag) => (
-                            <TableRow key={tag.id}>
-                              <TableCell>{tag.name}</TableCell>
-                              <TableCell>{tag.formula}</TableCell>
-                              {/* <TableCell>{tag.type}</TableCell> */}
-                              <TableCell>{tag.description}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSelectTag(tag)}
-                                >
-                                  Select
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </>
-                ) : selectedCategory === "system-tag" ? (
-                  <>
-                    <h3 className="text-lg font-semibold mb-2">System Tags</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Value</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {system_tags.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center py-4 text-muted-foreground"
-                            >
-                              No system tags available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          system_tags.map((tag) => (
-                            <TableRow key={tag.id}>
-                              <TableCell>{tag.name}</TableCell>
-                              {/* <TableCell>{tag.type}</TableCell>
-                              <TableCell>{tag.value}</TableCell> */}
-                              <TableCell>{tag.description}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSelectTag(tag)}
-                                >
-                                  Select
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Select a category to view available tags
+                  >
+                    <TagIcon className="h-4 w-4 text-green-600" />
+                    {tag.name}
+                  </div>
+                ))}
+                {(!config.calculation_tags || config.calculation_tags.length === 0) && (
+                  <div className="text-center text-muted-foreground p-8">
+                    <p>No calculation tags available.</p>
                   </div>
                 )}
               </div>
-            </ScrollArea>
-          </Card>
+            </TabsContent>
+
+            <TabsContent value="stats-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
+              <div className="space-y-1 p-1">
+                {config.stats_tags?.map((tag: StatsTag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm hover:bg-accent"
+                    onClick={() => handleTagSelect({
+                      id: tag.id,
+                      name: tag.name,
+                      type: 'stats',
+                      value: tag.referTag,
+                      description: tag.description,
+                    })}
+                  >
+                    <TagIcon className="h-4 w-4 text-orange-600" />
+                    {tag.name}
+                  </div>
+                ))}
+                {(!config.stats_tags || config.stats_tags.length === 0) && (
+                  <div className="text-center text-muted-foreground p-8">
+                    <p>No stats tags available.</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="user-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
+              <div className="space-y-1 p-1">
+                {config.user_tags?.map((tag: Tag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm hover:bg-accent"
+                    onClick={() => handleTagSelect({
+                      id: tag.id,
+                      name: tag.name,
+                      type: 'user',
+                      description: tag.description,
+                    })}
+                  >
+                    <TagIcon className="h-4 w-4 text-blue-600" />
+                    {tag.name}
+                  </div>
+                ))}
+                {(!config.user_tags || config.user_tags.length === 0) && (
+                  <div className="text-center text-muted-foreground p-8">
+                    <p>No user tags available.</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="system-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
+              <div className="space-y-1 p-1">
+                {config.system_tags?.map((tag: Tag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm hover:bg-accent"
+                    onClick={() => handleTagSelect({
+                      id: tag.id,
+                      name: tag.name,
+                      type: 'system',
+                      description: tag.description,
+                    })}
+                  >
+                    <TagIcon className="h-4 w-4 text-gray-600" />
+                    {tag.name}
+                  </div>
+                ))}
+                {(!config.system_tags || config.system_tags.length === 0) && (
+                  <div className="text-center text-muted-foreground p-8">
+                    <p>No system tags available.</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

@@ -66,10 +66,10 @@ export function StaticRoutesForm() {
       })
       setAddRouteDialogOpen(false)
       
-      toast({
-        title: "Route added",
-        description: "A new static route has been added.",
-      })
+    toast({
+      title: "Route added",
+      description: "A new static route has been added.",
+    })
     } catch (error) {
       console.error('Error adding route:', error)
       toast({
@@ -186,32 +186,32 @@ export function StaticRoutesForm() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Static Routes</CardTitle>
-          <CardDescription>Configure static routing table entries</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Destination</TableHead>
-                <TableHead>Subnet Mask</TableHead>
-                <TableHead>Gateway</TableHead>
-                <TableHead>Interface</TableHead>
-                <TableHead>Metric</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+    <Card>
+      <CardHeader>
+        <CardTitle>Static Routes</CardTitle>
+        <CardDescription>Configure static routing table entries</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Destination</TableHead>
+              <TableHead>Subnet Mask</TableHead>
+              <TableHead>Gateway</TableHead>
+              <TableHead>Interface</TableHead>
+              <TableHead>Metric</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
               {staticRoutes.length === 0 ? (
-                <TableRow>
+            <TableRow>
                   <TableCell colSpan={6} className="text-center py-4">
                     <div className="flex flex-col items-center justify-center">
                       <span className="text-muted-foreground">No static routes configured</span>
                     </div>
-                  </TableCell>
-                </TableRow>
+              </TableCell>
+            </TableRow>
               ) : (
                 staticRoutes.map((route) => (
                   <TableRow key={route.id}>
@@ -220,7 +220,7 @@ export function StaticRoutesForm() {
                     <TableCell>{route.gateway}</TableCell>
                     <TableCell>{route.interface}</TableCell>
                     <TableCell>{route.metric}</TableCell>
-                    <TableCell>
+              <TableCell>
                       <div className="flex space-x-2">
                         <Button 
                           variant="ghost" 
@@ -234,23 +234,23 @@ export function StaticRoutesForm() {
                           size="icon"
                           onClick={() => handleDeleteRoute(route.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+              </TableCell>
+            </TableRow>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-        <CardFooter>
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter>
           <Button onClick={() => setAddRouteDialogOpen(true)}>
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Route
-          </Button>
-        </CardFooter>
-      </Card>
+          <PlusCircle className="h-4 w-4 mr-2" />
+          Add Route
+        </Button>
+      </CardFooter>
+    </Card>
 
       {/* Add/Edit Route Dialog */}
       <Dialog open={addRouteDialogOpen} onOpenChange={setAddRouteDialogOpen}>

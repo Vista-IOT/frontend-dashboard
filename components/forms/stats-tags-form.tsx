@@ -216,10 +216,7 @@ function StatsTagDialog({
           open={tagSelectionDialogOpen}
           onOpenChange={setTagSelectionDialogOpen}
           onSelectTag={handleTagSelection}
-          userTags={userTags}
-          calculationTags={calculationTags}
-          statsTags={statsTags}
-          systemTags={systemTags}
+          excludeCalculationTags={true}
         />
       </DialogContent>
     </Dialog>

@@ -1,0 +1,151 @@
+device:
+  name: "Vista-IoT-Gateway-001"
+  model: "Vista-IoT-GW-5000"
+  version: "2.1.0"
+  location: ""
+  description: "Factory default IoT Gateway configuration"
+
+network:
+  interfaces:
+    eth0:
+      type: "ethernet"
+      enabled: true
+      mode: "static"
+      link:
+        speed: "1000"
+        duplex: "full"
+      ipv4:
+        mode: "static"
+        static:
+          address: "192.168.1.100"
+          netmask: "255.255.255.0"
+          gateway: "192.168.1.1"
+        dns:
+          primary: "8.8.8.8"
+          secondary: "8.8.4.4"
+  firewall:
+    enabled: true
+    default_policy: "drop"
+    rules: []
+  dhcp_server:
+    enabled: false
+    start_ip: ""
+    end_ip: ""
+    lease_time: 24
+    domain: ""
+    dns_servers: []
+  static_routes: []
+  port_forwarding: []
+  dynamic_dns:
+    enabled: false
+    provider: ""
+    domain: ""
+    username: ""
+    password: ""
+    update_interval: 60
+
+protocols:
+  modbus:
+    enabled: false
+    mode: "tcp"
+    tcp:
+      port: 502
+      max_connections: 5
+      timeout: 30
+    serial:
+      port: "ttyS0"
+      baudrate: 9600
+      data_bits: 8
+      parity: "none"
+      stop_bits: 1
+    slave_id: 1
+    mapping: []
+  mqtt:
+    enabled: false
+    broker:
+      address: "localhost"
+      port: 1883
+      client_id: "iot-gateway"
+      keepalive: 60
+      clean_session: true
+      tls:
+        enabled: false
+        version: "1.2"
+        verify_server: true
+        allow_insecure: false
+        cert_file: ""
+        key_file: ""
+        ca_file: ""
+      auth:
+        enabled: false
+        username: ""
+        password: ""
+    topics:
+      publish: []
+      subscribe: []
+
+hardware:
+  com_ports:
+    com1:
+      mode: "rs232"
+      baudrate: 9600
+      data_bits: 8
+      parity: "none"
+      stop_bits: 1
+      flow_control: "none"
+  watchdog:
+    enabled: false
+    timeout: 60
+    action: "restart"
+    custom_command: ""
+  gpio:
+    inputs: []
+    outputs: []
+
+security:
+  ssh:
+    enabled: true
+    port: 22
+    allow_root: false
+    password_auth: false
+  users: []
+  certificates: []
+
+logging:
+  level: "info"
+  max_size: "10M"
+  max_files: 5
+  remote_syslog:
+    enabled: false
+    server: ""
+    port: 514
+
+maintenance:
+  auto_update:
+    enabled: false
+    schedule: "0 0 * * 0"
+    channel: "stable"
+  backup:
+    enabled: false
+    schedule: "0 0 * * *"
+    retain: 7
+    location: "local"
+
+io_setup:
+  ports: []
+
+user_tags: []
+calculation_tags: []
+stats_tags: []
+system_tags:
+  - id: "sys-1"
+    name: "#SYS_UPTIME"
+    dataType: "Analog"
+    unit: "s"
+    spanHigh: 281474976710655
+    spanLow: 0
+    description: "The current uptime(s)"
+
+communication_forward:
+  destinations: []
+  bridges: []

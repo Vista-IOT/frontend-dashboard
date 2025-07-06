@@ -66,10 +66,10 @@ export function PortForwardingForm() {
       })
       setAddRuleDialogOpen(false)
       
-      toast({
-        title: "Rule added",
-        description: "A new port forwarding rule has been added.",
-      })
+    toast({
+      title: "Rule added",
+      description: "A new port forwarding rule has been added.",
+    })
     } catch (error) {
       console.error('Error adding rule:', error)
       toast({
@@ -186,32 +186,32 @@ export function PortForwardingForm() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Port Forwarding</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle>Port Forwarding</CardTitle>
           <CardDescription>Configure port forwarding rules for external access</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Protocol</TableHead>
-                <TableHead>External Port</TableHead>
-                <TableHead>Internal IP</TableHead>
-                <TableHead>Internal Port</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Protocol</TableHead>
+              <TableHead>External Port</TableHead>
+              <TableHead>Internal IP</TableHead>
+              <TableHead>Internal Port</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
               {portForwarding.length === 0 ? (
-                <TableRow>
+            <TableRow>
                   <TableCell colSpan={6} className="text-center py-4">
                     <div className="flex flex-col items-center justify-center">
                       <span className="text-muted-foreground">No port forwarding rules configured</span>
                     </div>
-                  </TableCell>
-                </TableRow>
+              </TableCell>
+            </TableRow>
               ) : (
                 portForwarding.map((rule) => (
                   <TableRow key={rule.id}>
@@ -220,7 +220,7 @@ export function PortForwardingForm() {
                     <TableCell>{rule.external_port}</TableCell>
                     <TableCell>{rule.internal_ip}</TableCell>
                     <TableCell>{rule.internal_port}</TableCell>
-                    <TableCell>
+              <TableCell>
                       <div className="flex space-x-2">
                         <Button 
                           variant="ghost" 
@@ -234,23 +234,23 @@ export function PortForwardingForm() {
                           size="icon"
                           onClick={() => handleDeleteRule(rule.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+              </TableCell>
+            </TableRow>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-        <CardFooter>
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter>
           <Button onClick={() => setAddRuleDialogOpen(true)}>
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Rule
-          </Button>
-        </CardFooter>
-      </Card>
+          <PlusCircle className="h-4 w-4 mr-2" />
+          Add Rule
+        </Button>
+      </CardFooter>
+    </Card>
 
       {/* Add/Edit Rule Dialog */}
       <Dialog open={addRuleDialogOpen} onOpenChange={setAddRuleDialogOpen}>

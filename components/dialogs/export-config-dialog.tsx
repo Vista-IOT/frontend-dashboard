@@ -74,11 +74,11 @@ export function ExportConfigDialog({ open, onOpenChange }: ExportConfigDialogPro
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       
-      toast({
-        title: "Configuration exported",
-        description: "The configuration has been exported successfully.",
-      })
-      onOpenChange(false)
+    toast({
+      title: "Configuration exported",
+      description: "The configuration has been exported successfully.",
+    })
+    onOpenChange(false)
     } catch (error) {
       console.error('Error exporting configuration:', error)
       toast({
@@ -109,45 +109,45 @@ export function ExportConfigDialog({ open, onOpenChange }: ExportConfigDialogPro
           <div className="space-y-3">
             <Label>Export Options</Label>
             <div className="space-y-2">
-              <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="network" 
                   checked={exportOptions.network}
                   onCheckedChange={(checked) => handleOptionChange('network', checked as boolean)}
                 />
                 <label htmlFor="network" className="text-sm font-medium leading-none">
-                  Network Settings
-                </label>
-              </div>
-              <div className="flex items-center space-x-2">
+                Network Settings
+              </label>
+            </div>
+            <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="security" 
                   checked={exportOptions.security}
                   onCheckedChange={(checked) => handleOptionChange('security', checked as boolean)}
                 />
                 <label htmlFor="security" className="text-sm font-medium leading-none">
-                  Security Settings
-                </label>
-              </div>
-              <div className="flex items-center space-x-2">
+                Security Settings
+              </label>
+            </div>
+            <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="protocols" 
                   checked={exportOptions.protocols}
                   onCheckedChange={(checked) => handleOptionChange('protocols', checked as boolean)}
                 />
                 <label htmlFor="protocols" className="text-sm font-medium leading-none">
-                  Protocol Settings
-                </label>
-              </div>
-              <div className="flex items-center space-x-2">
+                Protocol Settings
+              </label>
+            </div>
+            <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="hardware" 
                   checked={exportOptions.hardware}
                   onCheckedChange={(checked) => handleOptionChange('hardware', checked as boolean)}
                 />
                 <label htmlFor="hardware" className="text-sm font-medium leading-none">
-                  Hardware Settings
-                </label>
+                Hardware Settings
+              </label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox 
