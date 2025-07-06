@@ -71,7 +71,11 @@ const allowedVariables = ['A','B','C','D','E','F','G','H'];
 // Define the form schema
 const calculationTagSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1, "Name is required"),
+  name: z.string()
+    .min(3, "Name must be at least 3 characters.")
+    .regex(/^[a-zA-Z0-9-_]+$/, "Name can only contain letters, numbers, hyphens (-), and underscores (_).")
+    .refine((val) => !/^\d+$/.test(val), { message: "Name cannot be only numbers." })
+    .refine((val) => !/^\s|\s$/.test(val), { message: "Name cannot start or end with a space." }),
   defaultValue: z.coerce.number().default(0),
   formula: z.string().min(1, "Formula is required").refine((val) => {
     // Remove all allowed function names and constants
@@ -124,7 +128,11 @@ const calculationTagSchema = z.object({
   spanHigh: z.coerce.number().int().min(0).default(1000),
   spanLow: z.coerce.number().int().min(0).default(0),
   isParent: z.boolean().default(false),
-  description: z.string().optional().default("")
+  description: z.string()
+    .max(100, "Description should not exceed 100 characters.")
+    .optional()
+    .default("")
+    .refine((val: string) => !val || /[a-zA-Z0-9]/.test(val), { message: "Description should include some letters or numbers." }),
 });
 
 // Define the form props
@@ -172,9 +180,12 @@ export function CalculationTagForm({
   const [expandedDevices, setExpandedDevices] = useState<string[]>([]);
   const { config } = useConfigStore();
   // State for tag selection dialog
-  const [tagSelectionDialog, setTagSelectionDialog] = useState({
+  const [tagSelectionDialog, setTagSelectionDialog] = useState<{
+    isOpen: boolean,
+    targetVariable: keyof z.infer<typeof calculationTagSchema>,
+  }>({
     isOpen: false,
-    targetVariable: "",
+    targetVariable: "a",
   });
   const [activeTab, setActiveTab] = useState("basic");
   const { user_tags, stats_tags, calculation_tags, system_tags } = config;
@@ -273,7 +284,8 @@ export function CalculationTagForm({
     // 1. Duplicate tag name check
     const isDuplicate = calculation_tags.some(
       (tag) =>
-        tag.name.trim().toLowerCase() === values.name.trim().toLowerCase() &&
+        typeof tag.name === 'string' &&
+        tag.name.trim().toLowerCase() === ((values.name as string) || '').trim().toLowerCase() &&
         tag.name !== initialValues?.name // allow same name if editing
     );
 
@@ -295,7 +307,10 @@ export function CalculationTagForm({
     // 3. At least one variable (A–H) must be filled
     const variableFields = ["a", "b", "c", "d", "e", "f", "g", "h"];
     const atLeastOneFilled = variableFields.some(
-      (field) => values[field as keyof FormValues]?.trim() !== ""
+      (field) => {
+        const val = values[field as keyof FormValues];
+        return typeof val === 'string' && val.trim() !== "";
+      }
     );
 
     if (!atLeastOneFilled) {
@@ -306,7 +321,7 @@ export function CalculationTagForm({
     }
 
     // 4. Formula validation
-    const formula = values.formula.trim();
+    const formula = typeof values.formula === 'string' ? values.formula.trim() : "";
 
     // Reject any characters that are NOT: a–h (case-insensitive), numbers, + - * / . ( )
     const invalidFormula = /[^a-hA-H0-9+\-*/().]/.test(formula);
@@ -762,7 +777,7 @@ export function CalculationTagForm({
                         }
                         onSelectTag={(tag) => {
                           form.setValue(tagSelectionDialog.targetVariable, tag.name);
-                          setTagSelectionDialog({ isOpen: false, targetVariable: "" });
+                          setTagSelectionDialog({ isOpen: false, targetVariable: "a" });
                         }}
                         excludeCalculationTagId={form.getValues().id}
                       />

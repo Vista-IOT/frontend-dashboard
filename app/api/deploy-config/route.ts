@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
 
     // --- Comprehensive DB population ---
     // Clear existing records (for a fresh deployment)
+    // Delete in order that respects foreign key constraints
+    await prisma.virtualMemoryMap.deleteMany({});
     await prisma.statsTag.deleteMany({});
     await prisma.calculationTag.deleteMany({});
     await prisma.iOTag.deleteMany({});
@@ -32,6 +34,7 @@ export async function POST(req: NextRequest) {
     await prisma.iOPort.deleteMany({});
     await prisma.bridgeBlock.deleteMany({});
     await prisma.communicationBridge.deleteMany({});
+    await prisma.destination.deleteMany({});
     await prisma.hardwareMapping.deleteMany({});
 
     let ioPortCount = 0;
@@ -255,6 +258,48 @@ export async function POST(req: NextRequest) {
             });
             blockCount++;
           }
+        }
+      }
+    }
+
+    // Insert Destinations for VMM (must exist before VMM entries)
+    if (config?.communication_forward?.destinations && Array.isArray(config.communication_forward.destinations)) {
+      for (const dest of config.communication_forward.destinations) {
+        // Only create if type is virtual-memory-map and not already created
+        if (dest.type === 'virtual-memory-map') {
+          await prisma.destination.create({
+            data: {
+              id: dest.id,
+              name: dest.name || dest.id,
+              type: dest.type,
+              configJson: dest.configJson ? JSON.stringify(dest.configJson) : '{}',
+              description: dest.description || null,
+            },
+          });
+        }
+      }
+    }
+
+    // Insert Virtual Memory Map entries (VMM)
+    if (config?.communication_forward?.destinations && Array.isArray(config.communication_forward.destinations)) {
+      for (const dest of config.communication_forward.destinations) {
+        if (dest.type === 'virtual-memory-map' && dest.memory) {
+          // Use unitId from VMM form field if present, else default to 1
+          let unitId = 1;
+          if (dest.memory.unitId !== undefined && dest.memory.unitId !== null) {
+            unitId = parseInt(dest.memory.unitId, 10) || 1;
+          }
+          await prisma.virtualMemoryMap.create({
+            data: {
+              destinationId: dest.id,
+              address: dest.memory.address,
+              dataType: dest.memory.dataType,
+              length: dest.memory.length !== undefined ? parseInt(dest.memory.length, 10) : null,
+              value: null,
+              buffer: null,
+              unitId: unitId,
+            },
+          });
         }
       }
     }

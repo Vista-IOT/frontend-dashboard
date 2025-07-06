@@ -228,8 +228,32 @@ export function DeviceForm({
       return;
     }
 
-    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+    if (description && !/[a-zA-Z0-9]/.test(description)) {
       toast.error("Description should include some letters or numbers.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Packet Delay validation ---
+    if (!Number.isInteger(packetDelay) || packetDelay < 0) {
+      toast.error("Packet delay must be a non-negative integer.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Digital Block Size validation ---
+    if (!Number.isInteger(digitalBlockSize) || digitalBlockSize < 0) {
+      toast.error("Digital block size must be a non-negative integer.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Analog Block Size validation ---
+    if (!Number.isInteger(analogBlockSize) || analogBlockSize < 0) {
+      toast.error("Analog block size must be a non-negative integer.", {
         duration: 5000,
       });
       return;

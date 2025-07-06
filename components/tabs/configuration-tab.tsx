@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import YAML from 'yaml'
 
 export default function ConfigurationTab() {
-  const { getYamlString, getLastUpdated, updateConfig } = useConfigStore()
+  const { getYamlString, getLastUpdated, updateConfig, resetConfig } = useConfigStore()
   const [isDeploying, setIsDeploying] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [editorContent, setEditorContent] = useState("")
@@ -81,10 +81,9 @@ export default function ConfigurationTab() {
   const handleReset = async () => {
     setIsResetting(true)
     try {
-      // Force reset to default configuration
-      updateConfig([], defaultConfig)
-      setEditorContent(getYamlString()) // Update editor content
-      
+      // Use the new async resetConfig to fetch and apply dynamic default config
+      await resetConfig();
+      setEditorContent(getYamlString()); // Update editor content
       toast.success('Configuration reset to default state', {
         description: "All settings have been restored to factory defaults",
         duration: 3000,

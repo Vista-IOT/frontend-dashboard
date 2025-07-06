@@ -205,8 +205,10 @@ model VirtualMemoryMap {
   destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
   address       String
   dataType      String
+  length        Int?
   value         String? // Store as string, can be parsed as needed
   buffer        String? // JSON or binary buffer as string
+  unitId        Int      // Modbus unit id for this entry
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 }

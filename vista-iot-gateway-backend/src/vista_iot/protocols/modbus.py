@@ -6,6 +6,16 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional, List, Union
 import time
+import threading
+from ..database.db_connector import DBConnector
+try:
+    from pymodbus.server.async_io import StartTcpServer
+    from pymodbus.datastore import ModbusSequentialDataBlock, ModbusSlaveContext, ModbusServerContext
+except ImportError:
+    StartTcpServer = None
+    ModbusSequentialDataBlock = None
+    ModbusSlaveContext = None
+    ModbusServerContext = None
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +24,13 @@ class ModbusManager:
     Manages Modbus protocol communications, including TCP and RTU modes.
     """
     
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, vmm=None):
         """
         Initialize the Modbus Manager.
         
         Args:
             config_manager: The configuration manager instance
+            vmm: Optional reference to the in-memory Virtual Memory Map
         """
         self.config_manager = config_manager
         self.config = {}
@@ -33,6 +44,7 @@ class ModbusManager:
             "input": {}            # 3xxxxx range
         }
         self.callbacks = {}
+        self.vmm = vmm
         
         logger.info("ModbusManager initialized")
     
@@ -57,6 +69,8 @@ class ModbusManager:
         
         if mode == "tcp":
             await self._initialize_tcp_server()
+            # Also start slave server to expose VMM
+            await self.start_slave_server()
         elif mode in ["rtu", "ascii"]:
             await self._initialize_serial_client()
         else:
@@ -300,3 +314,41 @@ class ModbusManager:
                 "input": len(self.registers["input"])
             }
         }
+
+    async def start_slave_server(self):
+        """
+        Start a Modbus TCP slave/server that exposes the VirtualMemoryMap from in-memory data.
+        """
+        if StartTcpServer is None:
+            logger.error("pymodbus is not installed. Modbus slave server cannot be started.")
+            return
+        logger.info("Starting Modbus TCP slave server for VirtualMemoryMap")
+        # Get unit id from system tag
+        system_tags = self.config_manager.get_value("system_tags", [])
+        unit_id = 1
+        for st in system_tags:
+            if st.get("name") == "#SYS_UNIT_ID":
+                try:
+                    unit_id = int(st.get("defaultValue", 1))
+                except Exception:
+                    unit_id = 1
+        # Build register blocks from in-memory VMM
+        holding = {}
+        vmm = self.vmm.values() if self.vmm else []
+        for entry in vmm:
+            try:
+                addr = int(entry["address"])
+                val = int(float(entry["value"]))
+                holding[addr] = val
+            except Exception:
+                continue
+        # Create Modbus data store
+        block = ModbusSequentialDataBlock(0, [holding.get(i, 0) for i in range(max(holding.keys() or [0]) + 1)])
+        store = ModbusSlaveContext(hr=block, zero_mode=True)
+        context = ModbusServerContext(slaves={unit_id: store}, single=False)
+        # Run server in a thread to avoid blocking
+        def run_server():
+            StartTcpServer(context, address=("0.0.0.0", self.config.get("tcp", {}).get("port", 502)))
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+        logger.info(f"Modbus TCP slave server started on port {self.config.get('tcp', {}).get('port', 502)} for VMM")

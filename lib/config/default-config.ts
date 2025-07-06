@@ -191,7 +191,17 @@ export const defaultConfig: ConfigSchema = {
     },
   },
   io_setup: {
-    ports: [],
+    ports: [
+      // Example:
+      // {
+      //   id: "io-1",
+      //   name: "DI1",
+      //   type: "digital_input",
+      //   hardwareMappingId: 1,
+      //   hardwareInterface: "com1",
+      //   ...other fields
+      // }
+    ],
   },
 
   user_tags: [],
@@ -211,7 +221,16 @@ export const defaultConfig: ConfigSchema = {
     // }
   ],
   communication_forward: {
-    destinations: [],
+    destinations: [
+      // Example:
+      // {
+      //   id: "dest-1",
+      //   name: "SCADA",
+      //   type: "modbus_tcp",
+      //   configJson: "{}",
+      //   description: "Modbus TCP destination"
+      // }
+    ],
     bridges: [],
   },
   hardware_mappings: [
@@ -222,6 +241,17 @@ export const defaultConfig: ConfigSchema = {
     //   type: "system",
     //   path: "/sys/uptime",
     //   description: "System uptime in seconds"
+    // }
+  ],
+  virtual_memory_map: [
+    // Example:
+    // {
+    //   id: "vmm-1",
+    //   name: "HoldingRegister1",
+    //   address: 40001,
+    //   unitId: 1,
+    //   dataType: "Analog",
+    //   ...other fields
     // }
   ],
 };

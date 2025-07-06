@@ -604,3 +604,82 @@ class DBConnector:
         # This would be a more complex implementation that updates database records
         # based on the configuration. For this implementation, we'll just save a snapshot.
         return self.save_config_snapshot(config)
+
+    def get_virtual_memory_map(self) -> List[Dict[str, Any]]:
+        """
+        Get all entries from the VirtualMemoryMap table.
+        Returns:
+            List of VMM entries as dictionaries.
+        """
+        if not self.conn:
+            self.connect()
+        try:
+            self.cursor.execute("""
+                SELECT id, address, value, dataType, unitId, updatedAt
+                FROM VirtualMemoryMap
+            """)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to get VirtualMemoryMap: {e}")
+            return []
+
+    def set_virtual_memory_value(self, address: str, value: Any, data_type: str = "float", unit_id: int = 1) -> bool:
+        """
+        Set or update a value in the VirtualMemoryMap table.
+        Args:
+            address: The address/key in the VMM.
+            value: The value to set.
+            data_type: The data type (default float).
+            unit_id: The Modbus unit id (default 1).
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.conn:
+            self.connect()
+        try:
+            # Try update first
+            self.cursor.execute(
+                """
+                UPDATE VirtualMemoryMap SET value = ?, dataType = ?, unitId = ?, updatedAt = CURRENT_TIMESTAMP WHERE address = ?
+                """,
+                (value, data_type, unit_id, address)
+            )
+            if self.cursor.rowcount == 0:
+                # Insert if not exists
+                self.cursor.execute(
+                    """
+                    INSERT INTO VirtualMemoryMap (address, value, dataType, unitId, updatedAt) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (address, value, data_type, unit_id)
+                )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set VirtualMemoryMap value: {e}")
+            return False
+
+    def get_virtual_memory_value(self, address: str, unit_id: int = 1) -> Optional[Any]:
+        """
+        Get a value from the VirtualMemoryMap table by address and unit id.
+        Args:
+            address: The address/key in the VMM.
+            unit_id: The Modbus unit id (default 1).
+        Returns:
+            The value if found, else None.
+        """
+        if not self.conn:
+            self.connect()
+        try:
+            self.cursor.execute(
+                """
+                SELECT value FROM VirtualMemoryMap WHERE address = ? AND unitId = ?
+                """,
+                (address, unit_id)
+            )
+            row = self.cursor.fetchone()
+            if row:
+                return row[0]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get VirtualMemoryMap value: {e}")
+            return None

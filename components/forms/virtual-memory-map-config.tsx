@@ -53,19 +53,21 @@ export function VirtualMemoryMapConfig({ config, onUpdate }: VirtualMemoryMapCon
                     </SelectContent>
                 </Select>
             </div>
-             {config.dataType === 'ascii' && (
-                <div className="animate-in fade-in-50 duration-300">
-                    <Label htmlFor="string-length">String Length (in registers)</Label>
-                    <Input
-                        id="string-length"
-                        type="number"
-                        placeholder="e.g., 10"
-                        value={config.length || ''}
-                        onChange={handleLengthChange}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Each register holds 2 characters (bytes).</p>
-                </div>
-            )}
+            <div className="animate-in fade-in-50 duration-300">
+                <Label htmlFor="length">{config.dataType === 'ascii' ? 'String Length (in registers)' : 'Number of Registers to Map'}</Label>
+                <Input
+                    id="length"
+                    type="number"
+                    placeholder={config.dataType === 'ascii' ? 'e.g., 10' : 'e.g., 1'}
+                    value={config.length || ''}
+                    onChange={handleLengthChange}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {config.dataType === 'ascii'
+                    ? 'Each register holds 2 characters (bytes).'
+                    : 'Specify how many consecutive registers to map starting from the address.'}
+                </p>
+            </div>
         </div>
     );
 } 

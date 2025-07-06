@@ -139,7 +139,7 @@ function StatsTagDialog({
     if (description && description.length > 100) {
       errors.push("Description should not exceed 100 characters.");
     }
-    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+    if (description && !/[a-zA-Z0-9]/.test(description)) {
       errors.push("Description should contain letters or numbers.");
     }
 

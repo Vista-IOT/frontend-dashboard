@@ -268,27 +268,80 @@ function validateRestApiConfig(values: any): boolean {
   return errors.length > 0 ? showErrors(errors) : true;
 }
 
-function validateVirtualMemoryMapConfig(values: any): boolean {
+function validateVirtualMemoryMapConfig(values: any, existingConfigs: any[] = []): boolean {
   const errors: string[] = [];
 
-  if (!isNonEmpty(values.name)) errors.push("Name is required.");
-  if (!isNonEmpty(values.memory?.address)) errors.push("Address is required.");
-  if (!isNonEmpty(values.memory?.dataType))
-    errors.push("Data Type is required.");
-  if (!isNonEmpty(values.memory?.endianness))
-    errors.push("Endianness is required.");
-
-  if (["string", "ascii"].includes(values.memory?.dataType)) {
-    if (!isPositiveNumber(values.memory.length)) {
-      errors.push("Length is required for string/ascii types.");
+  // Name validation
+  if (!isNonEmpty(values.name)) {
+    errors.push("Name is required.");
+  } else {
+    if (values.name.length < 3) {
+      errors.push("Name must be at least 3 characters.");
+    }
+    if (!/^[a-zA-Z0-9-_]+$/.test(values.name)) {
+      errors.push("Name can only contain letters, numbers, hyphens (-), and underscores (_)." );
+    }
+    if (/^\d+$/.test(values.name)) {
+      errors.push("Name cannot be only numbers.");
+    }
+    if (/^\s|\s$/.test(values.name)) {
+      errors.push("Name cannot start or end with a space.");
+    }
+    // Uniqueness
+    const isDuplicate = existingConfigs.some(
+      (cfg) =>
+        cfg.name?.trim().toLowerCase() === values.name?.trim().toLowerCase() &&
+        cfg.id !== values.id
+    );
+    if (isDuplicate) {
+      errors.push("Name must be unique.");
     }
   }
 
+  // Address validation
+  if (!isNonEmpty(values.memory?.address)) {
+    errors.push("Address is required.");
+  } else {
+    const addr = values.memory.address;
+    if (!/^0x[0-9a-fA-F]+$/.test(addr) && !/^\d+$/.test(addr)) {
+      errors.push("Address must be a valid integer or hex (e.g., 0x1000 or 4096)." );
+    }
+  }
+
+  // Data Type
+  if (!isNonEmpty(values.memory?.dataType))
+    errors.push("Data Type is required.");
+
+  // Endianness
+  if (!isNonEmpty(values.memory?.endianness))
+    errors.push("Endianness is required.");
+
+  // Unit ID
+  const unitId = values.memory?.unitId;
+  if (unitId === undefined || unitId === null || unitId === "") {
+    errors.push("Unit ID is required.");
+  } else if (!Number.isInteger(unitId) || unitId < 1 || unitId > 247) {
+    errors.push("Unit ID must be an integer between 1 and 247.");
+  }
+
+  // Length for string/ascii
+  if (["string", "ascii"].includes(values.memory?.dataType)) {
+    if (!isPositiveNumber(values.memory.length) || !Number.isInteger(values.memory.length)) {
+      errors.push("Length is required and must be a positive integer for string/ascii types.");
+    }
+  }
+
+  // Scaling
   if (values.memory?.scaling?.enabled) {
     if (!isNumber(values.memory.scaling.factor))
       errors.push("Scaling factor must be a number.");
     if (!isNumber(values.memory.scaling.offset))
       errors.push("Scaling offset must be a number.");
+  }
+
+  // Description
+  if (values.description && values.description.length > 100) {
+    errors.push("Description should not exceed 100 characters.");
   }
 
   return errors.length > 0 ? showErrors(errors) : true;
@@ -323,7 +376,7 @@ export default function DestinationForm({
     } else if (type === "rest-api") {
       isValid = validateRestApiConfig(values);
     } else if (type === "virtual-memory-map") {
-      isValid = validateVirtualMemoryMapConfig(values);
+      isValid = validateVirtualMemoryMapConfig(values, existingConfigs);
     }
 
     if (!isValid) return;
@@ -1314,20 +1367,42 @@ export default function DestinationForm({
                   <option value="ascii">ascii</option>
                 </select>
               </div>
-              {(values.memory.dataType === "string" ||
-                values.memory.dataType === "ascii") && (
-                <div className="space-y-2">
-                  <Label htmlFor="length">Length</Label>
-                  <Input
-                    id="length"
-                    type="number"
-                    value={values.memory.length}
-                    onChange={(e) =>
-                      handleChange(["memory", "length"], Number(e.target.value))
-                    }
-                  />
-                </div>
-              )}
+              {/* Unit ID Field */}
+              <div className="space-y-2">
+                <Label htmlFor="unitId">Unit ID</Label>
+                <Input
+                  id="unitId"
+                  type="number"
+                  min={1}
+                  value={values.memory.unitId ?? 1}
+                  onChange={(e) =>
+                    handleChange(["memory", "unitId"], Number(e.target.value))
+                  }
+                  placeholder="1"
+                />
+              </div>
+              {/* Length Field: Always show for all data types */}
+              <div className="space-y-2">
+                <Label htmlFor="length">
+                  {['string', 'ascii'].includes(values.memory.dataType)
+                    ? 'Length (in registers)'
+                    : 'Number of Registers to Map'}
+                </Label>
+                <Input
+                  id="length"
+                  type="number"
+                  min={1}
+                  value={values.memory.length ?? 1}
+                  onChange={(e) =>
+                    handleChange(["memory", "length"], Number(e.target.value))
+                  }
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {['string', 'ascii'].includes(values.memory.dataType)
+                    ? 'Each register holds 2 characters (bytes).'
+                    : 'Specify how many consecutive registers to map starting from the address.'}
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="endianness">Endianness</Label>
                 <select

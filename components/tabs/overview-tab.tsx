@@ -1,8 +1,28 @@
 import { BarChartIcon as Bar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { useDashboardOverview } from "@/hooks/useDashboardOverview";
+import { Loader2 } from "lucide-react";
 
 export default function OverviewTab() {
+  const data = useDashboardOverview();
+  if (!data) {
+    return <div className="flex justify-center items-center h-40"><Loader2 className="animate-spin h-8 w-8 text-muted-foreground" /></div>;
+  }
+  const protocolStatusColor = (status: string) => {
+    if (status === "connected" || status === "running" || status === "active") return "bg-green-500";
+    if (status === "partial") return "bg-yellow-500";
+    if (status === "disconnected" || status === "stopped") return "bg-red-500";
+    return "bg-gray-400";
+  };
+  const protocols = [
+    { name: "Network", status: data.protocols?.network || "connected" },
+    { name: "VPN", status: data.protocols?.vpn || "connected" },
+    { name: "Modbus", status: data.protocols?.modbus || "partial" },
+    { name: "OPC-UA", status: data.protocols?.opcua || "connected" },
+    { name: "DNP3.0", status: data.protocols?.dnp3 || "disconnected" },
+    { name: "Watchdog", status: data.protocols?.watchdog || "active" },
+  ];
   return (
     <>
       {/* Status summary */}
@@ -13,48 +33,15 @@ export default function OverviewTab() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-green-500" />
-              <div>
-                <div className="font-medium">Network</div>
-                <div className="text-sm text-muted-foreground">Connected</div>
+            {protocols.map((p) => (
+              <div className="flex items-center gap-4" key={p.name}>
+                <div className={`h-3 w-3 rounded-full ${protocolStatusColor(p.status)}`} />
+                <div>
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-sm text-muted-foreground">{p.status.charAt(0).toUpperCase() + p.status.slice(1)}</div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-green-500" />
-              <div>
-                <div className="font-medium">VPN</div>
-                <div className="text-sm text-muted-foreground">Connected</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-yellow-500" />
-              <div>
-                <div className="font-medium">Modbus</div>
-                <div className="text-sm text-muted-foreground">Partial</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-green-500" />
-              <div>
-                <div className="font-medium">OPC-UA</div>
-                <div className="text-sm text-muted-foreground">Connected</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-red-500" />
-              <div>
-                <div className="font-medium">DNP3.0</div>
-                <div className="text-sm text-muted-foreground">Disconnected</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-3 w-3 rounded-full bg-green-500" />
-              <div>
-                <div className="font-medium">Watchdog</div>
-                <div className="text-sm text-muted-foreground">Active</div>
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -73,60 +60,26 @@ export default function OverviewTab() {
               <div className="font-medium">Status</div>
               <div className="font-medium">Traffic</div>
             </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>eth0 (WAN)</div>
-              <div>192.168.1.100</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-2" />
-                Connected
-              </div>
-              <div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 text-green-500" />
-                  <span>TX: 1.2 MB/s</span>
+            {data.network_interfaces?.map((iface: any) => (
+              <div className="grid gap-2 md:grid-cols-4 border-t pt-2" key={iface.name}>
+                <div>{iface.name}</div>
+                <div>{iface.ip && iface.ip !== "N/A" ? iface.ip : <span className="text-muted-foreground">N/A</span>}</div>
+                <div className="flex items-center">
+                  <div className={`h-2 w-2 rounded-full ${protocolStatusColor(iface.status)} mr-2`} />
+                  {iface.status.charAt(0).toUpperCase() + iface.status.slice(1)}
                 </div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 rotate-180 text-blue-500" />
-                  <span>RX: 256 KB/s</span>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>eth1 (LAN)</div>
-              <div>10.0.0.1</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-2" />
-                Connected
-              </div>
-              <div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 text-green-500" />
-                  <span>TX: 350 KB/s</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 rotate-180 text-blue-500" />
-                  <span>RX: 2.1 MB/s</span>
+                <div>
+                  <div className="flex items-center text-sm">
+                    <Bar className="h-3 w-3 mr-1 text-green-500" />
+                    <span>TX: {iface.tx}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <Bar className="h-3 w-3 mr-1 rotate-180 text-blue-500" />
+                    <span>RX: {iface.rx}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>wlan0</div>
-              <div>10.0.0.2</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-yellow-500 mr-2" />
-                Limited
-              </div>
-              <div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 text-green-500" />
-                  <span>TX: 50 KB/s</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <Bar className="h-3 w-3 mr-1 rotate-180 text-blue-500" />
-                  <span>RX: 120 KB/s</span>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
         <CardFooter>
@@ -150,42 +103,17 @@ export default function OverviewTab() {
               <div className="font-medium">Status</div>
               <div className="font-medium">Connections</div>
             </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>Modbus TCP</div>
-              <div>Server</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-2" />
-                Running
+            {Object.entries(data.protocols || {}).map(([name, status]: [string, any]) => (
+              <div className="grid gap-2 md:grid-cols-4 border-t pt-2" key={name}>
+                <div>{name}</div>
+                <div>-</div>
+                <div className="flex items-center">
+                  <div className={`h-2 w-2 rounded-full ${protocolStatusColor(status)} mr-2`} />
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </div>
+                <div>-</div>
               </div>
-              <div>3 active</div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>Modbus RTU</div>
-              <div>Client</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-yellow-500 mr-2" />
-                Partial
-              </div>
-              <div>1 active, 2 failed</div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>OPC-UA</div>
-              <div>Server</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-2" />
-                Running
-              </div>
-              <div>1 active</div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-4 border-t pt-2">
-              <div>DNP3.0</div>
-              <div>Server</div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 rounded-full bg-red-500 mr-2" />
-                Stopped
-              </div>
-              <div>0 active</div>
-            </div>
+            ))}
           </div>
         </CardContent>
         <CardFooter>
@@ -193,6 +121,50 @@ export default function OverviewTab() {
             Manage Protocols
           </Button>
         </CardFooter>
+      </Card>
+
+      {/* System resource summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>System Resources</CardTitle>
+          <CardDescription>Live system resource usage</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <div className="font-medium">System Uptime</div>
+              <div>{data.system_uptime}</div>
+            </div>
+            <div>
+              <div className="font-medium">CPU Load</div>
+              <div>{data.cpu_load}%</div>
+            </div>
+            <div>
+              <div className="font-medium">Memory Usage</div>
+              <div>
+                {data.memory?.used} / {data.memory?.total} {data.memory?.unit || 'MB'}
+                {typeof data.memory?.free !== 'undefined' && (
+                  <span> (Free: {data.memory.free} {data.memory.unit || 'MB'})</span>
+                )}
+                {typeof data.memory?.percent !== 'undefined' && (
+                  <span> ({data.memory.percent.toFixed(1)}%)</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="font-medium">Storage Usage</div>
+              <div>
+                {data.storage?.used} / {data.storage?.total} {data.storage?.unit || 'GB'}
+                {typeof data.storage?.free !== 'undefined' && (
+                  <span> (Free: {data.storage.free} {data.storage.unit || 'GB'})</span>
+                )}
+                {typeof data.storage?.percent !== 'undefined' && (
+                  <span> ({data.storage.percent.toFixed(1)}%)</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
       </Card>
     </>
   )

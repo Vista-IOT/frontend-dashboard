@@ -53,6 +53,7 @@ import { useHydrateConfigFromBackend } from "@/hooks/useHydrateConfigFromBackend
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import { comprehensiveConfig } from "@/lib/config/comprehensive-config";
 import { buildIoTagTree } from "@/lib/utils";
+import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 
 import NetworkTab from "@/components/tabs/network-tab";
 import SecurityTab from "@/components/tabs/security-tab";
@@ -101,9 +102,13 @@ function DashboardContent() {
   const deviceItemId = searchParams.get("deviceId");
   const [showReconfigureOption, setShowReconfigureOption] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(1000);
 
   // Get config from store
   const { config, updateConfig, resetConfig } = useConfigStore();
+  const hydrateConfig = useConfigStore((s) => s.hydrateConfigFromBackend);
+  const saveConfig = useConfigStore((s) => s.saveConfigToBackend);
+  const isDirty = useConfigStore((s) => s.isDirty);
 
   // Build IO ports tree from config for the sidebar
   const ioPorts = buildIoTagTree(config);
@@ -118,6 +123,9 @@ function DashboardContent() {
   // Add state for active section
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const pathname = usePathname();
+
+  // --- Dashboard Overview Data ---
+  const dashboardData = useDashboardOverview(refreshInterval);
 
   // Modified navigation items with proper routes
   const navItems: NavItem[] = [
@@ -405,6 +413,10 @@ function DashboardContent() {
     }
   };
 
+  useEffect(() => {
+    hydrateConfig();
+  }, [hydrateConfig]);
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -511,6 +523,20 @@ function DashboardContent() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          <div className="ml-4 flex items-center gap-2">
+            <label htmlFor="refresh-interval" className="text-xs text-muted-foreground">Refresh:</label>
+            <select
+              id="refresh-interval"
+              value={refreshInterval}
+              onChange={e => setRefreshInterval(Number(e.target.value))}
+              className="border rounded px-2 py-1 text-xs"
+            >
+              <option value={1000}>1s</option>
+              <option value={2000}>2s</option>
+              <option value={5000}>5s</option>
+              <option value={10000}>10s</option>
+            </select>
+          </div>
         </header>
 
         {/* Content */}
@@ -532,10 +558,11 @@ function DashboardContent() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">10d 14h 32m</div>
-                      <p className="text-xs text-muted-foreground">
-                        Last restart: 2023-06-15 08:23:45
-                      </p>
+                      {dashboardData ? (
+                        <div className="text-2xl font-bold">{dashboardData.system_uptime}</div>
+                      ) : (
+                        <Loader2 className="animate-spin" />
+                      )}
                     </CardContent>
                   </Card>
                   <Card>
@@ -545,8 +572,14 @@ function DashboardContent() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">24%</div>
-                      <Progress value={24} className="h-2" />
+                      {dashboardData ? (
+                        <>
+                          <div className="text-2xl font-bold">{dashboardData.cpu_load}%</div>
+                          <Progress value={dashboardData.cpu_load} className="h-2" />
+                        </>
+                      ) : (
+                        <Loader2 className="animate-spin" />
+                      )}
                     </CardContent>
                   </Card>
                   <Card>
@@ -556,8 +589,16 @@ function DashboardContent() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">512MB / 2GB</div>
-                      <Progress value={25} className="h-2" />
+                      {dashboardData && dashboardData.memory ? (
+                        <div className="text-2xl font-bold">
+                          {dashboardData.memory.used} / {dashboardData.memory.total} {dashboardData.memory.unit || 'MB'}
+                          {typeof dashboardData.memory.percent !== 'undefined' && (
+                            <span> ({dashboardData.memory.percent.toFixed(1)}%)</span>
+                          )}
+                        </div>
+                      ) : (
+                        <Loader2 className="animate-spin" />
+                      )}
                     </CardContent>
                   </Card>
                   <Card>
@@ -567,8 +608,16 @@ function DashboardContent() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">2.1GB / 8GB</div>
-                      <Progress value={26} className="h-2" />
+                      {dashboardData && dashboardData.storage ? (
+                        <div className="text-2xl font-bold">
+                          {dashboardData.storage.used} / {dashboardData.storage.total} {dashboardData.storage.unit || 'GB'}
+                          {typeof dashboardData.storage.percent !== 'undefined' && (
+                            <span> ({dashboardData.storage.percent.toFixed(1)}%)</span>
+                          )}
+                        </div>
+                      ) : (
+                        <Loader2 className="animate-spin" />
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -634,6 +683,12 @@ function DashboardContent() {
               </div>
             </>
           )}
+          <div className="flex gap-2 mb-4">
+            <button className="btn btn-primary" onClick={async () => {
+              await saveConfig();
+              toast({ title: "Config saved to backend!" });
+            }} disabled={!isDirty}>Save Config</button>
+          </div>
         </div>
       </div>
       {/* Dialogs */}

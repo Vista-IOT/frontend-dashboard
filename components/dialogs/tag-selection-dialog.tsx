@@ -120,7 +120,7 @@ export default function TagSelectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-screen max-w-[98vw] max-h-[90vh] overflow-auto flex flex-col p-0">
+      <DialogContent className="sm:max-w-5xl w-full max-h-[90vh] overflow-auto flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle>Select Tag</DialogTitle>
         </DialogHeader>

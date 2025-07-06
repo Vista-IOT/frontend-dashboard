@@ -47,8 +47,7 @@ async def startup_event():
     
     logger.info("Starting Vista IoT Gateway")
     
-    # Get configuration and database paths from environment or use defaults
-    config_path = os.environ.get("VISTA_CONFIG_PATH")
+    # Only use database path (no config_path)
     db_path = os.environ.get("VISTA_DB_PATH")
     
     # If db_path is not specified, use default path in frontend directory
@@ -57,8 +56,8 @@ async def startup_event():
         db_path = os.path.join(frontend_dir, "prisma", "dev.db")
         logger.info(f"Using default database path: {db_path}")
     
-    # Initialize gateway with database support
-    gateway = IoTGateway(config_path, db_path)
+    # Initialize gateway with database support only
+    gateway = IoTGateway(db_path=db_path)
     
     # Inject gateway into API dependency
     gateway_dependency.set_gateway(gateway)
@@ -88,12 +87,10 @@ def handle_sigterm(signum, frame):
     # Let the FastAPI shutdown event handle gateway shutdown
     raise SystemExit(0)
 
-async def run_gateway_only(config_path: str = None, db_path: str = None):
+async def run_gateway_only(db_path: str = None):
     """
     Run gateway without the API server.
-    
     Args:
-        config_path: Path to the configuration file
         db_path: Path to the SQLite database file
     """
     global gateway
@@ -104,8 +101,8 @@ async def run_gateway_only(config_path: str = None, db_path: str = None):
         db_path = os.path.join(frontend_dir, "prisma", "dev.db")
         logger.info(f"Using default database path: {db_path}")
     
-    # Initialize gateway with database support
-    gateway = IoTGateway(config_path, db_path)
+    # Initialize gateway with database support only
+    gateway = IoTGateway(db_path=db_path)
     
     # Register signal handlers
     signal.signal(signal.SIGTERM, handle_sigterm)
@@ -130,7 +127,6 @@ async def run_gateway_only(config_path: str = None, db_path: str = None):
 def main():
     """Main entry point for the application"""
     parser = argparse.ArgumentParser(description="Vista IoT Gateway")
-    parser.add_argument("--config", help="Path to configuration file")
     parser.add_argument("--db", help="Path to SQLite database file")
     parser.add_argument("--api-only", action="store_true", help="Run API server only")
     parser.add_argument("--gateway-only", action="store_true", help="Run gateway only (no API server)")
@@ -139,15 +135,13 @@ def main():
     
     args = parser.parse_args()
     
-    # Set configuration and database paths in environment
-    if args.config:
-        os.environ["VISTA_CONFIG_PATH"] = args.config
+    # Set database path in environment
     if args.db:
         os.environ["VISTA_DB_PATH"] = args.db
     
     if args.gateway_only:
         # Run gateway only
-        asyncio.run(run_gateway_only(args.config, args.db))
+        asyncio.run(run_gateway_only(args.db))
     else:
         # Run API server with gateway
         uvicorn.run(

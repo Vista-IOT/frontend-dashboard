@@ -229,31 +229,20 @@ export function IOTagDetailView({
       toast.error("Tag name is required.", { duration: 5000 });
       return;
     }
-
     if (newTag.name.length < 3) {
-      toast.error("Tag name must be at least 3 characters long.", {
-        duration: 5000,
-      });
+      toast.error("Tag name must be at least 3 characters long.", { duration: 5000 });
       return;
     }
-
     if (!/^[a-zA-Z0-9-_]+$/.test(newTag.name)) {
-      toast.error(
-        "Tag name can only contain letters, numbers, hyphens (-), and underscores (_).",
-        { duration: 5000 }
-      );
+      toast.error("Tag name can only contain letters, numbers, hyphens (-), and underscores (_).", { duration: 5000 });
       return;
     }
-
     if (/^\d+$/.test(newTag.name)) {
       toast.error("Tag name cannot be all numbers.", { duration: 5000 });
       return;
     }
-
     if (/^\s|\s$/.test(newTag.name)) {
-      toast.error("Tag name cannot start or end with spaces.", {
-        duration: 5000,
-      });
+      toast.error("Tag name cannot start or end with a space.", { duration: 5000 });
       return;
     }
 
@@ -270,28 +259,35 @@ export function IOTagDetailView({
       return;
     }
 
-    const addressNum = Number(newTag.address);
-
-    // --- Address validation ---
-    if (!Number.isInteger(addressNum) || addressNum < 0) {
-      toast.error("Address must be a non-negative integer.", {
-        duration: 5000,
-      });
+    // --- Description validation ---
+    if (newTag.description && newTag.description.length > 100) {
+      toast.error("Description should not exceed 100 characters.", { duration: 5000 });
+      return;
+    }
+    if (newTag.description && !/[a-zA-Z0-9]/.test(newTag.description)) {
+      toast.error("Description should include some letters or numbers.", { duration: 5000 });
       return;
     }
 
-    // // --- Data Type validation ---
-    // const validDataTypes = ["BOOL", "INT", "FLOAT", "UINT", "STRING"]; // Update to match your app
-    // if (!validDataTypes.includes(newTag.dataType)) {
-    //   toast.error(`Invalid data type: ${newTag.dataType}`, { duration: 5000 });
-    //   return;
-    // }
+    // --- Address validation ---
+    if (!newTag.address.trim()) {
+      toast.error("Address is required.", { duration: 5000 });
+      return;
+    }
+    if (!/^0x[0-9a-fA-F]+$/.test(newTag.address) && !/^\d+$/.test(newTag.address)) {
+      toast.error("Address must be a valid integer or hex (e.g., 0x1000 or 4096).", { duration: 5000 });
+      return;
+    }
 
-    // --- Description validation ---
-    if (newTag.description && newTag.description.length > 100) {
-      toast.error("Description should not exceed 100 characters.", {
-        duration: 5000,
-      });
+    // --- Data Type validation ---
+    if (!newTag.dataType) {
+      toast.error("Data Type is required.", { duration: 5000 });
+      return;
+    }
+
+    // --- Register Type validation ---
+    if (!newTag.registerType) {
+      toast.error("Register Type is required.", { duration: 5000 });
       return;
     }
 

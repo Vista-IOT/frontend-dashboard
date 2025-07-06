@@ -24,6 +24,14 @@ export function EthernetInterfaceForm() {
   const eth0Config = config.network.interfaces.eth0
   const wlan0Config = config.network.interfaces.wlan0
 
+  if (!eth0Config) {
+    return (
+      <div className="p-4 text-red-500">
+        Ethernet interface <b>eth0</b> not found in configuration.
+      </div>
+    );
+  }
+
   const handleEth0Submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)

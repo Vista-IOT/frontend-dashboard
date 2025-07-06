@@ -143,11 +143,11 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
     return ["tcpip", "tcpip-serial"].includes(type);
   }, [type]);
 
-  const [errors, setErrors] = useState<{ name?: string; type?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; type?: string; description?: string; scanTime?: string; timeOut?: string; retryCount?: string; autoRecoverTime?: string; serialPort?: string; baudRate?: string; dataBit?: string; stopBit?: string; parity?: string }>({});
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validationErrors: { name?: string; type?: string } = {};
+    const validationErrors: { name?: string; type?: string; description?: string; scanTime?: string; timeOut?: string; retryCount?: string; autoRecoverTime?: string; serialPort?: string; baudRate?: string; dataBit?: string; stopBit?: string; parity?: string } = {};
 
     // Basic validations
     if (!type.trim()) validationErrors.type = "Type is required.";
@@ -179,7 +179,47 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       validationErrors.name = "This name is already used.";
     }
 
-    // If any errors exist, show toasts and abort
+    // Description validation
+    if (description && description.length > 100) {
+      validationErrors.description = "Description should not exceed 100 characters.";
+    } else if (description && !/[a-zA-Z0-9]/.test(description)) {
+      validationErrors.description = "Description should include some letters or numbers.";
+    }
+
+    // Numeric fields
+    if (!Number.isInteger(scanTime) || scanTime < 1) {
+      validationErrors.scanTime = "Scan time must be an integer >= 1 ms.";
+    }
+    if (!Number.isInteger(timeOut) || timeOut < 1) {
+      validationErrors.timeOut = "Timeout must be an integer >= 1 ms.";
+    }
+    if (!Number.isInteger(retryCount) || retryCount < 0) {
+      validationErrors.retryCount = "Retry count must be 0 or greater.";
+    }
+    if (!Number.isInteger(autoRecoverTime) || autoRecoverTime < 0) {
+      validationErrors.autoRecoverTime = "Auto-recover time must be 0 or greater.";
+    }
+
+    // Serial settings validation
+    if (isSerialType) {
+      if (!serialPort && !serialPortCustom) {
+        validationErrors.serialPort = "Serial port is required.";
+      }
+      if (!Number.isInteger(baudRate) || baudRate < 1200 || baudRate > 115200) {
+        validationErrors.baudRate = "Baud rate must be between 1200 and 115200.";
+      }
+      if (!Number.isInteger(dataBit) || dataBit < 5 || dataBit > 8) {
+        validationErrors.dataBit = "Data bits must be between 5 and 8.";
+      }
+      if (!(stopBit === 1 || stopBit === 2)) {
+        validationErrors.stopBit = "Stop bit must be 1 or 2.";
+      }
+      if (!["None", "Even", "Odd"].includes(parity)) {
+        validationErrors.parity = "Parity must be None, Even, or Odd.";
+      }
+    }
+
+    // Show errors
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       for (const key in validationErrors) {
@@ -565,7 +605,6 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1">1</SelectItem>
-                      <SelectItem value="1.5">1.5</SelectItem>
                       <SelectItem value="2">2</SelectItem>
                     </SelectContent>
                   </Select>
@@ -581,8 +620,6 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                       <SelectItem value="None">None</SelectItem>
                       <SelectItem value="Even">Even</SelectItem>
                       <SelectItem value="Odd">Odd</SelectItem>
-                      <SelectItem value="Mark">Mark</SelectItem>
-                      <SelectItem value="Space">Space</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

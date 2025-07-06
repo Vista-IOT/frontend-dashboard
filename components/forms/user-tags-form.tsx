@@ -176,13 +176,16 @@ function TagDialog({
       if (descriptor0.length > 25 || descriptor1.length > 25) {
         errors.push("Descriptors should be under 25 characters.");
       }
+      if (!/[a-zA-Z0-9]/.test(descriptor0) || !/[a-zA-Z0-9]/.test(descriptor1)) {
+        errors.push("Descriptors must contain letters or numbers.");
+      }
     }
 
     // --- Description validation (optional) ---
     if (description && description.length > 100) {
       errors.push("Description should not exceed 100 characters.");
     }
-    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+    if (description && !/[a-zA-Z0-9]/.test(description)) {
       errors.push("Description must contain letters or numbers.");
     }
 

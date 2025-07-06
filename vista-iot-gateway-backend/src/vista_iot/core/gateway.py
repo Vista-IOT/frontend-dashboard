@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 
 from .config_manager import ConfigManager
+from ..utils import tag_processing
 
 logger = logging.getLogger(__name__)
 
@@ -18,20 +19,19 @@ class IoTGateway:
     This is the central coordinator for all gateway functionality.
     """
     
-    def __init__(self, config_path: Optional[str] = None, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None):
         """
-        Initialize the IoT Gateway with the specified configuration.
-        
+        Initialize the IoT Gateway using only the database config.
         Args:
-            config_path: Path to the user configuration file. If None, only default config is used.
             db_path: Path to the SQLite database file. If None, uses the default path.
         """
-        self.config_path = config_path
         self.db_path = db_path
-        self.config_manager = ConfigManager(config_path, db_path)
+        self.config_manager = ConfigManager(db_path=db_path)
         self.modules = {}
         self.running = False
         self.start_time = None
+        # In-memory Virtual Memory Map: address -> dict (address, value, dataType, unitId, updatedAt)
+        self.virtual_memory_map: Dict[str, Dict[str, Any]] = {}
         
         # Initialize system information
         self.system_info = {
@@ -45,7 +45,7 @@ class IoTGateway:
         # Setup logging
         self._setup_logging()
         
-        logger.info(f"IoT Gateway initialized with config: {config_path}")
+        logger.info(f"IoT Gateway initialized with config: {db_path}")
     
     def _setup_logging(self):
         """Configure logging based on configuration settings"""
@@ -89,6 +89,9 @@ class IoTGateway:
             # Continue anyway, but log the errors
         # Validate hardware
         self.validate_hardware()
+        
+        # Load VMM from DB into memory
+        self.load_vmm_from_db()
         
         try:
             # Initialize and start all required modules based on configuration
@@ -154,9 +157,8 @@ class IoTGateway:
         # Initialize Modbus if enabled
         if protocols_config.get("modbus", {}).get("enabled", False):
             try:
-                # This would be replaced with actual module import and initialization
                 from ..protocols import modbus
-                modbus_module = modbus.ModbusManager(self.config_manager)
+                modbus_module = modbus.ModbusManager(self.config_manager, vmm=self.virtual_memory_map)
                 await modbus_module.initialize()
                 self.modules["modbus"] = modbus_module
                 logger.info("Modbus module initialized")
@@ -251,24 +253,46 @@ class IoTGateway:
         This runs until the gateway is stopped and coordinates all module activities.
         """
         logger.info("Starting main gateway loop")
-        
         update_interval = 1.0  # 1 second update interval
         last_system_update = 0.0
-        
         try:
             while self.running:
                 current_time = time.time()
-                
                 # Update system information every 5 seconds
                 if current_time - last_system_update >= 5.0:
                     self._update_system_info()
                     last_system_update = current_time
-                
-                # TODO: Implement other periodic tasks
-                
+                # --- Poll IO Ports/Devices/Tags ---
+                io_ports = self.config_manager.get_value("io_setup.ports", [])
+                for port in io_ports:
+                    if not port.get("enabled", True):
+                        continue
+                    for device in port.get("devices", []):
+                        if not device.get("enabled", True):
+                            continue
+                        for tag in device.get("tags", []):
+                            # Simulate polling: in real code, poll hardware/protocol here
+                            raw_value = tag.get("defaultValue", 0)
+                            # TODO: Apply formula if present (for calculation tags)
+                            processed_value = tag_processing.process_tag_value(raw_value, tag)
+                            address = tag.get("address") or tag.get("id")
+                            data_type = tag.get("dataType", "float")
+                            # Use unit id from system tag if available
+                            system_tags = self.config_manager.get_value("system_tags", [])
+                            unit_id = 1
+                            for st in system_tags:
+                                if st.get("name") == "#SYS_UNIT_ID":
+                                    try:
+                                        unit_id = int(st.get("defaultValue", 1))
+                                    except Exception:
+                                        unit_id = 1
+                            # Update in-memory VMM instead of DB
+                            self.update_vmm_value(address, processed_value, data_type, unit_id)
+                # --- Bridge Logic: Route to VMM ---
+                # (For now, all polled data is already routed to VMM above)
+                # TODO: Implement advanced bridge logic if needed
                 # Sleep for a short time to prevent CPU hogging
                 await asyncio.sleep(update_interval)
-                
         except asyncio.CancelledError:
             logger.info("Main gateway loop cancelled")
             self.running = False
@@ -412,6 +436,49 @@ class IoTGateway:
                 logger.error("[HARDWARE ERROR] GPIO interface is NOT available on this system.")
         logger.info("Hardware validation complete.")
 
+    def load_vmm_from_db(self):
+        """Load the Virtual Memory Map from the DB into memory."""
+        from ..database.db_connector import DBConnector
+        db = DBConnector(self.db_path)
+        vmm_entries = db.get_virtual_memory_map()
+        self.virtual_memory_map = {str(entry["address"]): entry for entry in vmm_entries}
+        logger.info(f"Loaded {len(self.virtual_memory_map)} VMM entries from DB into memory.")
+
+    def save_vmm_to_db(self):
+        """Persist the in-memory VMM to the DB (overwrite all entries)."""
+        from ..database.db_connector import DBConnector
+        db = DBConnector(self.db_path)
+        # Clear table and re-insert all
+        try:
+            db.cursor.execute("DELETE FROM VirtualMemoryMap")
+            for entry in self.virtual_memory_map.values():
+                db.set_virtual_memory_value(
+                    entry["address"],
+                    entry["value"],
+                    entry.get("dataType", "float"),
+                    entry.get("unitId", 1)
+                )
+            db.conn.commit()
+            logger.info(f"Persisted {len(self.virtual_memory_map)} VMM entries to DB.")
+        except Exception as e:
+            logger.error(f"Failed to persist VMM to DB: {e}")
+
+    def update_vmm_value(self, address: str, value: Any, data_type: str = "float", unit_id: int = 1):
+        """Update a value in the in-memory VMM."""
+        now = datetime.now().isoformat()
+        self.virtual_memory_map[address] = {
+            "address": address,
+            "value": value,
+            "dataType": data_type,
+            "unitId": unit_id,
+            "updatedAt": now
+        }
+
+    def get_vmm_value(self, address: str, unit_id: int = 1) -> Optional[Any]:
+        entry = self.virtual_memory_map.get(address)
+        if entry and entry.get("unitId", 1) == unit_id:
+            return entry["value"]
+        return None
 
 def _flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
     """

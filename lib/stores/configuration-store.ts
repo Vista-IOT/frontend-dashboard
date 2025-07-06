@@ -612,6 +612,7 @@ export interface VirtualMemoryMapDestination {
     dataType: 'int16' | 'int32' | 'float32' | 'float64' | 'string' | 'ascii';
     length?: number; // For string/ascii types
     endianness: 'little' | 'big';
+    unitId?: number; // Modbus unit id for this entry
     scaling: {
       enabled: boolean;
       factor: number;
@@ -678,11 +679,92 @@ export interface ConfigState {
   getLastUpdated: () => string;
   setDirty: (isDirty: boolean) => void;
   getConfig: () => ConfigSchema; // MODIFIED: Return type is ConfigSchema
+  hydrateConfigFromBackend: () => Promise<void>;
+  saveConfigToBackend: () => Promise<void>;
 }
+
+// --- BEGIN: Dynamic Default Config Generator ---
+
+/**
+ * Fetches available network interfaces and serial ports from the backend and builds a dynamic default config.
+ */
+export async function fetchDynamicDefaultConfig(): Promise<ConfigSchema> {
+  // Use NEXT_PUBLIC_API_BASE_URL or fallback
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+  // Fetch all hardware info from /api/hardware/detect
+  const detectRes = await fetch(`${apiBase}/api/hardware/detect`);
+  const detectJson = await detectRes.json();
+  const hardware = detectJson.data || {};
+  const interfaces = hardware.network_interfaces || [];
+  const serialPorts = hardware.serial_ports || [];
+
+  // Build network.interfaces
+  const networkInterfaces: any = {};
+  interfaces.forEach((iface: any) => {
+    if (iface.type === "Ethernet") {
+      networkInterfaces[iface.name] = {
+        type: "ethernet",
+        enabled: true,
+        mode: "dhcp",
+        link: { speed: "auto", duplex: "auto" },
+        ipv4: {
+          mode: "dhcp",
+          static: { address: "", netmask: "", gateway: "" },
+          dns: { primary: "", secondary: "" },
+        },
+      };
+    } else if (iface.type === "WiFi") {
+      networkInterfaces[iface.name] = {
+        type: "wireless",
+        enabled: true,
+        mode: "client",
+        wifi: {
+          ssid: "",
+          security: { mode: "wpa2", password: "" },
+          channel: "auto",
+          band: "2.4",
+          hidden: false,
+        },
+        ipv4: {
+          mode: "dhcp",
+          static: { address: "", netmask: "", gateway: "" },
+        },
+      };
+    }
+  });
+
+  // Build hardware.com_ports
+  const com_ports: any = {};
+  serialPorts.forEach((port: any) => {
+    com_ports[port.name] = {
+      mode: "rs232",
+      baudrate: 9600,
+      data_bits: 8,
+      parity: "none",
+      stop_bits: 1,
+      flow_control: "none",
+    };
+  });
+
+  // Compose the config (fill in other fields from static defaultConfig as fallback)
+  return {
+    ...defaultConfig,
+    network: {
+      ...defaultConfig.network,
+      interfaces: networkInterfaces,
+    },
+    hardware: {
+      ...defaultConfig.hardware,
+      com_ports,
+    },
+  };
+}
+// --- END: Dynamic Default Config Generator ---
 
 // The store implementation
 export const useConfigStore = create<ConfigState>((set, get) => ({
-  config: defaultConfig as ConfigSchema, // Assert defaultConfig conforms to ConfigSchema
+  config: defaultConfig as ConfigSchema, // Initial value, will be replaced by dynamic config
   lastUpdated: new Date().toISOString(),
   isDirty: false,
 
@@ -713,9 +795,11 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     });
   },
 
-  resetConfig: () => {
+  // Make resetConfig async and use dynamic default config
+  resetConfig: async () => {
+    const dynamicConfig = await fetchDynamicDefaultConfig();
     set({
-      config: JSON.parse(JSON.stringify(defaultConfig)) as ConfigSchema,
+      config: dynamicConfig,
       lastUpdated: new Date().toISOString(),
       isDirty: true,
     });
@@ -735,6 +819,32 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   getConfig: () => {
     return get().config; // This now correctly returns ConfigSchema
+  },
+
+  hydrateConfigFromBackend: async () => {
+    const frontendBase = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+    const res = await fetch(`${frontendBase}/api/deploy-config`);
+    const json = await res.json();
+    let config = json.raw;
+    if (typeof config === "string") {
+      try {
+        config = YAML.parse(config);
+      } catch (e) {
+        config = {};
+      }
+    }
+    set({ config, lastUpdated: new Date().toISOString(), isDirty: false });
+  },
+
+  saveConfigToBackend: async () => {
+    const frontendBase = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+    const yamlString = get().getYamlString();
+    await fetch(`${frontendBase}/api/deploy-config`, {
+      method: "POST",
+      body: yamlString,
+      headers: { "Content-Type": "text/yaml" },
+    });
+    set({ isDirty: false });
   },
 }));
 
