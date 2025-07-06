@@ -25,3 +25,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backend directories
+/app/backend/
+/vista-iot-gateway-backend/
+/src/
+/config/
+/lib/services/
+requirements.txt
+setup.py
