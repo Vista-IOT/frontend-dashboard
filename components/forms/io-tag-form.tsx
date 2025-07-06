@@ -22,10 +22,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { DeviceConfig } from "./device-form"; // Import consolidated types. IOTag is part of DeviceConfig.
-
+import { toast } from "sonner";
 export interface SerialPortSettings {
   port: string;
   baudRate: number;
@@ -110,30 +110,51 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
     e.preventDefault();
 
     const validationErrors: { name?: string; type?: string } = {};
-    if (!type.trim()) validationErrors.type = "Type is required.";
-    if (!name.trim()) validationErrors.name = "Name is required.";
 
+    // Basic validations
+    if (!type.trim()) validationErrors.type = "Type is required.";
+    if (!name.trim()) {
+      validationErrors.name = "Name is required.";
+    } else {
+      // Stricter name validations
+      if (name.length < 3) {
+        validationErrors.name = "Name must be at least 3 characters.";
+      } else if (!/^[a-zA-Z0-9-_]+$/.test(name)) {
+        validationErrors.name =
+          "Name can only contain letters, numbers, hyphens (-), and underscores (_).";
+      } else if (/^\d+$/.test(name)) {
+        validationErrors.name = "Name cannot be only numbers.";
+      } else if (/^\s|\s$/.test(name)) {
+        validationErrors.name = "Name cannot start or end with a space.";
+      }
+    }
+
+    // Duplicate check
+    const allConfigs = getConfig().io_setup.ports;
+    const nameExists = allConfigs.some(
+      (cfg: IOPortConfig) =>
+        cfg.name.trim().toLowerCase() === name.trim().toLowerCase() &&
+        cfg.id !== existingConfig?.id
+    );
+
+    if (nameExists) {
+      validationErrors.name = "This name is already used.";
+    }
+
+    // If any errors exist, show toasts and abort
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      toast({
-        title: "Validation Error",
-        description: "Please fix the required fields.",
-        variant: "destructive",
-      });
+      for (const key in validationErrors) {
+        toast.error(validationErrors[key as keyof typeof validationErrors], {
+          duration: 4000,
+        });
+      }
       return;
     }
 
-    setErrors({}); // Clear any previous errors
+    setErrors({});
 
-    if (!type || !name) {
-      toast({
-        title: "Validation Error",
-        description: "Type and Name are required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Construct config
     let newPortConfig: IOPortConfig = {
       id: existingConfig?.id || `ioport-${Date.now()}`,
       type,
@@ -145,10 +166,9 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       autoRecoverTime,
       scanMode,
       enabled,
-      devices: existingConfig?.devices || [], // Initialize devices array
+      devices: existingConfig?.devices || [],
     };
 
-    // Add serial settings if it's a serial port type
     if (isSerialType) {
       newPortConfig.serialSettings = {
         port: serialPort,
@@ -162,7 +182,6 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       };
     }
 
-    // Call the local onSubmit if provided (e.g., for closing dialogs)
     if (onSubmit) {
       const success = onSubmit(newPortConfig);
       if (success && !existingConfig) {

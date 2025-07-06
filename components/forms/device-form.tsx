@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { IOPortConfig } from "./io-tag-form"; // Assuming IOPortConfig is exported from there
 import type { IOTag } from "@/lib/stores/configuration-store";
@@ -58,40 +58,6 @@ export const deviceConfigSchema = z.object({
   ),
 });
 
-// Example object that follows the DeviceConfig shape
-const config = {
-  id: "dev001",
-  enabled: true,
-  name: "Sensor A",
-  deviceType: "Modbus RTU",
-  unitNumber: 5,
-  tagWriteType: "Bit",
-  description: "Main Modbus sensor",
-  addDeviceNameAsPrefix: true,
-  useAsciiProtocol: 1,
-  packetDelay: 10,
-  digitalBlockSize: 32,
-  analogBlockSize: 16,
-  tags: [
-    {
-      id: "tag001",
-      name: "Voltage",
-      dataType: "Analog",
-      address: "40001",
-      description: "Reads voltage",
-    },
-  ],
-};
-
-const result = deviceConfigSchema.safeParse(config);
-
-if (!result.success) {
-  console.error("❌ Validation failed:", result.error.format());
-} else {
-  console.log("✅ Valid config:", result.data);
-  // Save to localStorage, DB, or send to backend
-}
-
 export interface DeviceConfig {
   id: string;
   enabled: boolean;
@@ -125,10 +91,16 @@ export function DeviceForm({
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true);
   const [name, setName] = useState(existingConfig?.name || "NewDevice");
   const [nameError, setNameError] = useState(() => {
-    const lowerNewName = (existingConfig?.name || "NewDevice").trim().toLowerCase();
+    const lowerNewName = (existingConfig?.name || "NewDevice")
+      .trim()
+      .toLowerCase();
     const lowerExistingNames = (existingDeviceNames || [])
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     return (
       (existingConfig?.name || "NewDevice") === "NewDevice" ||
       (existingConfig?.name || "NewDevice").trim() === "" ||
@@ -166,12 +138,16 @@ export function DeviceForm({
   useEffect(() => {
     const lowerNewName = name.trim().toLowerCase();
     const lowerExistingNames = (existingDeviceNames || [])
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     setNameError(
       name === "NewDevice" ||
-      name.trim() === "" ||
-      lowerExistingNames.includes(lowerNewName)
+        name.trim() === "" ||
+        lowerExistingNames.includes(lowerNewName)
     );
   }, [name, existingDeviceNames, existingConfig]);
 
@@ -181,26 +157,108 @@ export function DeviceForm({
     // Check for uniqueness (case-insensitive, ignore self if editing)
     const lowerNewName = newName.trim().toLowerCase();
     const lowerExistingNames = existingDeviceNames
-      .filter(n => !existingConfig || n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase())
-      .map(n => n.toLowerCase());
+      .filter(
+        (n) =>
+          !existingConfig ||
+          n.toLowerCase() !== (existingConfig.name ?? "").toLowerCase()
+      )
+      .map((n) => n.toLowerCase());
     setNameError(
       newName === "NewDevice" ||
-      newName.trim() === "" ||
-      lowerExistingNames.includes(lowerNewName)
+        newName.trim() === "" ||
+        lowerExistingNames.includes(lowerNewName)
     );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (nameError) {
-      toast({
-        title: "Validation Error",
-        description: "Please provide a valid device name",
+    // --- Name validation ---
+    if (nameError || !name.trim()) {
+      toast.error("Provide a valid and unique device name.", {
+        duration: 5000,
       });
       return;
     }
 
+    if (name.length < 3) {
+      toast.error("Device name must be at least 3 characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9-_]+$/.test(name)) {
+      toast.error(
+        "Device name can only contain letters, numbers, hyphens (-), and underscores (_).",
+        {
+          duration: 5000,
+        }
+      );
+      return;
+    }
+
+    if (/^\s|\s$/.test(name)) {
+      toast.error("Device name cannot start or end with a space.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (/^\d+$/.test(name)) {
+      toast.error("Device name cannot be all numbers.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Unit Number validation ---
+    if (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247) {
+      toast.error("Unit number must be an integer between 1 and 247.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Description validation ---
+    if (description && description.length > 100) {
+      toast.error("Description should not exceed 100 characters.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      toast.error("Description should include some letters or numbers.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Port existence check ---
+    const ports = getConfig().io_setup?.ports || [];
+    const thisPort = ports.find((p) => p.id === portId);
+
+    if (!thisPort) {
+      toast.error(`Port ${portId} not found.`, {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Unit number conflict check ---
+    const unitConflict = thisPort.devices.some(
+      (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id
+    );
+
+    if (unitConflict) {
+      toast.error(`Unit number ${unitNumber} is already in use on this port.`, {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // --- Construct new device config ---
     const newDeviceConfig: DeviceConfig = {
       id: existingConfig?.id || `device-${Date.now()}`,
       enabled,
@@ -214,7 +272,7 @@ export function DeviceForm({
       packetDelay,
       digitalBlockSize,
       analogBlockSize,
-      tags: existingConfig?.tags || [], // Initialize tags array
+      tags: existingConfig?.tags || [],
     };
 
     if (onSubmit) {
@@ -289,7 +347,8 @@ export function DeviceForm({
                 />
                 {nameError && (
                   <p className="text-xs text-destructive">
-                    Please enter a unique device name (not used by any other device in this port)
+                    Please enter a unique device name (not used by any other
+                    device in this port)
                   </p>
                 )}
               </div>

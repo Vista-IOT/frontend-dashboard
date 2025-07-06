@@ -56,26 +56,75 @@ import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
 import type { ConfigSchema } from "@/lib/stores/configuration-store"; // adjust the path as needed
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import { buildIoTagTree } from "@/lib/utils";
+import { toast } from "sonner";
+
+const tagNameRegex = /^[A-Za-z0-9_:-]+$/;
+const allowedFunctions = [
+  'min', 'max', 'avg', 'sum', 'abs', 'ceil', 'floor', 'round', 'roundn', 'exp', 'log', 'log10', 'logn', 'root', 'sqrt', 'clamp', 'inrange',
+  'sin', 'cos', 'tan', 'acos', 'asin', 'atan', 'atan2', 'cosh', 'cot', 'csc', 'sec', 'sinh', 'tanh',
+  'mand', 'mor', 'nand', 'nor', 'not', 'or', 'xor', 'xnor',
+  'pi', 'epsilon', 'inf'
+];
+const allowedOperators = ['+', '-', '*', '/', '%', '^', '(', ')', '?', ':', '<', '>', '<=', '>=', '==', '!=', ','];
+const allowedVariables = ['A','B','C','D','E','F','G','H'];
+
 // Define the form schema
 const calculationTagSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Name is required"),
   defaultValue: z.coerce.number().default(0),
-  formula: z.string().min(1, "Formula is required"),
-  a: z.string().optional().default(""),
-  b: z.string().optional().default(""),
-  c: z.string().optional().default(""),
-  d: z.string().optional().default(""),
-  e: z.string().optional().default(""),
-  f: z.string().optional().default(""),
-  g: z.string().optional().default(""),
-  h: z.string().optional().default(""),
+  formula: z.string().min(1, "Formula is required").refine((val) => {
+    // Remove all allowed function names and constants
+    let formula = val;
+    for (const fn of allowedFunctions) {
+      formula = formula.replace(new RegExp(fn + '\\s*\\(', 'gi'), '');
+      formula = formula.replace(new RegExp('\\b' + fn + '\\b', 'gi'), '');
+    }
+    // Remove allowed operators
+    for (const op of allowedOperators) {
+      formula = formula.split(op).join('');
+    }
+    // Remove numbers, whitespace, and commas
+    formula = formula.replace(/[0-9\s,\.]/g, '');
+    // Remove allowed variables
+    for (const v of allowedVariables) {
+      formula = formula.replace(new RegExp(v, 'gi'), '');
+    }
+    // If anything remains, it's invalid
+    return formula.length === 0;
+  }, {
+    message: "Formula can only contain variables A–H, allowed functions, constants, numbers, and operators."
+  }),
+  a: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "A: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  b: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "B: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  c: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "C: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  d: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "D: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  e: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "E: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  f: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "F: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  g: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "G: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
+  h: z.string().optional().default("").refine((val) => !val || tagNameRegex.test(val), {
+    message: "H: Only letters, numbers, underscores, colons, and dashes are allowed."
+  }),
   period: z.coerce.number().int().min(1).default(1),
   readWrite: z.string().default("Read/Write"),
   spanHigh: z.coerce.number().int().min(0).default(1000),
   spanLow: z.coerce.number().int().min(0).default(0),
   isParent: z.boolean().default(false),
-  description: z.string().optional().default(""),
+  description: z.string().optional().default("")
 });
 
 // Define the form props
@@ -221,6 +270,75 @@ export function CalculationTagForm({
   // Custom submit logic, called only if validation passes
 
   function onValidSubmit(values: FormValues) {
+    // 1. Duplicate tag name check
+    const isDuplicate = calculation_tags.some(
+      (tag) =>
+        tag.name.trim().toLowerCase() === values.name.trim().toLowerCase() &&
+        tag.name !== initialValues?.name // allow same name if editing
+    );
+
+    if (isDuplicate) {
+      toast.error("A calculation tag with this name already exists.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 2. Empty formula check
+    if (!values.formula || values.formula.trim() === "") {
+      toast.error("Formula field cannot be empty.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 3. At least one variable (A–H) must be filled
+    const variableFields = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const atLeastOneFilled = variableFields.some(
+      (field) => values[field as keyof FormValues]?.trim() !== ""
+    );
+
+    if (!atLeastOneFilled) {
+      toast.error("At least one variable (A–H) must be provided.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // 4. Formula validation
+    const formula = values.formula.trim();
+
+    // Reject any characters that are NOT: a–h (case-insensitive), numbers, + - * / . ( )
+    const invalidFormula = /[^a-hA-H0-9+\-*/().]/.test(formula);
+    if (invalidFormula) {
+      toast.error(
+        "Formula can only contain letters A–H, numbers, and operators (+, -, *, /, (, )).",
+        {
+          duration: 5000,
+        }
+      );
+      return;
+    }
+
+    // Reject letters outside A–H (e.g., x, y, z, m, etc.)
+    const disallowedLetters = formula.match(/[i-zI-Z]/g);
+    if (disallowedLetters) {
+      toast.error("Formula can only include variables A–H.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    const openParens = (values.formula.match(/\(/g) || []).length;
+    const closeParens = (values.formula.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      toast.error("Formula has unbalanced parentheses.", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    //  All validations passed
     onSubmit(values);
     onCancel();
     console.log("Submitted");

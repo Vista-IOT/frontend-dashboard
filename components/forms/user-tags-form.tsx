@@ -36,7 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, X, FileText } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -107,21 +107,104 @@ function TagDialog({
       }
     }
   }, [open, editTag]);
-
+  const { getConfig } = useConfigStore();
   const handleSubmit = () => {
     setIsNameTouched(true);
 
+    const errors: string[] = [];
+
+    // --- Name Validation ---
     if (!tagName.trim()) {
-      return; // stop submission if name is empty
+      errors.push("Tag name is required.");
+    } else {
+      if (tagName.length < 3) {
+        errors.push("Tag name must be at least 3 characters.");
+      }
+      if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
+        errors.push(
+          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+        );
+      }
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("Tag name cannot start or end with spaces.");
+      }
+      if (/^\d+$/.test(tagName)) {
+        errors.push("Tag name cannot be only numbers.");
+      }
+
+      // Uniqueness
+      const allTags: UserTag[] = getConfig().user_tags;
+      const nameExists = allTags.some(
+        (tag) =>
+          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+          tag.id !== editTag?.id
+      );
+
+      if (nameExists) {
+        errors.push("A tag with this name already exists.");
+      }
     }
 
+    // --- Data Type Validation ---
+    const validTypes = ["Analog", "Discrete"];
+    if (!validTypes.includes(dataType)) {
+      errors.push("Invalid data type selected.");
+    }
+
+    // --- Analog-specific validations ---
+    if (dataType === "Analog") {
+      const high = parseFloat(spanHigh);
+      const low = parseFloat(spanLow);
+      const defaultVal = parseFloat(defaultValue);
+
+      if (isNaN(high) || isNaN(low)) {
+        errors.push("Span High and Span Low must be valid numbers.");
+      } else if (low >= high) {
+        errors.push("Span Low must be less than Span High.");
+      }
+
+      if (isNaN(defaultVal)) {
+        errors.push("Default value must be a valid number.");
+      }
+    }
+
+    // --- Discrete-specific validations ---
+    if (dataType === "Discrete") {
+      if (!descriptor0.trim() || !descriptor1.trim()) {
+        errors.push("Both descriptors are required for Discrete tags.");
+      }
+      if (descriptor0.length > 25 || descriptor1.length > 25) {
+        errors.push("Descriptors should be under 25 characters.");
+      }
+    }
+
+    // --- Description validation (optional) ---
+    if (description && description.length > 100) {
+      errors.push("Description should not exceed 100 characters.");
+    }
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      errors.push("Description must contain letters or numbers.");
+    }
+
+    // --- Display errors ---
+    if (errors.length > 0) {
+      errors.forEach((err) =>
+        toast.error(err, {
+          duration: 4000,
+        })
+      );
+      return;
+    }
+
+    // --- Construct Tag Object ---
     const tagData = {
       id: editTag ? editTag.id : Date.now(),
       name: tagName,
       dataType: dataType,
-      defaultValue: dataType === "Analog" ? defaultValue : discreteValue,
-      spanHigh: dataType === "Analog" ? spanHigh : "1",
-      spanLow: dataType === "Analog" ? spanLow : "0",
+      defaultValue:
+        dataType === "Analog" ? parseFloat(defaultValue) : discreteValue,
+      spanHigh: dataType === "Analog" ? parseFloat(spanHigh) : "1",
+      spanLow: dataType === "Analog" ? parseFloat(spanLow) : "0",
       descriptor0: dataType === "Discrete" ? descriptor0 : "",
       descriptor1: dataType === "Discrete" ? descriptor1 : "",
       readWrite: readWrite,
@@ -292,7 +375,6 @@ function TagDialog({
 }
 
 export function UserTagsForm() {
-  const { toast } = useToast();
   const userTags = useConfigStore((state) => state.config.user_tags || []);
   const updateConfig = useConfigStore((state) => state.updateConfig);
 
@@ -318,9 +400,8 @@ export function UserTagsForm() {
         t.id === tag.id ? { ...tag } : t
       );
       updateConfig(["user_tags"], updatedTags);
-      toast({
-        title: "Tag Updated",
-        description: `Tag "${tag.name}" has been updated successfully.`,
+      toast.success(`Tag "${tag.name}" has been updated successfully.`, {
+        duration: 3000,
       });
     } else {
       const newTag: UserTag = {
@@ -328,9 +409,8 @@ export function UserTagsForm() {
         id: Date.now().toString(),
       };
       updateConfig(["user_tags"], [...userTags, newTag]);
-      toast({
-        title: "Tag Added",
-        description: `Tag "${newTag.name}" has been added successfully.`,
+      toast.success(`Tag "${newTag.name}" has been added successfully.`, {
+        duration: 3000,
       });
     }
     setTagDialogOpen(false);
@@ -341,15 +421,12 @@ export function UserTagsForm() {
       const updatedTags = userTags.filter((tag) => tag.id !== selectedTagId);
       updateConfig(["user_tags"], updatedTags);
       setSelectedTagId(null);
-      toast({
-        title: "Tag Deleted",
-        description: "The selected tag has been deleted.",
+      toast.success("The selected tag has been deleted.", {
+        duration: 3000,
       });
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to delete.",
-        variant: "destructive",
+      toast.error("Please select a tag to delete.", {
+        duration: 3000,
       });
     }
   };

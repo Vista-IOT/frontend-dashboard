@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, X } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
@@ -91,11 +91,69 @@ function StatsTagDialog({
   };
 
   const handleSubmit = () => {
-    if (!tagName || !referTag) {
-      alert("Please fill in both the Name and Refer Tag fields.");
+    const errors: string[] = [];
+
+    // --- Tag name validation ---
+    if (!tagName.trim()) {
+      errors.push("Stats tag name is required.");
+    } else {
+      if (tagName.length < 3) {
+        errors.push("Stats tag name must be at least 3 characters.");
+      }
+      if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
+        errors.push(
+          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+        );
+      }
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("Tag name cannot start or end with spaces.");
+      }
+      if (/^\d+$/.test(tagName)) {
+        errors.push("Tag name cannot be only numbers.");
+      }
+
+      const nameExists = statsTags.some(
+        (tag) =>
+          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
+          tag.id !== editTag?.id
+      );
+      if (nameExists) {
+        errors.push("A stats tag with this name already exists.");
+      }
+    }
+
+    // --- Refer tag validation ---
+    if (!referTag.trim()) {
+      errors.push("Refer Tag is required.");
+    }
+
+    // --- Update Cycle validation ---
+    if (
+      updateCycle !== "" &&
+      (!/^\d+$/.test(updateCycle) || parseInt(updateCycle) <= 0)
+    ) {
+      errors.push("Update cycle must be a positive number.");
+    }
+
+    // --- Description validation ---
+    if (description && description.length > 100) {
+      errors.push("Description should not exceed 100 characters.");
+    }
+    if (description && /^[^a-zA-Z0-9]+$/.test(description)) {
+      errors.push("Description should contain letters or numbers.");
+    }
+
+    // --- Display errors if any ---
+    if (errors.length > 0) {
+      errors.forEach((err) =>
+        toast.error(err, {
+          duration: 4000,
+        })
+      );
       return;
     }
 
+    // --- All validations passed ---
     const tagData = {
       id: editTag ? editTag.id : Date.now(),
       name: tagName,
@@ -105,6 +163,7 @@ function StatsTagDialog({
       updateUnit: updateUnit,
       description: description,
     };
+
     onSaveTag(tagData, !!editTag);
     onOpenChange(false);
   };
@@ -231,7 +290,6 @@ export function StatsTagsForm() {
   const [selectedTagId, setSelectedTagId] = useState<string | number | null>(
     null
   );
-  const { toast } = useToast();
 
   const handleAddTag = () => {
     setEditingTag(null);
@@ -246,10 +304,8 @@ export function StatsTagsForm() {
         setTagDialogOpen(true);
       }
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to modify.",
-        variant: "destructive",
+      toast.error("Please select a tag to modify.", {
+        duration: 3000,
       });
     }
   };
@@ -259,12 +315,14 @@ export function StatsTagsForm() {
       ? tags.map((t: any) => (t.id === tag.id ? tag : t))
       : [...tags, tag];
     updateConfig(["stats_tags"], updatedTags);
-    toast({
-      title: isEdit ? "Tag Updated" : "Tag Added",
-      description: `Tag "${tag.name}" has been ${
+    toast.success(
+      `Tag "${tag.name}" has been ${
         isEdit ? "updated" : "added"
       } successfully.`,
-    });
+      {
+        duration: 3000,
+      }
+    );
   };
 
   const handleDeleteTag = () => {
@@ -272,15 +330,12 @@ export function StatsTagsForm() {
       const updatedTags = tags.filter((tag: any) => tag.id !== selectedTagId);
       updateConfig(["stats_tags"], updatedTags);
       setSelectedTagId(null);
-      toast({
-        title: "Tag Deleted",
-        description: "The selected tag has been deleted.",
+      toast.success("The selected tag has been deleted.", {
+        duration: 3000,
       });
     } else {
-      toast({
-        title: "No Tag Selected",
-        description: "Please select a tag to delete.",
-        variant: "destructive",
+      toast.error("Please select a tag to delete.", {
+        duration: 3000,
       });
     }
   };
