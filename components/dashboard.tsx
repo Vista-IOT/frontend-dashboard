@@ -118,7 +118,7 @@ function DashboardContent() {
   // Add state for active section
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const pathname = usePathname();
-  
+
   // Modified navigation items with proper routes
   const navItems: NavItem[] = [
     {

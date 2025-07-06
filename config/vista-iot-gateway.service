@@ -1,0 +1,16 @@
+[Unit]
+Description=Vista IoT Gateway Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vista-iot-gateway-backend
+Environment=VISTA_IOT_HOST=0.0.0.0
+Environment=VISTA_IOT_PORT=8000
+ExecStart=/opt/vista-iot-gateway-backend/venv/bin/vista-iot-gateway
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 

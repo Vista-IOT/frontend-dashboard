@@ -48,15 +48,33 @@ export default function ConfigurationTab() {
         headers: { "Content-Type": "text/yaml" },
         body: editorContent,
       });
-      if (!response.ok) throw new Error("Failed to deploy");
+      if (!response.ok) {
+        let errorMsg = "Failed to deploy";
+        try {
+          const data = await response.json();
+          console.error("DEPLOY ERROR JSON:", data);
+          if (data && data.error) {
+            errorMsg = data.error;
+          }
+        } catch (e) {
+          try {
+            const text = await response.text();
+            console.error("DEPLOY ERROR TEXT:", text);
+            if (text) errorMsg = text;
+          } catch {}
+        }
+        throw new Error(errorMsg);
+      }
       toast.success("Configuration deployed and stored in database!");
     } catch (error) {
       toast.error("Failed to deploy configuration", {
         description: error instanceof Error ? error.message : String(error),
+        duration: 8000,
       });
+      console.error("DEPLOY ERROR CAUGHT:", error);
     } finally {
-          setIsDeploying(false)
-      }
+      setIsDeploying(false)
+    }
   }
 
   const handleReset = async () => {

@@ -130,7 +130,7 @@ model StatsTag {
   id               String  @id
   name             String
   referTagId       String // Required FK to IOTag
-  referTagObj      IOTag   @relation(fields: [referTagId], references: [id])
+  referTagObj      IOTag?  @relation(fields: [referTagId], references: [id])
   type             String
   updateCycleValue Int
   updateCycleUnit  String

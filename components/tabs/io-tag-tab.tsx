@@ -466,12 +466,8 @@ export default function IOTagManagement({
                             </span>
                             <Switch
                               checked={port.enabled}
+                              onClick={e => e.stopPropagation()}
                               onCheckedChange={(checked: boolean) => {
-                                // Prevent the card click when toggling the switch
-                                const e = window.event;
-                                if (e) {
-                                  e.stopPropagation();
-                                }
                                 const updatedPort = {
                                   ...port,
                                   enabled: checked,
