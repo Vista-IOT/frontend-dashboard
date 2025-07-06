@@ -609,7 +609,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "s",
       spanHigh: 281474976710655,
       spanLow: 0,
-      description: "The current uptime(s)"
+      description: "The current uptime(s)",
+      path: "/sys/uptime"
     },
     {
       id: "sys-2",
@@ -618,7 +619,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "s",
       spanHigh: 281474976710655,
       spanLow: 0,
-      description: "The current system time(s)"
+      description: "The current system time(s)",
+      path: "/sys/current_time"
     },
     {
       id: "sys-3",
@@ -627,7 +629,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "Hz",
       spanHigh: 10737418240,
       spanLow: 0,
-      description: "CPU Frequency"
+      description: "CPU Frequency",
+      path: "/sys/cpu_freq"
     },
     {
       id: "sys-4",
@@ -636,7 +639,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "Byte",
       spanHigh: 10737418240,
       spanLow: 0,
-      description: "Memory size(Byte)"
+      description: "Memory size(Byte)",
+      path: "/sys/mem_size"
     },
     {
       id: "sys-5",
@@ -645,7 +649,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "%",
       spanHigh: 100,
       spanLow: 0,
-      description: "CPU utilization rate(%)"
+      description: "CPU utilization rate(%)",
+      path: "/sys/cpu_used"
     },
     {
       id: "sys-6",
@@ -654,7 +659,8 @@ export const comprehensiveConfig: ConfigSchema = {
       unit: "%",
       spanHigh: 100,
       spanLow: 0,
-      description: "Memory utilization rate(%)"
+      description: "Memory utilization rate(%)",
+      path: "/sys/mem_used"
     }
   ],
   communication_forward: {

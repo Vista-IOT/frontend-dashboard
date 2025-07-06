@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   await prisma.iOPort.deleteMany({});
   await prisma.bridgeBlock.deleteMany({});
   await prisma.communicationBridge.deleteMany({});
+  await prisma.hardwareMapping.deleteMany({});
 
   let ioPortCount = 0;
   let deviceCount = 0;
@@ -228,6 +229,20 @@ export async function POST(req: NextRequest) {
           blockCount++;
         }
       }
+    }
+  }
+
+  // Insert Hardware Mappings
+  if (config?.hardware_mappings && Array.isArray(config.hardware_mappings)) {
+    for (const mapping of config.hardware_mappings) {
+      await prisma.hardwareMapping.create({
+        data: {
+          name: mapping.name,
+          type: mapping.type,
+          path: mapping.path,
+          description: mapping.description ?? null,
+        },
+      });
     }
   }
 

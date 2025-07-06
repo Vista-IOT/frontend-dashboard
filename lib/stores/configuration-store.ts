@@ -107,6 +107,7 @@ export interface SystemTag {
   spanHigh: number;
   spanLow: number;
   description?: string;
+  path?: string;
 }
 // Canonical DeviceConfig definition (originally from device-form.tsx)
 export interface DeviceConfig {
@@ -685,35 +686,23 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   updateConfig: (path: string[], value: any) => {
     set((state) => {
-      // Use a deep copy for state updates to avoid direct mutation issues.
-      // JSON.parse(JSON.stringify(...)) is a common simple deep copy method.
-      const newConfig = JSON.parse(
-        JSON.stringify(state.config)
-      ) as ConfigSchema;
-      let current: any = newConfig; // Use 'any' for dynamic path navigation
-
+      const newConfig = JSON.parse(JSON.stringify(state.config)) as ConfigSchema;
+      let current: any = newConfig;
       for (let i = 0; i < path.length - 1; i++) {
-        if (
-          current[path[i]] === undefined ||
-          typeof current[path[i]] !== "object"
-        ) {
-          current[path[i]] = {}; // Create path if it doesn't exist or isn't an object
+        if (current[path[i]] === undefined || typeof current[path[i]] !== "object") {
+          current[path[i]] = {};
         }
         current = current[path[i]];
       }
-
       if (path.length > 0) {
         current[path[path.length - 1]] = value;
       } else {
-        // If path is empty, replace the entire config.
-        // Ensure 'value' conforms to ConfigSchema if this case is used.
         return {
-          config: value as ConfigSchema, // Assert value conforms
+          config: value as ConfigSchema,
           lastUpdated: new Date().toISOString(),
           isDirty: true,
         };
       }
-
       return {
         config: newConfig,
         lastUpdated: new Date().toISOString(),
@@ -724,7 +713,6 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   resetConfig: () => {
     set({
-      // Ensure defaultConfig is treated as ConfigSchema upon reset
       config: JSON.parse(JSON.stringify(defaultConfig)) as ConfigSchema,
       lastUpdated: new Date().toISOString(),
       isDirty: true,

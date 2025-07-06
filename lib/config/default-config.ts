@@ -197,9 +197,31 @@ export const defaultConfig: ConfigSchema = {
   user_tags: [],
   calculation_tags: [],
   stats_tags: [],
-  system_tags: [],
+  system_tags: [
+    // Example:
+    // {
+    //   id: "sys-1",
+    //   name: "#SYS_UPTIME",
+    //   dataType: "Analog",
+    //   unit: "s",
+    //   spanHigh: 281474976710655,
+    //   spanLow: 0,
+    //   description: "The current uptime(s)",
+    //   path: "/sys/uptime"
+    // }
+  ],
   communication_forward: {
     destinations: [],
     bridges: [],
   },
+  hardware_mappings: [
+    // Example:
+    // {
+    //   id: 1,
+    //   name: "SYS_UPTIME",
+    //   type: "system",
+    //   path: "/sys/uptime",
+    //   description: "System uptime in seconds"
+    // }
+  ],
 };

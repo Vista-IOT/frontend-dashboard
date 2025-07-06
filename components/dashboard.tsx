@@ -52,6 +52,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useHydrateConfigFromBackend } from "@/hooks/useHydrateConfigFromBackend";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import { comprehensiveConfig } from "@/lib/config/comprehensive-config";
+import { buildIoTagTree } from "@/lib/utils";
 
 import NetworkTab from "@/components/tabs/network-tab";
 import SecurityTab from "@/components/tabs/security-tab";
@@ -101,8 +102,11 @@ function DashboardContent() {
   const [showReconfigureOption, setShowReconfigureOption] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
 
-  // Mock IO ports data for the sidebar tree view
-  const [ioPorts, setIoPorts] = useState<Port[]>([]);
+  // Get config from store
+  const { config, updateConfig, resetConfig } = useConfigStore();
+
+  // Build IO ports tree from config for the sidebar
+  const ioPorts = buildIoTagTree(config);
 
   // Dialog states
   const [restartDialogOpen, setRestartDialogOpen] = useState(false);
@@ -115,9 +119,6 @@ function DashboardContent() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const pathname = usePathname();
   
-  // Get config store functions
-  const { updateConfig, resetConfig } = useConfigStore();
-
   // Modified navigation items with proper routes
   const navItems: NavItem[] = [
     {

@@ -184,4 +184,12 @@ model Destination {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   bridgeBlocks BridgeBlock[]
+}
+
+model HardwareMapping {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  path        String
+  description String?
 } 

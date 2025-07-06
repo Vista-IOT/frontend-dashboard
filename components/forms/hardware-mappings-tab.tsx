@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, Edit, Trash2, Check, X } from "lucide-react";
-import { useConfigStore, HardwareMappingTag } from "@/lib/stores/configuration-store";
+import { useConfigStore, HardwareMappingTag, SystemTag } from "@/lib/stores/configuration-store";
 
 const TAG_TYPES = [
   { value: "network", label: "Network Interface" },
@@ -20,7 +20,8 @@ const TAG_TYPES = [
 ];
 
 export function HardwareMappingsTab() {
-  const [hardwareMappings, setHardwareMappings] = useState<HardwareMappingTag[]>([]);
+  const hardwareMappings = useConfigStore(state => state.config.hardware_mappings || []);
+  const updateConfig = useConfigStore(state => state.updateConfig);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newTag, setNewTag] = useState<HardwareMappingTag>({
     id: Date.now(),
@@ -30,27 +31,21 @@ export function HardwareMappingsTab() {
     description: "",
   });
 
-  useEffect(() => {
-    const tags = (useConfigStore.getState().config.hardware_mappings as HardwareMappingTag[]) || [];
-    setHardwareMappings(tags);
-  }, []);
-
-  useEffect(() => {
-    useConfigStore.getState().updateConfig(["hardware_mappings"], hardwareMappings);
-  }, [hardwareMappings]);
-
   const handleEdit = (id: number) => setEditingId(id);
   const handleCancel = () => setEditingId(null);
   const handleSave = (id: number, updated: HardwareMappingTag) => {
-    setHardwareMappings(tags => tags.map(tag => tag.id === id ? updated : tag));
+    const updatedMappings = hardwareMappings.map(tag => tag.id === id ? updated : tag);
+    updateConfig(["hardware_mappings"], updatedMappings);
     setEditingId(null);
   };
   const handleDelete = (id: number) => {
-    setHardwareMappings(tags => tags.filter(tag => tag.id !== id));
+    const updatedMappings = hardwareMappings.filter(tag => tag.id !== id);
+    updateConfig(["hardware_mappings"], updatedMappings);
   };
   const handleAdd = () => {
     if (!newTag.name.trim() || !newTag.path.trim()) return;
-    setHardwareMappings(tags => [...tags, { ...newTag, id: Date.now() }]);
+    const updatedMappings = [...hardwareMappings, { ...newTag, id: Date.now() }];
+    updateConfig(["hardware_mappings"], updatedMappings);
     setNewTag({ id: Date.now(), name: "", type: "network", path: "", description: "" });
   };
 
@@ -84,7 +79,7 @@ export function HardwareMappingsTab() {
                       <TableCell>
                         <Input
                           value={tag.name}
-                          onChange={e => setHardwareMappings(tags => tags.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
+                          onChange={e => handleSave(tag.id, { ...tag, name: e.target.value })}
                           className="h-8"
                           placeholder="Enter name"
                         />
@@ -92,7 +87,7 @@ export function HardwareMappingsTab() {
                       <TableCell>
                         <Select
                           value={tag.type}
-                          onValueChange={value => setHardwareMappings(tags => tags.map(t => t.id === tag.id ? { ...t, type: value } : t))}
+                          onValueChange={value => handleSave(tag.id, { ...tag, type: value })}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
@@ -107,7 +102,7 @@ export function HardwareMappingsTab() {
                       <TableCell>
                         <Input
                           value={tag.path}
-                          onChange={e => setHardwareMappings(tags => tags.map(t => t.id === tag.id ? { ...t, path: e.target.value } : t))}
+                          onChange={e => handleSave(tag.id, { ...tag, path: e.target.value })}
                           className="h-8"
                           placeholder="e.g. eth0, /dev/ttyUSB0"
                         />
@@ -115,7 +110,7 @@ export function HardwareMappingsTab() {
                       <TableCell>
                         <Input
                           value={tag.description}
-                          onChange={e => setHardwareMappings(tags => tags.map(t => t.id === tag.id ? { ...t, description: e.target.value } : t))}
+                          onChange={e => handleSave(tag.id, { ...tag, description: e.target.value })}
                           className="h-8"
                           placeholder="Description"
                         />
