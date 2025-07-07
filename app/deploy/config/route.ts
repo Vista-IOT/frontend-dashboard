@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import yaml from 'js-yaml';
 
+// Add CORS headers to all responses
+function addCorsHeaders(response: NextResponse) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
+  return response;
+}
+
+// Handle preflight requests
+export async function OPTIONS(req: NextRequest) {
+  const response = new NextResponse(null, { status: 204 });
+  return addCorsHeaders(response);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
@@ -12,7 +27,8 @@ export async function POST(req: NextRequest) {
       try {
         config = JSON.parse(body); // Try JSON fallback
       } catch (e2) {
-        return NextResponse.json({ error: 'Invalid config format' }, { status: 400 });
+        const response = NextResponse.json({ error: 'Invalid config format' }, { status: 400 });
+        return addCorsHeaders(response);
       }
     }
 
@@ -317,7 +333,7 @@ export async function POST(req: NextRequest) {
       console.error('Failed to trigger backend restart:', err);
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       ioPorts: ioPortCount,
       devices: deviceCount,
@@ -327,22 +343,36 @@ export async function POST(req: NextRequest) {
       bridges: bridgeCount,
       blocks: blockCount,
     });
+    
+    return addCorsHeaders(response);
   } catch (error) {
     console.error("DEPLOY ERROR:", error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: error instanceof Error ? (error.stack || error.message) : String(error) },
       { status: 500 }
     );
+    return addCorsHeaders(response);
   }
 }
 
 export async function GET() {
-  // Get the latest config snapshot
-  const latest = await prisma.configSnapshot.findFirst({
-    orderBy: { createdAt: 'desc' },
-  });
-  if (!latest) {
-    return NextResponse.json({ error: 'No config snapshot found' }, { status: 404 });
+  try {
+    // Get the latest config snapshot
+    const latest = await prisma.configSnapshot.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!latest) {
+      const response = NextResponse.json({ error: 'No config snapshot found' }, { status: 404 });
+      return addCorsHeaders(response);
+    }
+    const response = NextResponse.json({ raw: latest.raw });
+    return addCorsHeaders(response);
+  } catch (error) {
+    console.error("GET ERROR:", error);
+    const response = NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
+    return addCorsHeaders(response);
   }
-  return NextResponse.json({ raw: latest.raw });
-} 
+}

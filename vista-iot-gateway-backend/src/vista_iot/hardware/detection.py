@@ -7,6 +7,7 @@ import re
 import subprocess
 import platform
 import logging
+import glob
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -23,43 +24,63 @@ class HardwareDetector:
             # Check /dev for common serial port patterns
             dev_dir = '/dev'
             port_patterns = [
-                'ttyS*',    # Standard serial ports
-                'ttyUSB*',  # USB-to-serial converters
-                'ttyACM*',  # CDC ACM devices (Arduino, etc.)
-                'ttyAMA*',  # AMBA serial ports (Raspberry Pi)
-                'ttymxc*',  # i.MX serial ports
-                'ttyO*',    # OMAP serial ports
-                'rfcomm*'   # Bluetooth serial ports
+                'ttyS*',     # Standard serial ports
+                'ttyUSB*',   # USB-to-serial converters
+                'ttyACM*',   # CDC ACM devices (Arduino, etc.)
+                'ttyAMA*',   # AMBA serial ports (Raspberry Pi)
+                'ttyAS*',    # ARM serial ports (your system)
+                'ttymxc*',   # i.MX serial ports
+                'ttyO*',     # OMAP serial ports
+                'rfcomm*'    # Bluetooth serial ports
             ]
             
             for pattern in port_patterns:
                 try:
-                    port_matches = []
-                    for port in os.listdir(dev_dir):
-                        if port.startswith(pattern[:-1]):  # Remove the *
-                            port_path = os.path.join(dev_dir, port)
-                            port_type = "Unknown"
-                            
-                            # Try to determine port type
-                            if 'USB' in port:
-                                port_type = "USB-to-Serial"
-                            elif 'AMA' in port:
-                                port_type = "Hardware UART"
-                            elif 'ACM' in port:
-                                port_type = "CDC ACM"
-                            
-                            port_info = {
-                                "name": port,
-                                "path": port_path,
-                                "type": port_type,
-                                "description": f"Serial port {port}",
-                                "connected": os.path.exists(port_path)
-                            }
-                            port_matches.append(port_info)
+                    # Use glob to find matching devices
+                    port_paths = glob.glob(os.path.join(dev_dir, pattern))
                     
-                    ports.extend(port_matches)
+                    for port_path in port_paths:
+                        port_name = os.path.basename(port_path)
+                        port_type = "Unknown"
+                        
+                        # Try to determine port type based on name
+                        if 'USB' in port_name:
+                            port_type = "USB-to-Serial"
+                        elif 'AMA' in port_name or 'AS' in port_name:
+                            port_type = "Hardware UART"
+                        elif 'ACM' in port_name:
+                            port_type = "CDC ACM"
+                        elif 'ttyS' in port_name:
+                            port_type = "Standard Serial"
+                        elif 'rfcomm' in port_name:
+                            port_type = "Bluetooth Serial"
+                        
+                        # Check if port is accessible
+                        is_accessible = os.path.exists(port_path)
+                        
+                        port_info = {
+                            "name": port_name,
+                            "path": port_path,
+                            "type": port_type,
+                            "description": f"Serial port {port_name}",
+                            "connected": is_accessible
+                        }
+                        
+                        # Try to get additional info from dmesg or sys
+                        try:
+                            # Check if it's a USB device
+                            if 'USB' in port_name:
+                                # Try to get USB device info
+                                usb_info = HardwareDetector._get_usb_serial_info(port_name)
+                                if usb_info:
+                                    port_info["usb_info"] = usb_info
+                        except Exception as e:
+                            logger.debug(f"Could not get additional info for {port_name}: {e}")
+                        
+                        ports.append(port_info)
+                        
                 except Exception as e:
-                    logger.error(f"Error detecting serial ports: {e}")
+                    logger.error(f"Error detecting serial ports with pattern {pattern}: {e}")
         
         elif platform.system() == 'Windows':
             try:
@@ -86,6 +107,42 @@ class HardwareDetector:
                 logger.error(f"Error detecting Windows serial ports: {e}")
             
         return ports
+
+    @staticmethod
+    def _get_usb_serial_info(port_name: str) -> Optional[Dict[str, Any]]:
+        """Get USB device information for a USB serial port."""
+        try:
+            # Extract device number from port name (e.g., ttyUSB0 -> 0)
+            device_num = re.search(r'\d+$', port_name)
+            if not device_num:
+                return None
+            
+            # Try to find the USB device in sysfs
+            usb_path = f"/sys/class/tty/{port_name}/device"
+            if os.path.exists(usb_path):
+                # Follow symlinks to find USB device info
+                real_path = os.path.realpath(usb_path)
+                usb_device_path = real_path
+                
+                # Walk up the directory tree to find USB device info
+                while usb_device_path and not os.path.exists(os.path.join(usb_device_path, 'idVendor')):
+                    usb_device_path = os.path.dirname(usb_device_path)
+                
+                if usb_device_path and os.path.exists(os.path.join(usb_device_path, 'idVendor')):
+                    info = {}
+                    for attr in ['idVendor', 'idProduct', 'manufacturer', 'product', 'serial']:
+                        attr_path = os.path.join(usb_device_path, attr)
+                        if os.path.exists(attr_path):
+                            try:
+                                with open(attr_path, 'r') as f:
+                                    info[attr] = f.read().strip()
+                            except:
+                                pass
+                    return info if info else None
+        except Exception as e:
+            logger.debug(f"Error getting USB info for {port_name}: {e}")
+        
+        return None
 
     @staticmethod
     def detect_network_interfaces() -> List[Dict[str, Any]]:
@@ -140,7 +197,7 @@ class HardwareDetector:
 
     @staticmethod
     def detect_gpio() -> Dict[str, Any]:
-        """Detect GPIO capabilities."""
+        """Detect GPIO capabilities using modern GPIO character device interface."""
         gpio_info = {
             "available": False,
             "chip_count": 0,
@@ -148,42 +205,86 @@ class HardwareDetector:
         }
         
         if platform.system() == 'Linux':
-            gpio_chip_path = '/sys/class/gpio'
-            if os.path.exists(gpio_chip_path):
-                gpio_info["available"] = True
-                try:
-                    # List all GPIO chips
-                    gpio_chips = [d for d in os.listdir('/dev') if d.startswith('gpiochip')]
+            try:
+                # Look for GPIO character devices in /dev
+                gpio_chips = glob.glob('/dev/gpiochip*')
+                
+                if gpio_chips:
+                    gpio_info["available"] = True
                     gpio_info["chip_count"] = len(gpio_chips)
                     
-                    # Get detailed info for each chip
-                    for chip in gpio_chips:
-                        chip_path = os.path.join('/sys/class/gpio', chip)
-                        if os.path.exists(chip_path):
+                    # Try to get detailed info using gpiodetect if available
+                    try:
+                        result = subprocess.run(
+                            ['gpiodetect'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        
+                        if result.returncode == 0:
+                            # Parse gpiodetect output
+                            for line in result.stdout.split('\n'):
+                                if line.strip():
+                                    # Format: gpiochip0 [label] (ngpio lines)
+                                    match = re.match(r'(gpiochip\d+)\s+\[([^\]]+)\]\s+\((\d+)\s+lines\)', line)
+                                    if match:
+                                        chip_name, label, ngpio = match.groups()
+                                        gpio_info["gpio_chips"].append({
+                                            "name": chip_name,
+                                            "path": f"/dev/{chip_name}",
+                                            "label": label,
+                                            "ngpio": int(ngpio)
+                                        })
+                    except (subprocess.TimeoutExpired, FileNotFoundError):
+                        # gpiodetect not available or timed out, use basic detection
+                        logger.debug("gpiodetect not available, using basic GPIO detection")
+                        
+                        for chip_path in gpio_chips:
+                            chip_name = os.path.basename(chip_path)
                             chip_info = {
-                                "name": chip,
-                                "path": f"/dev/{chip}",
+                                "name": chip_name,
+                                "path": chip_path,
                                 "label": "Unknown",
                                 "ngpio": 0
                             }
                             
-                            # Try to read chip info
-                            try:
-                                with open(os.path.join(chip_path, 'label'), 'r') as f:
-                                    chip_info["label"] = f.read().strip()
-                            except:
-                                pass
+                            # Try to get info from sysfs if available
+                            sys_path = f"/sys/class/gpio/{chip_name}"
+                            if os.path.exists(sys_path):
+                                try:
+                                    label_path = os.path.join(sys_path, 'label')
+                                    if os.path.exists(label_path):
+                                        with open(label_path, 'r') as f:
+                                            chip_info["label"] = f.read().strip()
+                                except:
+                                    pass
                                     
-                            try:
-                                with open(os.path.join(chip_path, 'ngpio'), 'r') as f:
-                                    chip_info["ngpio"] = int(f.read().strip())
-                            except:
-                                pass
-                                    
-                            gpio_info["gpio_chips"].append(chip_info)
+                                try:
+                                    ngpio_path = os.path.join(sys_path, 'ngpio')
+                                    if os.path.exists(ngpio_path):
+                                        with open(ngpio_path, 'r') as f:
+                                            chip_info["ngpio"] = int(f.read().strip())
+                                except:
+                                    pass
                             
-                except Exception as e:
-                    logger.error(f"Error detecting GPIO: {e}")
+                            gpio_info["gpio_chips"].append(chip_info)
+                
+                # Also check for legacy sysfs GPIO interface
+                legacy_gpio_path = '/sys/class/gpio'
+                if os.path.exists(legacy_gpio_path) and not gpio_info["available"]:
+                    gpio_info["available"] = True
+                    gpio_info["legacy_interface"] = True
+                    
+                    # Count available GPIO chips in legacy interface
+                    try:
+                        legacy_chips = [d for d in os.listdir(legacy_gpio_path) if d.startswith('gpiochip')]
+                        gpio_info["chip_count"] = len(legacy_chips)
+                    except:
+                        pass
+                        
+            except Exception as e:
+                logger.error(f"Error detecting GPIO: {e}")
         
         return gpio_info
 
@@ -220,7 +321,7 @@ class HardwareDetector:
                                 "vendor_id": vid,
                                 "product_id": pid,
                                 "description": desc,
-                                "path": f"/dev/bus/usb/{bus.zfill(3)}/{device}"
+                                "path": f"/dev/bus/usb/{bus.zfill(3)}/{device.zfill(3)}"
                             })
             except Exception as e:
                 logger.error(f"Error detecting USB devices: {e}")

@@ -49,7 +49,7 @@ export default function ConfigurationTab() {
       const port = process.env.NEXT_PUBLIC_FRONTEND_PORT || "3000";
       const apiBase = `${protocol}//${hostname}:${port}`;
       
-      const response = await fetch(`${apiBase}/api/deploy-config`, {
+      const response = await fetch(`${apiBase}/deploy/config`, {
         method: "POST",
         headers: { "Content-Type": "text/yaml" },
         body: editorContent,
