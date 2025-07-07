@@ -231,9 +231,8 @@ class HardwareDetector:
                 for usb in c.Win32_USBControllerDevice():
                     try:
                         pnp_device = usb.Dependent
-                        device_id_part = pnp_device.DeviceID.split(chr(92))[1]
                         device_info = c.query(
-                            f"SELECT * FROM Win32_PnPEntity WHERE DeviceID='{device_id_part}'"
+                            f"SELECT * FROM Win32_PnPEntity WHERE DeviceID='{pnp_device.DeviceID.split('\\')[1]}'"
                         )
                         if device_info:
                             device = device_info[0]

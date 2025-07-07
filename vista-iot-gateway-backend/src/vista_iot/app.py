@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI(title="Vista IoT Gateway API")
 
-# Add CORS middleware
+# Add CORS middleware with proper wildcard configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set to specific origins in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Set to False to allow wildcard origins
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Include API router
