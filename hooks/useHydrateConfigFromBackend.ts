@@ -6,7 +6,7 @@ export function useHydrateConfigFromBackend() {
   const { updateConfig } = useConfigStore();
 
   useEffect(() => {
-    fetch('/api/deploy-config')
+    fetch('/deploy/config')
       .then(async (res) => {
         if (!res.ok) throw new Error('No config snapshot found');
         const data = await res.json();

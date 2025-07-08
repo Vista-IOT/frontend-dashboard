@@ -823,7 +823,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   hydrateConfigFromBackend: async () => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-    const res = await fetch(`${apiBase}/deploy-config`);
+    const res = await fetch(`${apiBase}/deploy/config`);
     const json = await res.json();
     let config = json.raw;
     if (typeof config === "string") {
@@ -839,7 +839,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   saveConfigToBackend: async () => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
     const yamlString = get().getYamlString();
-    await fetch(`${apiBase}/deploy-config`, {
+    await fetch(`${apiBase}/deploy/config`, {
       method: "POST",
       body: yamlString,
       headers: { "Content-Type": "text/yaml" },
