@@ -6,7 +6,10 @@ export function useHydrateConfigFromBackend() {
   const { updateConfig } = useConfigStore();
 
   useEffect(() => {
-    fetch('/deploy/config')
+    // Use window.location.origin to get the correct base URL
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    
+    fetch(`${baseUrl}/deploy/config`)
       .then(async (res) => {
         if (!res.ok) throw new Error('No config snapshot found');
         const data = await res.json();
@@ -14,11 +17,11 @@ export function useHydrateConfigFromBackend() {
           const parsed = YAML.parse(data.raw);
           updateConfig([], parsed);
         } catch (e) {
-          // Optionally handle error
+          console.error('Failed to parse config YAML:', e);
         }
       })
-      .catch(() => {
-        // Optionally fallback to default config
+      .catch((error) => {
+        console.error('Failed to hydrate config from backend:', error);
       });
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -72,7 +72,7 @@ export function ImportConfigDialog({ open, onOpenChange }: ImportConfigDialogPro
     
     try {
       // Reset to default first, then apply imported config
-      resetConfig()
+      await resetConfig()
       
       // Apply the imported configuration
       // For now, we'll replace the entire config

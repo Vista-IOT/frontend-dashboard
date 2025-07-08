@@ -389,8 +389,8 @@ function DashboardContent() {
     setIsLoadingComprehensive(true);
     
     try {
-      // Reset to default first
-      resetConfig();
+      // Reset to default first and wait for it to complete
+      await resetConfig();
       
       // Apply comprehensive configuration
       Object.keys(comprehensiveConfig).forEach(key => {

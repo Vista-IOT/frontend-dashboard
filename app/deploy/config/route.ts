@@ -235,10 +235,10 @@ export async function POST(req: NextRequest) {
             name: tag.name,
             referTagObj: { connect: { id: referTagId } },
             type: tag.type,
-            updateCycleValue: (tag.updateCycle !== undefined && tag.updateCycle !== null && !isNaN(Number(tag.updateCycle)))
-              ? (typeof tag.updateCycle === 'string' ? parseInt(tag.updateCycle, 10) : tag.updateCycle)
+            updateCycleValue: (tag.updateCycleValue !== undefined && tag.updateCycleValue !== null && !isNaN(Number(tag.updateCycleValue)))
+              ? (typeof tag.updateCycleValue === 'string' ? parseInt(tag.updateCycleValue, 10) : tag.updateCycleValue)
               : 1, // Default to 1 if missing or invalid
-            updateCycleUnit: tag.updateUnit ?? null,
+            updateCycleUnit: tag.updateCycleUnit ?? "sec",
             description: tag.description ?? null,
           },
         });

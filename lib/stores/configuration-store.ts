@@ -674,7 +674,7 @@ export interface ConfigState {
   lastUpdated: string;
   isDirty: boolean;
   updateConfig: (path: string[], value: any) => void;
-  resetConfig: () => void;
+  resetConfig: () => Promise<void>;
   getYamlString: () => string;
   getLastUpdated: () => string;
   setDirty: (isDirty: boolean) => void;
@@ -690,7 +690,7 @@ export interface ConfigState {
  */
 export async function fetchDynamicDefaultConfig(): Promise<ConfigSchema> {
   // Use NEXT_PUBLIC_API_BASE_URL or fallback
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const apiBase = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000");
 
   // Fetch all hardware info from /api/hardware/detect
   const detectRes = await fetch(`${apiBase}/api/hardware/detect`);
@@ -822,7 +822,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
 
   hydrateConfigFromBackend: async () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    const apiBase = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_API_BASE_URL || "");
     const res = await fetch(`${apiBase}/deploy/config`);
     const json = await res.json();
     let config = json.raw;
@@ -837,7 +837,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
 
   saveConfigToBackend: async () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    const apiBase = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_API_BASE_URL || "");
     const yamlString = get().getYamlString();
     await fetch(`${apiBase}/deploy/config`, {
       method: "POST",

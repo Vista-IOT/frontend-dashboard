@@ -28,7 +28,7 @@ export function ResetConfigDialog({ open, onOpenChange }: ResetConfigDialogProps
     
     try {
       // Reset to default configuration
-      resetConfig()
+      await resetConfig()
       
     toast({
       title: "Configuration reset",
