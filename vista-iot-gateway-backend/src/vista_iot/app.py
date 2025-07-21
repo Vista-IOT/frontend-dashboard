@@ -16,7 +16,7 @@ from .api.router import api_router, gateway_dependency
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.WARNING,  # Only show warnings and errors by default
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 )
 

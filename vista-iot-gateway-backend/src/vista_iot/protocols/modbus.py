@@ -7,15 +7,18 @@ import logging
 from typing import Dict, Any, Optional, List, Union
 import time
 import threading
+import struct
 from ..database.db_connector import DBConnector
 try:
     from pymodbus.server.async_io import StartTcpServer
     from pymodbus.datastore import ModbusSequentialDataBlock, ModbusSlaveContext, ModbusServerContext
+    from pymodbus.client import ModbusTcpClient
 except ImportError:
     StartTcpServer = None
     ModbusSequentialDataBlock = None
     ModbusSlaveContext = None
     ModbusServerContext = None
+    ModbusTcpClient = None
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,10 @@ class ModbusManager:
             return
         
         self.is_running = True
+        
+        # Start the device polling task
+        asyncio.create_task(self.poll_devices())
+        
         logger.info(f"Modbus Manager initialized in {mode} mode")
     
     async def _initialize_register_maps(self):
@@ -352,3 +359,113 @@ class ModbusManager:
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
         logger.info(f"Modbus TCP slave server started on port {self.config.get('tcp', {}).get('port', 502)} for VMM")
+    
+    async def poll_devices(self):
+        """
+        Continuously poll configured Modbus devices and update VMM.
+        """
+        if not self.is_running:
+            return
+            
+        logger.info("Starting Modbus device polling")
+        
+        while self.is_running:
+            try:
+                # Get IO setup configuration
+                io_ports = self.config_manager.get_value("io_setup.ports", [])
+                
+                for port in io_ports:
+                    if not port.get("enabled", True):
+                        continue
+                        
+                    for device in port.get("devices", []):
+                        if not device.get("enabled", True) or device.get("deviceType") != "Modbus TCP":
+                            continue
+                            
+                        # Connect to device
+                        ip_address = device.get("ipAddress", "10.0.0.1")
+                        port_number = device.get("portNumber", 502)
+                        unit_id = device.get("unitNumber", 180)
+                        
+                        if ModbusTcpClient is not None:
+                            client = ModbusTcpClient(ip_address, port=port_number)
+                            
+                            if client.connect():
+                                logger.debug(f"Connected to Modbus device {device.get('name')} at {ip_address}:{port_number}")
+                                
+                                # Read all tags for this device
+                                for tag in device.get("tags", []):
+                                    try:
+                                        await self._read_tag(client, tag, unit_id)
+                                    except Exception as e:
+                                        logger.error(f"Error reading tag {tag.get('name')}: {e}")
+                                
+                                client.close()
+                            else:
+                                logger.warning(f"Failed to connect to Modbus device at {ip_address}:{port_number}")
+                        else:
+                            logger.warning("pymodbus not available, cannot poll devices")
+                
+                # Wait before next poll cycle
+                await asyncio.sleep(1.0)  # Poll every second
+                
+            except Exception as e:
+                logger.error(f"Error in device polling loop: {e}")
+                await asyncio.sleep(5.0)  # Wait longer on error
+    
+    async def _read_tag(self, client, tag, unit_id):
+        """
+        Read a single tag from a Modbus device and update VMM.
+        """
+        tag_name = tag.get("name")
+        address = int(tag.get("address", 0))
+        register_type = tag.get("registerType", "Coil").lower()
+        
+        try:
+            if register_type == "coil":
+                result = client.read_coils(address=address, count=1, slave=unit_id)
+                if not result.isError():
+                    value = result.bits[0]
+                    # Update VMM
+                    if self.vmm is not None:
+                        self.vmm[str(address)] = {
+                            "address": str(address),
+                            "value": value,
+                            "dataType": "Digital",
+                            "unitId": unit_id,
+                            "updatedAt": time.time()
+                        }
+                    logger.debug(f"Read coil {tag_name} at address {address}: {value}")
+                
+            elif register_type == "holding":
+                # Read as 32-bit float (2 registers)
+                result = client.read_holding_registers(address=address, count=2, slave=unit_id)
+                if not result.isError():
+                    registers = result.registers
+                    # Convert to float
+                    value = self._convert_registers_to_float(registers[0], registers[1])
+                    
+                    # Update VMM
+                    if self.vmm is not None:
+                        self.vmm[str(address)] = {
+                            "address": str(address),
+                            "value": value,
+                            "dataType": "Analog",
+                            "unitId": unit_id,
+                            "updatedAt": time.time()
+                        }
+                    logger.debug(f"Read holding register {tag_name} at address {address}: {value}")
+                
+        except Exception as e:
+            logger.error(f"Error reading tag {tag_name}: {e}")
+    
+    def _convert_registers_to_float(self, high_reg, low_reg):
+        """
+        Convert two 16-bit registers to a 32-bit float.
+        """
+        try:
+            packed = struct.pack('>HH', high_reg, low_reg)
+            return struct.unpack('>f', packed)[0]
+        except Exception as e:
+            logger.error(f"Error converting registers to float: {e}")
+            return 0.0

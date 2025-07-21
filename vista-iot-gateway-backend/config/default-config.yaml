@@ -46,7 +46,7 @@ network:
 
 protocols:
   modbus:
-    enabled: false
+    enabled: true
     mode: "tcp"
     tcp:
       port: 502
@@ -58,8 +58,18 @@ protocols:
       data_bits: 8
       parity: "none"
       stop_bits: 1
-    slave_id: 1
-    mapping: []
+    slave_id: 180
+    mapping:
+      - device:
+          name: "Advantech Device"
+          host: "10.0.0.1"
+          port: 502
+          unit_id: 180
+        tags:
+          - name: "MyTag"
+            register: 0
+            data_type: "FLOAT32"
+            description: "Test tag from Advantech device"
   mqtt:
     enabled: false
     broker:

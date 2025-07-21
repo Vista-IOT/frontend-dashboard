@@ -12,6 +12,18 @@ const nextConfig = {
     }
     return config
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/dashboard/:path*',
+        destination: 'http://localhost:8000/api/dashboard/:path*',
+      },
+      {
+        source: '/api/hardware/:path*',
+        destination: 'http://localhost:8000/api/hardware/:path*',
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig 

@@ -42,34 +42,54 @@ export default function ConfigurationTab() {
 
   const handleDeploy = async () => {
     setIsDeploying(true)
+    let frontendError = null;
+    let backendError = null;
     try {
       // Dynamically construct the URL using the current window location
       const protocol = window.location.protocol;
       const hostname = window.location.hostname;
       const port = process.env.NEXT_PUBLIC_FRONTEND_PORT || "3000";
       const apiBase = `${protocol}//${hostname}:${port}`;
-      
-      const response = await fetch(`${apiBase}/deploy/config`, {
+      // 1. Deploy to frontend (proxy)
+      const frontendRes = await fetch(`${apiBase}/deploy/config`, {
         method: "POST",
         headers: { "Content-Type": "text/yaml" },
         body: editorContent,
       });
-      if (!response.ok) {
-        let errorMsg = "Failed to deploy";
+      if (!frontendRes.ok) {
+        let errorMsg = "Failed to deploy (frontend proxy)";
         try {
-          const data = await response.json();
-          console.error("DEPLOY ERROR JSON:", data);
-          if (data && data.error) {
-            errorMsg = data.error;
-          }
+          const data = await frontendRes.json();
+          if (data && data.error) errorMsg = data.error;
         } catch (e) {
           try {
-            const text = await response.text();
-            console.error("DEPLOY ERROR TEXT:", text);
+            const text = await frontendRes.text();
             if (text) errorMsg = text;
           } catch {}
         }
-        throw new Error(errorMsg);
+        frontendError = errorMsg;
+      }
+      // 2. Deploy directly to backend
+      const backendRes = await fetch("http://localhost:8000/deploy/config", {
+        method: "POST",
+        headers: { "Content-Type": "text/yaml" },
+        body: editorContent,
+      });
+      if (!backendRes.ok) {
+        let errorMsg = "Failed to deploy (backend direct)";
+        try {
+          const data = await backendRes.json();
+          if (data && data.error) errorMsg = data.error;
+        } catch (e) {
+          try {
+            const text = await backendRes.text();
+            if (text) errorMsg = text;
+          } catch {}
+        }
+        backendError = errorMsg;
+      }
+      if (frontendError || backendError) {
+        throw new Error([frontendError, backendError].filter(Boolean).join("; "));
       }
       toast.success("Configuration deployed and stored in database!");
     } catch (error) {

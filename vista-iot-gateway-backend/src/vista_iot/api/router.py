@@ -143,6 +143,18 @@ async def restart_gateway(background_tasks: BackgroundTasks, gateway=Depends(get
     background_tasks.add_task(gateway.restart)
     return {"status": "success", "message": "Gateway restart scheduled"}
 
+@gateway_router.post("/deploy/config")
+async def deploy_config(request: Request, background_tasks: BackgroundTasks, gateway=Depends(get_gateway)):
+    """
+    Deploy a new configuration and restart the gateway.
+    """
+    config = await request.json()
+    # Save config to database
+    gateway.update_config(config, save=True)
+    # Schedule a restart (reloads config from DB and restarts all modules)
+    background_tasks.add_task(gateway.restart)
+    return {"status": "success", "message": "Config deployed and gateway restart scheduled"}
+
 @gateway_router.get("/tags")
 async def get_all_tags(gateway=Depends(get_gateway)):
     """Get all tags and their current values"""

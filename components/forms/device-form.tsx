@@ -72,6 +72,8 @@ export interface DeviceConfig {
   digitalBlockSize: number;
   analogBlockSize: number;
   tags: IOTag[]; // Array to hold device tags
+  ipAddress?: string; // For Modbus TCP
+  portNumber?: number; // For Modbus TCP
 }
 
 interface DeviceFormProps {
@@ -134,6 +136,25 @@ export function DeviceForm({
   const [analogBlockSize, setAnalogBlockSize] = useState(
     existingConfig?.analogBlockSize || 64
   );
+
+  // 2. Add state for Modbus TCP fields
+  const [ipAddress, setIpAddress] = useState(
+    existingConfig?.ipAddress || "11.0.0.1"
+  );
+  const [portNumber, setPortNumber] = useState(
+    existingConfig?.portNumber || 502
+  );
+
+  // 3. Autofill defaults when switching to Modbus TCP
+  useEffect(() => {
+    if (
+      deviceType === "Modbus TCP" &&
+      (!existingConfig || existingConfig.deviceType !== "Modbus TCP")
+    ) {
+      setIpAddress("11.0.0.1");
+      setPortNumber(502);
+    }
+  }, [deviceType]);
 
   useEffect(() => {
     const lowerNewName = name.trim().toLowerCase();
@@ -297,6 +318,9 @@ export function DeviceForm({
       digitalBlockSize,
       analogBlockSize,
       tags: existingConfig?.tags || [],
+      ...(deviceType === "Modbus TCP"
+        ? { ipAddress, portNumber }
+        : {}),
     };
 
     if (onSubmit) {
@@ -313,12 +337,16 @@ export function DeviceForm({
         setPacketDelay(20);
         setDigitalBlockSize(512);
         setAnalogBlockSize(64);
+        setIpAddress("11.0.0.1");
+        setPortNumber(502);
       }
     }
   };
 
+  // 4. Add 'Modbus TCP' to DEVICE_TYPES
   const DEVICE_TYPES = [
     "Modbus RTU",
+    "Modbus TCP",
     "Advantech ADAM 2000 Series (Modbus RTU)",
     "Advantech ADAM 4000 Series (ADAM ASCII/Modbus RTU)",
     "Advantech WebCon 2000 Series",
@@ -393,6 +421,32 @@ export function DeviceForm({
                   </SelectContent>
                 </Select>
               </div>
+              {/* Modbus TCP fields */}
+              {deviceType === "Modbus TCP" && (
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ipAddress">IP Address</Label>
+                    <Input
+                      id="ipAddress"
+                      value={ipAddress}
+                      onChange={(e) => setIpAddress(e.target.value)}
+                      placeholder="11.0.0.1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="portNumber">Port Number</Label>
+                    <Input
+                      id="portNumber"
+                      type="number"
+                      value={portNumber}
+                      onChange={(e) => setPortNumber(Number(e.target.value))}
+                      min={1}
+                      max={65535}
+                      placeholder="502"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Device Model */}
               <div className="flex items-center space-x-2 mb-4">
