@@ -22,6 +22,20 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Suppress uvicorn access logs for /api/dashboard/overview
+block_endpoints = ["/api/dashboard/overview"]
+
+class LogFilter(logging.Filter):
+    def filter(self, record):
+        # Uvicorn access log records have args: (client_addr, method, path, http_version, status_code)
+        if record.args and len(record.args) >= 3:
+            if record.args[2] in block_endpoints:
+                return False
+        return True
+
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.addFilter(LogFilter())
+
 # Create FastAPI app
 app = FastAPI(title="Vista IoT Gateway API")
 

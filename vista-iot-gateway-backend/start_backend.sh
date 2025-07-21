@@ -25,4 +25,4 @@ export PYTHONPATH=src
 
 # Start the backend with uvicorn
 echo "Starting Vista IoT Gateway Backend on port 8000..."
-uvicorn vista_iot.app:app --reload --host 0.0.0.0 --port 8000
+uvicorn vista_iot.app:app --reload --host 0.0.0.0 --port 8000 --log-level warning
