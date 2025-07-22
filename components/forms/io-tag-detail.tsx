@@ -61,6 +61,8 @@ import type { IOPortConfig } from "./io-tag-form";
 // import type { DeviceConfig } from "./device-form";
 // IOTag interface is defined and exported in this file, no need for self-import.
 
+import { usePolledTagValues } from "@/hooks/usePolledTagValues";
+
 const CONVERSION_OPTIONS = [
   { value: "UINT, Big Endian (ABCD)", defaultLength: 16 },
   { value: "INT, Big Endian (ABCD)", defaultLength: 16 },
@@ -347,6 +349,8 @@ export function IOTagDetailView({
     setEditingTag(null);
   };
 
+  const polledValues = usePolledTagValues(1000); // 1s polling
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -396,13 +400,14 @@ export function IOTagDetailView({
                 <TableHead>Length</TableHead>
                 <TableHead>Read Write</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Value</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tagsToDisplay.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={11}
+                    colSpan={12}
                     className="text-center py-6 text-muted-foreground"
                   >
                     No IO tags configured for this device. Click "Add" to create
@@ -438,6 +443,9 @@ export function IOTagDetailView({
                     <TableCell>{tag.readWrite || "Read/Write"}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
                       {tag.description}
+                    </TableCell>
+                    <TableCell>
+                      {polledValues[deviceToDisplay.name]?.[tag.id] ?? "--"}
                     </TableCell>
                   </TableRow>
                 ))

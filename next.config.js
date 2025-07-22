@@ -22,6 +22,10 @@ const nextConfig = {
         source: '/api/hardware/:path*',
         destination: 'http://127.0.0.1:8000/api/hardware/:path*',
       },
+      {
+        source: '/api/io/polled-values',
+        destination: 'http://127.0.0.1:8000/deploy/api/io/polled-values',
+      },
     ]
   },
 }

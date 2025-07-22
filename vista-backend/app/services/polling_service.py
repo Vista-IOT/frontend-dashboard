@@ -7,6 +7,16 @@ import struct
 
 logger = logging.getLogger(__name__)
 
+# Global dict to store latest polled values: {device_name: {tag_id: value}}
+_latest_polled_values = {}
+_latest_polled_values_lock = threading.Lock()
+
+def get_latest_polled_values():
+    with _latest_polled_values_lock:
+        # Return a deep copy to avoid race conditions
+        import copy
+        return copy.deepcopy(_latest_polled_values)
+
 def ping_host(ip, count=2, timeout=1):
     try:
         logger.info(f"Attempting to ping {ip} with count={count}, timeout={timeout}")
@@ -156,6 +166,9 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 else:
                     registers = result.registers
                     logger.info(f"Raw registers [{min_addr}-{min_addr+count-1}]: {registers}")
+                    with _latest_polled_values_lock:
+                        if device_name not in _latest_polled_values:
+                            _latest_polled_values[device_name] = {}
                     for tag in tags:
                         tag_id = tag.get('id', 'UnknownTagID')
                         tag_name = tag.get('name', 'UnknownTag')
@@ -168,6 +181,8 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                             pos = reg_addr - min_addr
                             converted_value = convert_register_value(registers, pos, tag)
                             logger.info(f"{device_name} [{tag_name} @ {address}] = {converted_value} ({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
+                            with _latest_polled_values_lock:
+                                _latest_polled_values[device_name][tag_id] = converted_value
                         except Exception as e:
                             logger.error(f"Error processing tag {tag_name}: {e}")
                 time.sleep(scan_time_ms / 1000.0)

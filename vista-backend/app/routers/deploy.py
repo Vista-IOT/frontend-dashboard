@@ -5,6 +5,7 @@ import yaml
 from typing import Dict, Any
 from app.services.initializer import initialize_backend
 from app.utils.config_summary import generate_config_summary
+from app.services.polling_service import get_latest_polled_values
 import threading
 
 logger = logging.getLogger(__name__)
@@ -34,4 +35,12 @@ async def deploy_config(request: Request):
         raise HTTPException(status_code=400, detail="Invalid YAML format")
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred") 
+        raise HTTPException(status_code=500, detail="An internal error occurred")
+
+# New API route for polled values
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+@router.get("/api/io/polled-values")
+def get_polled_values():
+    return JSONResponse(get_latest_polled_values()) 
