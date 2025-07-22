@@ -11,116 +11,143 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
-import { useConfigStore } from "@/lib/stores/configuration-store"
+import { useConfigStore, EthernetInterface, WirelessInterface } from "@/lib/stores/configuration-store"
 import { RefreshCw } from "lucide-react"
+import { useNetworkInterfaces } from "@/hooks/useNetworkInterfaces"
 
 export function EthernetInterfaceForm() {
-  const { toast } = useToast()
-  const { updateConfig, getConfig } = useConfigStore()
-  const [isSaving, setIsSaving] = useState(false)
-  
-  // Get current configuration
-  const config = getConfig()
-  const eth0Config = config.network.interfaces.eth0
-  const wlan0Config = config.network.interfaces.wlan0
+  const { interfaces, isLoading, error } = useNetworkInterfaces()
 
-  if (!eth0Config) {
-    return (
-      <div className="p-4 text-red-500">
-        Ethernet interface <b>eth0</b> not found in configuration.
-      </div>
-    );
+  if (isLoading) {
+    return <div>Loading network interfaces...</div>
   }
 
-  const handleEth0Submit = async (e: React.FormEvent) => {
+  if (error) {
+    return <div className="p-4 text-red-500">Error: {error}</div>
+  }
+
+  const supportedInterfaces = interfaces.filter(
+    iface => iface.type === "Ethernet" || iface.type === "WiFi"
+  );
+
+
+  return (
+    <div className="space-y-4">
+      {supportedInterfaces.map(iface => (
+        <InterfaceForm key={iface.name} iface={iface} />
+      ))}
+    </div>
+  )
+}
+
+function InterfaceForm({ iface }: { iface: { name: string, type: string } }) {
+  const { toast } = useToast()
+  const { updateConfig } = useConfigStore()
+  const [isSaving, setIsSaving] = useState(false)
+  
+  const ifaceConfig = useConfigStore(state => state.config.network.interfaces[iface.name]);
+
+  useEffect(() => {
+    // If the config for this interface doesn't exist, create a default one
+    if (!ifaceConfig) {
+      if (iface.type === 'Ethernet') {
+        updateConfig(['network', 'interfaces', iface.name], {
+          type: 'ethernet',
+          enabled: true,
+          mode: 'static',
+          link: { speed: 'auto', duplex: 'auto' },
+          ipv4: {
+            mode: 'dhcp',
+            static: { address: '', netmask: '', gateway: '' },
+            dns: { primary: '', secondary: '' }
+          }
+        });
+      } else if (iface.type === 'WiFi') {
+        updateConfig(['network', 'interfaces', iface.name], {
+          type: 'wireless',
+          enabled: true,
+          mode: 'client',
+          wifi: {
+            ssid: '',
+            security: { mode: 'none', password: '' },
+            channel: 'auto',
+            band: '2.4',
+            hidden: false,
+          },
+          ipv4: {
+            mode: 'dhcp',
+            static: { address: '', netmask: '', gateway: '' },
+          },
+        });
+      }
+    }
+  }, [ifaceConfig, iface, updateConfig]);
+
+  if (!ifaceConfig) {
+    return <div>Initializing interface {iface.name}...</div>;
+  }
+  
+  if (ifaceConfig.type === 'ethernet') {
+    return <EthernetForm ifaceConfig={ifaceConfig as EthernetInterface} interfaceName={iface.name} />
+  } else if (ifaceConfig.type === 'wireless') {
+    return <WifiForm ifaceConfig={ifaceConfig as WirelessInterface} interfaceName={iface.name} />
+  }
+
+  return null;
+}
+
+function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInterface, interfaceName: string }) {
+  const { toast } = useToast()
+  const { updateConfig } = useConfigStore()
+  const [isSaving, setIsSaving] = useState(false)
+  const [enabled, setEnabled] = useState(ifaceConfig.enabled)
+  const [ipv4Mode, setIpv4Mode] = useState(ifaceConfig.ipv4.mode);
+  
+  useEffect(() => {
+    setEnabled(ifaceConfig.enabled);
+    setIpv4Mode(ifaceConfig.ipv4.mode);
+  }, [ifaceConfig]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     
     try {
       const formData = new FormData(e.target as HTMLFormElement)
       
-      const eth0Data = {
+      const interfaceData: EthernetInterface = {
         type: "ethernet",
-        enabled: formData.get("eth0-enabled") === "on",
-        mode: formData.get("eth0-mode") as string,
+        enabled: enabled,
+        mode: formData.get(`${interfaceName}-mode`) as string,
         link: {
-          speed: formData.get("eth0-speed") as string,
-          duplex: formData.get("eth0-duplex") as string,
+          speed: formData.get(`${interfaceName}-speed`) as string,
+          duplex: formData.get(`${interfaceName}-duplex`) as string,
         },
         ipv4: {
-          mode: formData.get("eth0-ipv4-mode") as string,
+          mode: ipv4Mode,
           static: {
-            address: formData.get("eth0-ip-address") as string || "",
-            netmask: formData.get("eth0-subnet-mask") as string || "",
-            gateway: formData.get("eth0-gateway") as string || "",
+            address: formData.get(`${interfaceName}-ip-address`) as string || "",
+            netmask: formData.get(`${interfaceName}-subnet-mask`) as string || "",
+            gateway: formData.get(`${interfaceName}-gateway`) as string || "",
           },
           dns: {
-            primary: formData.get("eth0-dns-primary") as string || "",
-            secondary: formData.get("eth0-dns-secondary") as string || "",
+            primary: formData.get(`${interfaceName}-dns-primary`) as string || "",
+            secondary: formData.get(`${interfaceName}-dns-secondary`) as string || "",
           },
         },
       }
       
-      updateConfig(['network', 'interfaces', 'eth0'], eth0Data)
+      updateConfig(['network', 'interfaces', interfaceName], interfaceData)
       
       toast({
         title: "Settings saved",
-        description: "Ethernet interface (eth0) settings have been updated.",
+        description: `Ethernet interface (${interfaceName}) settings have been updated.`,
       })
     } catch (error) {
-      console.error('Error saving eth0 settings:', error)
+      console.error(`Error saving ${interfaceName} settings:`, error)
       toast({
         title: "Error",
-        description: "Failed to save ethernet interface settings.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleWlan0Submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSaving(true)
-    
-    try {
-      const formData = new FormData(e.target as HTMLFormElement)
-      
-      const wlan0Data = {
-        type: "wireless",
-        enabled: formData.get("wlan0-enabled") === "on",
-        mode: formData.get("wlan0-mode") as string,
-        wifi: {
-          ssid: formData.get("wlan0-ssid") as string || "",
-          security: {
-            mode: formData.get("wlan0-security-mode") as string,
-            password: formData.get("wlan0-password") as string || "",
-          },
-          channel: formData.get("wlan0-channel") as string,
-          band: formData.get("wlan0-band") as string,
-          hidden: formData.get("wlan0-hidden") === "on",
-        },
-        ipv4: {
-          mode: formData.get("wlan0-ipv4-mode") as string,
-          static: {
-            address: formData.get("wlan0-ip-address") as string || "",
-            netmask: formData.get("wlan0-subnet-mask") as string || "",
-            gateway: formData.get("wlan0-gateway") as string || "",
-          },
-        },
-      }
-      
-      updateConfig(['network', 'interfaces', 'wlan0'], wlan0Data)
-      
-    toast({
-      title: "Settings saved",
-        description: "Wireless interface (wlan0) settings have been updated.",
-    })
-    } catch (error) {
-      console.error('Error saving wlan0 settings:', error)
-      toast({
-        title: "Error",
-        description: "Failed to save wireless interface settings.",
+        description: `Failed to save ${interfaceName} interface settings.`,
         variant: "destructive",
       })
     } finally {
@@ -129,87 +156,92 @@ export function EthernetInterfaceForm() {
   }
 
   return (
-      <div className="space-y-4">
-      {/* Ethernet Interface (eth0) */}
-      <form onSubmit={handleEth0Submit}>
+    <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle>Ethernet Interface (eth0)</CardTitle>
+          <CardTitle>Ethernet Interface ({interfaceName})</CardTitle>
             <CardDescription>Configure WAN interface settings</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="eth0-enabled">Enable Interface</Label>
+            <Label htmlFor={`${interfaceName}-enabled`}>Enable Interface</Label>
               <Switch 
-                id="eth0-enabled" 
-                name="eth0-enabled"
-                defaultChecked={eth0Config.enabled}
+              id={`${interfaceName}-enabled`}
+              name={`${interfaceName}-enabled`}
+              checked={enabled}
+              onCheckedChange={setEnabled}
               />
             </div>
 
+          {enabled && (
+            <>
             <div className="space-y-2">
               <Label>Connection Type</Label>
-              <RadioGroup defaultValue={eth0Config.ipv4.mode} name="eth0-ipv4-mode">
+                <RadioGroup 
+                  defaultValue={ipv4Mode} 
+                  name={`${interfaceName}-ipv4-mode`}
+                  onValueChange={setIpv4Mode}
+                >
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dhcp" id="eth0-dhcp" />
-                  <Label htmlFor="eth0-dhcp">DHCP (Automatic IP)</Label>
+                    <RadioGroupItem value="dhcp" id={`${interfaceName}-dhcp`} />
+                    <Label htmlFor={`${interfaceName}-dhcp`}>DHCP (Automatic IP)</Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="static" id="eth0-static" />
-                  <Label htmlFor="eth0-static">Static IP</Label>
+                    <RadioGroupItem value="static" id={`${interfaceName}-static`} />
+                    <Label htmlFor={`${interfaceName}-static`}>Static IP</Label>
                 </div>
               </RadioGroup>
             </div>
 
-            {eth0Config.ipv4.mode === "static" && (
+              {ipv4Mode === "static" && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="eth0-ip-address">IP Address</Label>
+                      <Label htmlFor={`${interfaceName}-ip-address`}>IP Address</Label>
                     <Input 
-                      id="eth0-ip-address" 
-                      name="eth0-ip-address"
+                        id={`${interfaceName}-ip-address`}
+                        name={`${interfaceName}-ip-address`}
                       placeholder="192.168.1.100" 
-                      defaultValue={eth0Config.ipv4.static.address}
+                        defaultValue={ifaceConfig.ipv4.static.address}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="eth0-subnet-mask">Subnet Mask</Label>
+                      <Label htmlFor={`${interfaceName}-subnet-mask`}>Subnet Mask</Label>
                     <Input 
-                      id="eth0-subnet-mask" 
-                      name="eth0-subnet-mask"
+                        id={`${interfaceName}-subnet-mask`}
+                        name={`${interfaceName}-subnet-mask`}
                       placeholder="255.255.255.0" 
-                      defaultValue={eth0Config.ipv4.static.netmask}
+                        defaultValue={ifaceConfig.ipv4.static.netmask}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="eth0-gateway">Default Gateway</Label>
+                      <Label htmlFor={`${interfaceName}-gateway`}>Default Gateway</Label>
                     <Input 
-                      id="eth0-gateway" 
-                      name="eth0-gateway"
+                        id={`${interfaceName}-gateway`}
+                        name={`${interfaceName}-gateway`}
                       placeholder="192.168.1.1" 
-                      defaultValue={eth0Config.ipv4.static.gateway}
+                        defaultValue={ifaceConfig.ipv4.static.gateway}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="eth0-dns-primary">Primary DNS</Label>
+                      <Label htmlFor={`${interfaceName}-dns-primary`}>Primary DNS</Label>
                     <Input 
-                      id="eth0-dns-primary" 
-                      name="eth0-dns-primary"
+                        id={`${interfaceName}-dns-primary`}
+                        name={`${interfaceName}-dns-primary`}
                       placeholder="8.8.8.8" 
-                      defaultValue={eth0Config.ipv4.dns?.primary}
+                        defaultValue={ifaceConfig.ipv4.dns?.primary}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="eth0-dns-secondary">Secondary DNS</Label>
+                    <Label htmlFor={`${interfaceName}-dns-secondary`}>Secondary DNS</Label>
                   <Input 
-                    id="eth0-dns-secondary" 
-                    name="eth0-dns-secondary"
+                      id={`${interfaceName}-dns-secondary`}
+                      name={`${interfaceName}-dns-secondary`}
                     placeholder="8.8.4.4" 
-                    defaultValue={eth0Config.ipv4.dns?.secondary}
+                      defaultValue={ifaceConfig.ipv4.dns?.secondary}
                   />
                 </div>
               </div>
@@ -217,9 +249,9 @@ export function EthernetInterfaceForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-                <Label htmlFor="eth0-speed">Speed</Label>
-                <Select defaultValue={eth0Config.link.speed} name="eth0-speed">
-                  <SelectTrigger id="eth0-speed">
+                  <Label htmlFor={`${interfaceName}-speed`}>Speed</Label>
+                  <Select defaultValue={ifaceConfig.link.speed} name={`${interfaceName}-speed`}>
+                    <SelectTrigger id={`${interfaceName}-speed`}>
                   <SelectValue placeholder="Select speed" />
                 </SelectTrigger>
                 <SelectContent>
@@ -231,9 +263,9 @@ export function EthernetInterfaceForm() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="eth0-duplex">Duplex</Label>
-                <Select defaultValue={eth0Config.link.duplex} name="eth0-duplex">
-                  <SelectTrigger id="eth0-duplex">
+                  <Label htmlFor={`${interfaceName}-duplex`}>Duplex</Label>
+                  <Select defaultValue={ifaceConfig.link.duplex} name={`${interfaceName}-duplex`}>
+                    <SelectTrigger id={`${interfaceName}-duplex`}>
                     <SelectValue placeholder="Select duplex" />
                   </SelectTrigger>
                   <SelectContent>
@@ -244,6 +276,8 @@ export function EthernetInterfaceForm() {
               </Select>
               </div>
             </div>
+            </>
+          )}
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isSaving}>
@@ -259,53 +293,129 @@ export function EthernetInterfaceForm() {
           </CardFooter>
         </Card>
       </form>
+  )
+}
 
-      {/* Wireless Interface (wlan0) */}
-      <form onSubmit={handleWlan0Submit}>
+function WifiForm({ ifaceConfig, interfaceName }: { ifaceConfig: WirelessInterface, interfaceName: string }) {
+  const { toast } = useToast();
+  const { updateConfig } = useConfigStore();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [enabled, setEnabled] = useState(ifaceConfig.enabled);
+  const [mode, setMode] = useState(ifaceConfig.mode);
+  const [ssid, setSsid] = useState(ifaceConfig.wifi.ssid);
+  const [securityMode, setSecurityMode] = useState(ifaceConfig.wifi.security.mode);
+  const [password, setPassword] = useState(ifaceConfig.wifi.security.password);
+  const [channel, setChannel] = useState(ifaceConfig.wifi.channel);
+  const [band, setBand] = useState(ifaceConfig.wifi.band);
+  const [hidden, setHidden] = useState(ifaceConfig.wifi.hidden);
+  const [ipv4Mode, setIpv4Mode] = useState(ifaceConfig.ipv4.mode);
+  
+  useEffect(() => {
+    setEnabled(ifaceConfig.enabled);
+    setMode(ifaceConfig.mode);
+    setSsid(ifaceConfig.wifi.ssid);
+    setSecurityMode(ifaceConfig.wifi.security.mode);
+    setPassword(ifaceConfig.wifi.security.password);
+    setChannel(ifaceConfig.wifi.channel);
+    setBand(ifaceConfig.wifi.band);
+    setHidden(ifaceConfig.wifi.hidden);
+    setIpv4Mode(ifaceConfig.ipv4.mode);
+  }, [ifaceConfig]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const formData = new FormData(e.target as HTMLFormElement);
+      const interfaceData: WirelessInterface = {
+        type: 'wireless',
+        enabled,
+        mode,
+        wifi: {
+          ssid,
+          security: {
+            mode: securityMode,
+            password,
+          },
+          channel,
+          band,
+          hidden,
+        },
+        ipv4: {
+          mode: ipv4Mode,
+          static: {
+            address: formData.get(`${interfaceName}-ip-address`) as string || '',
+            netmask: formData.get(`${interfaceName}-subnet-mask`) as string || '',
+            gateway: formData.get(`${interfaceName}-gateway`) as string || '',
+          },
+        },
+      };
+      updateConfig(['network', 'interfaces', interfaceName], interfaceData);
+      toast({
+        title: "Settings saved",
+        description: `WiFi interface (${interfaceName}) settings have been updated.`,
+      });
+    } catch (error) {
+      console.error(`Error saving ${interfaceName} settings:`, error);
+      toast({
+        title: "Error",
+        description: `Failed to save ${interfaceName} interface settings.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle>Wireless Interface (wlan0)</CardTitle>
+          <CardTitle>Wireless Interface ({interfaceName})</CardTitle>
             <CardDescription>Configure wireless interface settings</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="wlan0-enabled">Enable Interface</Label>
+            <Label htmlFor={`${interfaceName}-enabled`}>Enable Interface</Label>
               <Switch 
-                id="wlan0-enabled" 
-                name="wlan0-enabled"
-                defaultChecked={wlan0Config.enabled}
+              id={`${interfaceName}-enabled`}
+              checked={enabled}
+              onCheckedChange={setEnabled}
               />
             </div>
 
+          {enabled && (
+            <>
             <div className="space-y-2">
               <Label>Wireless Mode</Label>
-              <RadioGroup defaultValue={wlan0Config.mode} name="wlan0-mode">
+                <RadioGroup value={mode} onValueChange={setMode}>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="client" id="wlan0-client" />
-                  <Label htmlFor="wlan0-client">Client Mode</Label>
+                    <RadioGroupItem value="client" id={`${interfaceName}-client`} />
+                    <Label htmlFor={`${interfaceName}-client`}>Client Mode</Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ap" id="wlan0-ap" />
-                  <Label htmlFor="wlan0-ap">Access Point Mode</Label>
+                    <RadioGroupItem value="ap" id={`${interfaceName}-ap`} />
+                    <Label htmlFor={`${interfaceName}-ap`}>Access Point Mode</Label>
                 </div>
               </RadioGroup>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="wlan0-ssid">SSID</Label>
+                <Label htmlFor={`${interfaceName}-ssid`}>SSID</Label>
               <Input 
-                id="wlan0-ssid" 
-                name="wlan0-ssid"
+                  id={`${interfaceName}-ssid`}
                 placeholder="Network Name" 
-                defaultValue={wlan0Config.wifi.ssid}
+                  value={ssid}
+                  onChange={(e) => setSsid(e.target.value)}
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="wlan0-security-mode">Security</Label>
-                <Select defaultValue={wlan0Config.wifi.security.mode} name="wlan0-security-mode">
-                  <SelectTrigger id="wlan0-security-mode">
+                  <Label htmlFor={`${interfaceName}-security-mode`}>Security</Label>
+                  <Select value={securityMode} onValueChange={setSecurityMode}>
+                    <SelectTrigger id={`${interfaceName}-security-mode`}>
                     <SelectValue placeholder="Select security" />
                   </SelectTrigger>
                   <SelectContent>
@@ -316,45 +426,41 @@ export function EthernetInterfaceForm() {
                   </SelectContent>
                 </Select>
               </div>
+                {securityMode !== 'none' && (
               <div className="space-y-2">
-                <Label htmlFor="wlan0-password">Password</Label>
+                    <Label htmlFor={`${interfaceName}-password`}>Password</Label>
                 <Input 
-                  id="wlan0-password" 
-                  name="wlan0-password"
+                      id={`${interfaceName}-password`}
                   type="password" 
                   placeholder="••••••••" 
-                  defaultValue={wlan0Config.wifi.security.password}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="wlan0-channel">Channel</Label>
-                <Select defaultValue={wlan0Config.wifi.channel} name="wlan0-channel">
-                  <SelectTrigger id="wlan0-channel">
+                  <Label htmlFor={`${interfaceName}-channel`}>Channel</Label>
+                  <Select value={channel} onValueChange={setChannel}>
+                    <SelectTrigger id={`${interfaceName}-channel`}>
                     <SelectValue placeholder="Select channel" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="auto">Auto</SelectItem>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3</SelectItem>
-                    <SelectItem value="4">4</SelectItem>
-                    <SelectItem value="5">5</SelectItem>
-                    <SelectItem value="6">6</SelectItem>
-                    <SelectItem value="7">7</SelectItem>
-                    <SelectItem value="8">8</SelectItem>
-                    <SelectItem value="9">9</SelectItem>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="11">11</SelectItem>
+                      {[...Array(11)].map((_, i) => (
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                          Channel {i + 1}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wlan0-band">Band</Label>
-                <Select defaultValue={wlan0Config.wifi.band} name="wlan0-band">
-                  <SelectTrigger id="wlan0-band">
+                  <Label htmlFor={`${interfaceName}-band`}>Band</Label>
+                  <Select value={band} onValueChange={setBand}>
+                    <SelectTrigger id={`${interfaceName}-band`}>
                     <SelectValue placeholder="Select band" />
                   </SelectTrigger>
                   <SelectContent>
@@ -367,59 +473,61 @@ export function EthernetInterfaceForm() {
 
             <div className="flex items-center space-x-2">
               <Switch 
-                id="wlan0-hidden" 
-                name="wlan0-hidden"
-                defaultChecked={wlan0Config.wifi.hidden}
+                  id={`${interfaceName}-hidden`}
+                  checked={hidden}
+                  onCheckedChange={setHidden}
               />
-              <Label htmlFor="wlan0-hidden">Hidden Network</Label>
+                <Label htmlFor={`${interfaceName}-hidden`}>Hidden Network</Label>
             </div>
 
             <div className="space-y-2">
               <Label>IP Configuration</Label>
-              <RadioGroup defaultValue={wlan0Config.ipv4.mode} name="wlan0-ipv4-mode">
+                <RadioGroup value={ipv4Mode} onValueChange={setIpv4Mode}>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dhcp" id="wlan0-dhcp" />
-                  <Label htmlFor="wlan0-dhcp">DHCP (Automatic IP)</Label>
+                    <RadioGroupItem value="dhcp" id={`${interfaceName}-dhcp-ip`} />
+                    <Label htmlFor={`${interfaceName}-dhcp-ip`}>DHCP (Automatic IP)</Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="static" id="wlan0-static" />
-                  <Label htmlFor="wlan0-static">Static IP</Label>
+                    <RadioGroupItem value="static" id={`${interfaceName}-static-ip`} />
+                    <Label htmlFor={`${interfaceName}-static-ip`}>Static IP</Label>
                 </div>
               </RadioGroup>
             </div>
 
-            {wlan0Config.ipv4.mode === "static" && (
+              {ipv4Mode === 'static' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="wlan0-ip-address">IP Address</Label>
+                      <Label htmlFor={`${interfaceName}-ip-address`}>IP Address</Label>
                     <Input 
-                      id="wlan0-ip-address" 
-                      name="wlan0-ip-address"
+                        id={`${interfaceName}-ip-address`}
+                        name={`${interfaceName}-ip-address`}
                       placeholder="192.168.1.100" 
-                      defaultValue={wlan0Config.ipv4.static.address}
+                        defaultValue={ifaceConfig.ipv4.static.address}
                     />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`${interfaceName}-subnet-mask`}>Subnet Mask</Label>
+                      <Input
+                        id={`${interfaceName}-subnet-mask`}
+                        name={`${interfaceName}-subnet-mask`}
+                        placeholder="255.255.255.0"
+                        defaultValue={ifaceConfig.ipv4.static.netmask}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="wlan0-subnet-mask">Subnet Mask</Label>
+                    <Label htmlFor={`${interfaceName}-gateway`}>Default Gateway</Label>
                     <Input 
-                      id="wlan0-subnet-mask" 
-                      name="wlan0-subnet-mask"
-                      placeholder="255.255.255.0" 
-                      defaultValue={wlan0Config.ipv4.static.netmask}
+                      id={`${interfaceName}-gateway`}
+                      name={`${interfaceName}-gateway`}
+                      placeholder="192.168.1.1"
+                      defaultValue={ifaceConfig.ipv4.static.gateway}
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="wlan0-gateway">Default Gateway</Label>
-                  <Input 
-                    id="wlan0-gateway" 
-                    name="wlan0-gateway"
-                    placeholder="192.168.1.1" 
-                    defaultValue={wlan0Config.ipv4.static.gateway}
-                  />
-                </div>
-              </div>
+              )}
+            </>
             )}
           </CardContent>
           <CardFooter>
@@ -436,7 +544,6 @@ export function EthernetInterfaceForm() {
           </CardFooter>
         </Card>
       </form>
-      </div>
   )
 }
 

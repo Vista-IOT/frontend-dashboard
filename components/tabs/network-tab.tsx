@@ -11,9 +11,11 @@ import { StaticRoutesForm } from "@/components/forms/static-routes-form"
 import { PortForwardingForm } from "@/components/forms/port-forwarding-form"
 import { DynamicDNSForm } from "@/components/forms/dynamic-dns-form"
 import { WifiSettingsForm } from "@/components/forms/wifi-settings-form"
+import { useConfigStore } from "@/lib/stores/configuration-store"
 
 export default function NetworkTab() {
   const searchParams = useSearchParams()
+  const config = useConfigStore(state => state.config);
   const [activeNetworkTab, setActiveNetworkTab] = useState(() => {
     return searchParams.get("section") || "interfaces"
   })
@@ -36,10 +38,10 @@ export default function NetworkTab() {
         <Tabs value={activeNetworkTab} onValueChange={setActiveNetworkTab}>
           <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
             <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
-            <TabsTrigger value="dhcp">DHCP</TabsTrigger>
+            {config.network.dhcp_server.enabled && <TabsTrigger value="dhcp">DHCP</TabsTrigger>}
             <TabsTrigger value="routing">Routing</TabsTrigger>
             <TabsTrigger value="port-forwarding">Port Forwarding</TabsTrigger>
-            <TabsTrigger value="ddns">Dynamic DNS</TabsTrigger>
+            {config.network.dynamic_dns.enabled && <TabsTrigger value="ddns">Dynamic DNS</TabsTrigger>}
             <TabsTrigger value="wifi">WiFi</TabsTrigger>
           </TabsList>
 
@@ -47,9 +49,9 @@ export default function NetworkTab() {
             <EthernetInterfaceForm />
           </TabsContent>
 
-          <TabsContent value="dhcp">
+          {config.network.dhcp_server.enabled && <TabsContent value="dhcp">
             <DHCPServerForm />
-          </TabsContent>
+          </TabsContent>}
 
           <TabsContent value="routing">
             <StaticRoutesForm />
@@ -59,9 +61,9 @@ export default function NetworkTab() {
             <PortForwardingForm />
           </TabsContent>
 
-          <TabsContent value="ddns">
+          {config.network.dynamic_dns.enabled && <TabsContent value="ddns">
             <DynamicDNSForm />
-          </TabsContent>
+          </TabsContent>}
 
           <TabsContent value="wifi">
             <WifiSettingsForm />

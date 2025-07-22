@@ -16,9 +16,11 @@ import { FirewallForm } from "@/components/forms/firewall-form";
 import { IPBindingForm } from "@/components/forms/ip-binding-form";
 import { EncryptionSettingsForm } from "@/components/forms/encryption-settings-form";
 import { CertificateManagementForm } from "@/components/forms/certificate-management-form";
+import { useConfigStore } from "@/lib/stores/configuration-store";
 
 export default function SecurityTab() {
   const searchParams = useSearchParams();
+  const config = useConfigStore(state => state.config);
   const [activeSecurityTab, setActiveSecurityTab] = useState(() => {
     return searchParams.get("section") || "vpn";
   });
@@ -43,7 +45,7 @@ export default function SecurityTab() {
         <Tabs value={activeSecurityTab} onValueChange={setActiveSecurityTab}>
           <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
             <TabsTrigger value="vpn">VPN</TabsTrigger>
-            <TabsTrigger value="firewall">Firewall</TabsTrigger>
+            {config.network.firewall.enabled && <TabsTrigger value="firewall">Firewall</TabsTrigger>}
             <TabsTrigger value="ip-binding">IP Binding</TabsTrigger>
             <TabsTrigger value="encryption">Encryption</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
@@ -54,9 +56,9 @@ export default function SecurityTab() {
             {/* <div className="h-[2000px] bg-red-100">Test</div> */}
           </TabsContent>
 
-          <TabsContent value="firewall">
+          {config.network.firewall.enabled && <TabsContent value="firewall">
             <FirewallForm />
-          </TabsContent>
+          </TabsContent>}
 
           <TabsContent value="ip-binding">
             <IPBindingForm />

@@ -187,7 +187,7 @@ interface EthernetLinkConfig {
   duplex: string;
 }
 
-interface EthernetInterface {
+export interface EthernetInterface {
   type: string;
   enabled: boolean;
   mode: string;
@@ -208,7 +208,7 @@ interface WifiConfig {
   hidden: boolean;
 }
 
-interface WirelessInterface {
+export interface WirelessInterface {
   type: string;
   enabled: boolean;
   mode: string;
@@ -217,8 +217,7 @@ interface WirelessInterface {
 }
 
 interface NetworkInterfaces {
-  eth0: EthernetInterface;
-  wlan0: WirelessInterface;
+  [key: string]: EthernetInterface | WirelessInterface;
 }
 
 // Define a basic FirewallRule, expand if structure is known
@@ -664,6 +663,7 @@ export interface ConfigSchema {
   system_tags: SystemTag[];
   communication_forward?: CommunicationForwardConfig;
   hardware_mappings?: HardwareMappingTag[];
+  virtual_memory_map?: any[];
 }
 
 // --- END: Inserted Interface Definitions ---

@@ -321,17 +321,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Trigger backend reload/restart (use env var for backend URL)
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-      const resp = await fetch(`${backendUrl}/api/restart`, {
-        method: 'POST',
-      });
-      // Optionally log the response for debugging
-      const respText = await resp.text();
-      console.log('Backend restart response:', resp.status, respText);
-    } catch (err) {
-      console.error('Failed to trigger backend restart:', err);
-    }
+    // try {
+    //   const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    //   const resp = await fetch(`${backendUrl}/restart`, {
+    //     method: 'POST',
+    //   });
+    //   // Optionally log the response for debugging
+    //   const respText = await resp.text();
+    //   console.log('Backend restart response:', resp.status, respText);
+    // } catch (err) {
+      // console.error('Failed to trigger backend restart:', err);
+    // }
 
     const response = NextResponse.json({
       success: true,

@@ -6,41 +6,7 @@ device:
   description: "Primary IoT Gateway for Industrial Automation System"
 
 network:
-  interfaces:
-    eth0:
-      type: "ethernet"
-      enabled: true
-      mode: "static"
-      link:
-        speed: "1000"
-        duplex: "full"
-      ipv4:
-        mode: "static"
-        static:
-          address: "192.168.1.100"
-          netmask: "255.255.255.0"
-          gateway: "192.168.1.1"
-        dns:
-          primary: "8.8.8.8"
-          secondary: "8.8.4.4"
-    wlan0:
-      type: "wireless"
-      enabled: true
-      mode: "client"
-      wifi:
-        ssid: "Vista-Industrial-WiFi"
-        security:
-          mode: "wpa2"
-          password: "SecurePass123!"
-        channel: "6"
-        band: "2.4"
-        hidden: false
-      ipv4:
-        mode: "dhcp"
-        static:
-          address: ""
-          netmask: ""
-          gateway: ""
+  interfaces: {}
   firewall:
     enabled: true
     default_policy: "drop"

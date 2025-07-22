@@ -21,6 +21,7 @@ export function DynamicDNSForm() {
   // Get current configuration
   const config = getConfig()
   const ddnsConfig = config.network.dynamic_dns
+  const [enabled, setEnabled] = useState(ddnsConfig.enabled)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,7 +31,7 @@ export function DynamicDNSForm() {
       const formData = new FormData(e.target as HTMLFormElement)
       
       const ddnsData = {
-        enabled: formData.get("ddns-enabled") === "on",
+        enabled: enabled,
         provider: formData.get("provider") as string,
         domain: formData.get("domain") as string,
         username: formData.get("username") as string,
@@ -69,68 +70,73 @@ export function DynamicDNSForm() {
             <Switch 
               id="ddns-enabled" 
               name="ddns-enabled"
-              defaultChecked={ddnsConfig.enabled}
+              checked={enabled}
+              onCheckedChange={setEnabled}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="provider">Service Provider</Label>
-            <Select defaultValue={ddnsConfig.provider} name="provider">
-              <SelectTrigger id="provider">
-                <SelectValue placeholder="Select provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dyndns">DynDNS</SelectItem>
-                <SelectItem value="noip">No-IP</SelectItem>
-                <SelectItem value="freedns">FreeDNS</SelectItem>
-                <SelectItem value="duckdns">DuckDNS</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="provider">Service Provider</Label>
+                <Select defaultValue={ddnsConfig.provider} name="provider">
+                  <SelectTrigger id="provider">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dyndns">DynDNS</SelectItem>
+                    <SelectItem value="noip">No-IP</SelectItem>
+                    <SelectItem value="freedns">FreeDNS</SelectItem>
+                    <SelectItem value="duckdns">DuckDNS</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="domain">Domain Name</Label>
-            <Input 
-              id="domain" 
-              name="domain"
-              placeholder="mygateway.dyndns.org" 
-              defaultValue={ddnsConfig.domain}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="domain">Domain Name</Label>
+                <Input 
+                  id="domain" 
+                  name="domain"
+                  placeholder="mygateway.dyndns.org" 
+                  defaultValue={ddnsConfig.domain}
+                />
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input 
-                id="username" 
-                name="username"
-                placeholder="username" 
-                defaultValue={ddnsConfig.username}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                name="password"
-                type="password" 
-                placeholder="••••••••" 
-                defaultValue={ddnsConfig.password}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input 
+                    id="username" 
+                    name="username"
+                    placeholder="username" 
+                    defaultValue={ddnsConfig.username}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    name="password"
+                    type="password" 
+                    placeholder="••••••••" 
+                    defaultValue={ddnsConfig.password}
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="update-interval">Update Interval (minutes)</Label>
-            <Input 
-              id="update-interval" 
-              name="update-interval"
-              placeholder="60" 
-              type="number" 
-              defaultValue={ddnsConfig.update_interval}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="update-interval">Update Interval (minutes)</Label>
+                <Input 
+                  id="update-interval" 
+                  name="update-interval"
+                  placeholder="60" 
+                  type="number" 
+                  defaultValue={ddnsConfig.update_interval}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
         <CardFooter>
           <Button type="submit" disabled={isSaving}>

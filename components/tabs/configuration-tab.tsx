@@ -13,17 +13,19 @@ import YAML from 'yaml'
 
 export default function ConfigurationTab() {
   const { getYamlString, getLastUpdated, updateConfig, resetConfig } = useConfigStore()
+  const lastUpdated = useConfigStore(state => state.lastUpdated);
   const [isDeploying, setIsDeploying] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
-  const [editorContent, setEditorContent] = useState("")
+  const [editorContent, setEditorContent] = useState(getYamlString())
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isConfigValid, setIsConfigValid] = useState(true)
 
   useEffect(() => {
-    setEditorContent(getYamlString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!hasUnsavedChanges) {
+      setEditorContent(getYamlString());
+    }
+  }, [lastUpdated]);
 
   const handleEditorDidMount = () => {
     setIsEditorReady(true)

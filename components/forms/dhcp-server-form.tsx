@@ -20,6 +20,7 @@ export function DHCPServerForm() {
   // Get current configuration
   const config = getConfig()
   const dhcpConfig = config.network.dhcp_server
+  const [enabled, setEnabled] = useState(dhcpConfig.enabled)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +30,7 @@ export function DHCPServerForm() {
       const formData = new FormData(e.target as HTMLFormElement)
       
       const dhcpData = {
-        enabled: formData.get("dhcp-enabled") === "on",
+        enabled: enabled,
         start_ip: formData.get("start-ip") as string,
         end_ip: formData.get("end-ip") as string,
         lease_time: parseInt(formData.get("lease-time") as string) || 24,
@@ -68,62 +69,67 @@ export function DHCPServerForm() {
             <Switch 
               id="dhcp-enabled" 
               name="dhcp-enabled"
-              defaultChecked={dhcpConfig.enabled}
+              checked={enabled}
+              onCheckedChange={setEnabled}
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start-ip">Start IP Address</Label>
-              <Input 
-                id="start-ip" 
-                name="start-ip"
-                placeholder="10.0.0.100" 
-                defaultValue={dhcpConfig.start_ip}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="end-ip">End IP Address</Label>
-              <Input 
-                id="end-ip" 
-                name="end-ip"
-                placeholder="10.0.0.200" 
-                defaultValue={dhcpConfig.end_ip}
-              />
-            </div>
-          </div>
+          {enabled && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-ip">Start IP Address</Label>
+                  <Input 
+                    id="start-ip" 
+                    name="start-ip"
+                    placeholder="10.0.0.100" 
+                    defaultValue={dhcpConfig.start_ip}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-ip">End IP Address</Label>
+                  <Input 
+                    id="end-ip" 
+                    name="end-ip"
+                    placeholder="10.0.0.200" 
+                    defaultValue={dhcpConfig.end_ip}
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="lease-time">Lease Time (hours)</Label>
-              <Input 
-                id="lease-time" 
-                name="lease-time"
-                placeholder="24" 
-                type="number" 
-                defaultValue={dhcpConfig.lease_time}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="domain">Domain Name</Label>
-              <Input 
-                id="domain" 
-                name="domain"
-                placeholder="local" 
-                defaultValue={dhcpConfig.domain}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lease-time">Lease Time (hours)</Label>
+                  <Input 
+                    id="lease-time" 
+                    name="lease-time"
+                    placeholder="24" 
+                    type="number" 
+                    defaultValue={dhcpConfig.lease_time}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="domain">Domain Name</Label>
+                  <Input 
+                    id="domain" 
+                    name="domain"
+                    placeholder="local" 
+                    defaultValue={dhcpConfig.domain}
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dns">DNS Servers (comma separated)</Label>
-            <Input 
-              id="dns" 
-              name="dns"
-              placeholder="8.8.8.8, 8.8.4.4" 
-              defaultValue={dhcpConfig.dns_servers.join(", ")}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="dns">DNS Servers (comma separated)</Label>
+                <Input 
+                  id="dns" 
+                  name="dns"
+                  placeholder="8.8.8.8, 8.8.4.4" 
+                  defaultValue={dhcpConfig.dns_servers.join(", ")}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
         <CardFooter>
           <Button type="submit" disabled={isSaving}>

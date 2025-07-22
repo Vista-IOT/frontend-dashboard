@@ -1,5 +1,5 @@
 """
-Hardware detection utilities for the Vista IoT Gateway.
+Hardware detection utilities for the Vista IoT Backend.
 Provides functionality to detect and monitor system hardware resources.
 """
 import os
@@ -8,6 +8,7 @@ import subprocess
 import platform
 import logging
 import glob
+import json
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class HardwareDetector:
                 'ttyUSB*',   # USB-to-serial converters
                 'ttyACM*',   # CDC ACM devices (Arduino, etc.)
                 'ttyAMA*',   # AMBA serial ports (Raspberry Pi)
-                'ttyAS*',    # ARM serial ports (your system)
+                'ttyAS*',    # ARM serial ports
                 'ttymxc*',   # i.MX serial ports
                 'ttyO*',     # OMAP serial ports
                 'rfcomm*'    # Bluetooth serial ports
@@ -66,11 +67,9 @@ class HardwareDetector:
                             "connected": is_accessible
                         }
                         
-                        # Try to get additional info from dmesg or sys
+                        # Try to get additional info for USB devices
                         try:
-                            # Check if it's a USB device
                             if 'USB' in port_name:
-                                # Try to get USB device info
                                 usb_info = HardwareDetector._get_usb_serial_info(port_name)
                                 if usb_info:
                                     port_info["usb_info"] = usb_info
@@ -145,6 +144,56 @@ class HardwareDetector:
         return None
 
     @staticmethod
+    def _is_wifi_interface(interface_name: str) -> bool:
+        """Check if an interface is a WiFi interface using multiple detection methods."""
+        # Method 1: Check common WiFi interface name patterns
+        wifi_patterns = [
+            r'^wlan\d+$',      # wlan0, wlan1, etc.
+            r'^wl\w+$',        # wlp3s0, etc.
+            r'^wifi\d+$',      # wifi0, wifi1, etc.
+            r'^ath\d+$',       # ath0, ath1 (Atheros)
+            r'^ra\d+$',        # ra0, ra1 (Ralink)
+            r'^rtl\d+$',       # rtl0, rtl1 (Realtek)
+        ]
+        
+        for pattern in wifi_patterns:
+            if re.match(pattern, interface_name):
+                return True
+        
+        # Method 2: Check if interface has wireless extensions
+        try:
+            # Check if interface appears in iwconfig output (indicates wireless capability)
+            result = subprocess.run(
+                ['iwconfig', interface_name],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            # If iwconfig doesn't return an error and doesn't say "no wireless extensions"
+            if result.returncode == 0 and "no wireless extensions" not in result.stderr.lower():
+                return True
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        
+        # Method 3: Check sysfs for wireless directory
+        try:
+            wireless_path = f"/sys/class/net/{interface_name}/wireless"
+            if os.path.exists(wireless_path):
+                return True
+        except:
+            pass
+        
+        # Method 4: Check if interface has a phy directory (indicating wireless)
+        try:
+            phy_path = f"/sys/class/net/{interface_name}/phy80211"
+            if os.path.exists(phy_path):
+                return True
+        except:
+            pass
+        
+        return False
+
+    @staticmethod
     def detect_network_interfaces() -> List[Dict[str, Any]]:
         """Detect all network interfaces on the system."""
         interfaces = []
@@ -159,15 +208,29 @@ class HardwareDetector:
                 )
                 
                 if result.returncode == 0:
-                    import json
                     try:
                         data = json.loads(result.stdout)
                         for iface in data:
+                            interface_name = iface.get('ifname', '')
+                            
+                            # Determine interface type using improved detection
+                            interface_type = "Other"
+                            if interface_name == 'lo':
+                                interface_type = "Loopback"
+                            elif HardwareDetector._is_wifi_interface(interface_name):
+                                interface_type = "WiFi"
+                            elif interface_name.startswith('eth') or interface_name.startswith('en'):
+                                interface_type = "Ethernet"
+                            elif interface_name.startswith('br'):
+                                interface_type = "Bridge"
+                            elif interface_name.startswith('tun') or interface_name.startswith('tap'):
+                                interface_type = "VPN/Tunnel"
+                            elif interface_name.startswith('docker') or interface_name.startswith('veth'):
+                                interface_type = "Container"
+                            
                             interfaces.append({
-                                "name": iface.get('ifname', ''),
-                                "type": "Ethernet" if 'eth' in iface.get('ifname', '') else 
-                                       'WiFi' if 'wlan' in iface.get('ifname', '') else 
-                                       'Loopback' if 'lo' == iface.get('ifname', '') else 'Other',
+                                "name": interface_name,
+                                "type": interface_type,
                                 "mac": iface.get('address', ''),
                                 "state": iface.get('operstate', 'UNKNOWN').upper(),
                                 "ip_addresses": [addr.get('local', '') for addr in iface.get('addr_info', []) if 'local' in addr],
@@ -182,9 +245,16 @@ class HardwareDetector:
                 import wmi
                 c = wmi.WMI()
                 for interface in c.Win32_NetworkAdapterConfiguration(IPEnabled=1):
+                    interface_type = "Other"
+                    description = interface.Description or ""
+                    if "Ethernet" in description:
+                        interface_type = "Ethernet"
+                    elif any(wifi_term in description.lower() for wifi_term in ["wireless", "wifi", "802.11", "wlan"]):
+                        interface_type = "WiFi"
+                    
                     interfaces.append({
-                        "name": interface.Description,
-                        "type": "Ethernet" if "Ethernet" in interface.Description else "WiFi" if "Wireless" in interface.Description else "Other",
+                        "name": description,
+                        "type": interface_type,
                         "mac": interface.MACAddress,
                         "state": "UP",
                         "ip_addresses": [ip for ip in interface.IPAddress if ip] if interface.IPAddress else [],

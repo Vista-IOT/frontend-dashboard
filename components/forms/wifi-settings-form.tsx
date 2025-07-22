@@ -95,10 +95,12 @@ export function WifiSettingsForm() {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="mode"
-          render={({ field }) => (
+        {form.watch("enabled") && (
+          <>
+            <FormField
+              control={form.control}
+              name="mode"
+              render={({ field }) => (
             <FormItem>
               <FormLabel>WiFi Mode</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -285,6 +287,8 @@ export function WifiSettingsForm() {
                 </FormItem>
               )}
             />
+          </>
+        )}
           </>
         )}
 

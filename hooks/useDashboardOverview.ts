@@ -7,7 +7,7 @@ export function useDashboardOverview(refreshInterval = 1000) {
   useEffect(() => {
     let isMounted = true;
     const fetchData = () => {
-      fetch(`${baseUrl}/api/dashboard/overview`)
+      fetch(`${baseUrl}/dashboard/overview`)
         .then(res => res.json())
         .then(json => { if (isMounted) setData(json.data); });
     };

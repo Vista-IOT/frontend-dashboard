@@ -12,9 +12,11 @@ import { SNMPForm } from "@/components/forms/snmp-form"
 import { IECProtocolsForm } from "@/components/forms/iec-protocols-form"
 import { ProtocolConversionForm } from "@/components/forms/protocol-conversion-form"
 import { DataMappingForm } from "@/components/forms/data-mapping-form"
+import { useConfigStore } from "@/lib/stores/configuration-store"
 
 export default function ProtocolsTab() {
   const searchParams = useSearchParams()
+  const config = useConfigStore(state => state.config);
   const [activeProtocolTab, setActiveProtocolTab] = useState(() => {
     return searchParams.get("section") || "dnp3"
   })
@@ -38,7 +40,7 @@ export default function ProtocolsTab() {
           <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
             <TabsTrigger value="dnp3">DNP3.0</TabsTrigger>
             <TabsTrigger value="opcua">OPC-UA</TabsTrigger>
-            <TabsTrigger value="modbus">Modbus</TabsTrigger>
+            {config.protocols.modbus.enabled && <TabsTrigger value="modbus">Modbus</TabsTrigger>}
             <TabsTrigger value="snmp">SNMP</TabsTrigger>
             <TabsTrigger value="iec">IEC</TabsTrigger>
           </TabsList>
@@ -51,9 +53,9 @@ export default function ProtocolsTab() {
             <OPCUAForm />
           </TabsContent>
 
-          <TabsContent value="modbus">
+          {config.protocols.modbus.enabled && <TabsContent value="modbus">
             <ModbusForm separateAdvancedConfig={false} />
-          </TabsContent>
+          </TabsContent>}
 
           <TabsContent value="snmp">
             <SNMPForm />

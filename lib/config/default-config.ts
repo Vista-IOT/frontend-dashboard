@@ -9,52 +9,7 @@ export const defaultConfig: ConfigSchema = {
     description: "",
   },
   network: {
-    interfaces: {
-      eth0: {
-        type: "ethernet",
-        enabled: true,
-        mode: "dhcp",
-        link: {
-          speed: "auto",
-          duplex: "auto",
-        },
-        ipv4: {
-          mode: "dhcp",
-          static: {
-            address: "",
-            netmask: "",
-            gateway: "",
-          },
-          dns: {
-            primary: "",
-            secondary: "",
-          },
-        },
-      },
-      wlan0: {
-        type: "wireless",
-        enabled: false,
-        mode: "client",
-        wifi: {
-          ssid: "",
-          security: {
-            mode: "wpa2",
-            password: "",
-          },
-          channel: "auto",
-          band: "2.4",
-          hidden: false,
-        },
-        ipv4: {
-          mode: "dhcp",
-          static: {
-            address: "",
-            netmask: "",
-            gateway: "",
-          },
-        },
-      },
-    },
+    interfaces: {},
     firewall: {
       enabled: true,
       default_policy: "drop",

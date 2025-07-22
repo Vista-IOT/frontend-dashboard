@@ -41,7 +41,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHydrateConfigFromBackend } from "@/hooks/useHydrateConfigFromBackend";
+import { useHydrateConfigFromBackend, useConfigStore } from "@/hooks/useHydrateConfigFromBackend";
 
 // Types for the navigation items
 type NavItem = {
@@ -55,6 +55,7 @@ type NavItem = {
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const config = useConfigStore(state => state.config);
 
   useHydrateConfigFromBackend();
 
@@ -307,8 +308,8 @@ export default function Dashboard() {
               <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="network">Network</TabsTrigger>
-                <TabsTrigger value="security">Security</TabsTrigger>
-                <TabsTrigger value="protocols">Protocols</TabsTrigger>
+                {config.security.ssh.enabled && <TabsTrigger value="security">Security</TabsTrigger>}
+                {(config.protocols.modbus.enabled || config.protocols.mqtt.enabled) && <TabsTrigger value="protocols">Protocols</TabsTrigger>}
                 <TabsTrigger value="logs">Logs</TabsTrigger>
               </TabsList>
 
@@ -587,7 +588,7 @@ export default function Dashboard() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="security" className="mt-6 space-y-6">
+              {config.security.ssh.enabled && <TabsContent value="security" className="mt-6 space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Security Configuration</CardTitle>
@@ -650,9 +651,9 @@ export default function Dashboard() {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </TabsContent>}
 
-              <TabsContent value="protocols" className="mt-6 space-y-6">
+              {(config.protocols.modbus.enabled || config.protocols.mqtt.enabled) && <TabsContent value="protocols" className="mt-6 space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Industrial Protocols</CardTitle>
@@ -714,7 +715,7 @@ export default function Dashboard() {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </TabsContent>}
 
               <TabsContent value="logs" className="mt-6">
                 <Card>

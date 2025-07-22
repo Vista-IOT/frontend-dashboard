@@ -56,7 +56,7 @@ export function HardwareMappingsTab() {
 
   useEffect(() => {
     setLoadingHardware(true);
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    const apiBase = "";
     fetch(`${apiBase}/api/hardware/detect`)
       .then(res => res.json())
       .then(data => {

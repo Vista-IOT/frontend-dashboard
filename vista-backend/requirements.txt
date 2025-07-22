@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+netifaces
+psutil
+py-cpuinfo
+zeroconf
+pyserial
+requests
+PyYAML
