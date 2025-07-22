@@ -3,6 +3,8 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 import yaml
 from typing import Dict, Any
+from app.services.initializer import initialize_backend
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,9 @@ async def deploy_config(request: Request):
         config = yaml.safe_load(body)
         summary = generate_config_summary(config)
         logger.info("Received new configuration deployment:%s", summary)
-        return {"status": "success", "message": "Configuration received and logged."}
+        # Trigger backend re-initialization in the background
+        threading.Thread(target=initialize_backend, daemon=True).start()
+        return {"status": "success", "message": "Configuration received and backend re-initialized."}
     except yaml.YAMLError as e:
         logger.error(f"Error parsing YAML: {e}")
         raise HTTPException(status_code=400, detail="Invalid YAML format")
