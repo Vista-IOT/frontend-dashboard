@@ -5,6 +5,24 @@ from . import network_configurator
 
 logger = logging.getLogger(__name__)
 
+def _get_default_netmask(ip_address: str) -> str:
+    """Infers a default network mask based on the IP address."""
+    if not ip_address:
+        return ""
+    try:
+        first_octet = int(ip_address.split('.')[0])
+        if first_octet == 10:
+            logger.info(f"IP {ip_address} is in a Class A private range. Using default netmask 255.0.0.0")
+            return "255.0.0.0"
+        
+        # For most other typical LAN scenarios (including 192.168.x.x and 172.16.x.x subnets)
+        # a /24 mask is the most common and safest default.
+        logger.info(f"Using common default netmask 255.255.255.0 for IP {ip_address}")
+        return "255.255.255.0"
+    except (ValueError, IndexError):
+        logger.error(f"Invalid IP address format: {ip_address}. Cannot determine default netmask.")
+        return ""
+
 def _configure_network(config, detected_interfaces):
     """Checks and logs network interface configurations."""
     logger.info("--- Configuring Network Interfaces ---")
@@ -27,11 +45,17 @@ def _configure_network(config, detected_interfaces):
                     netmask = static_settings.get('netmask')
                     gateway = static_settings.get('gateway')
                     
+                    if ip and not netmask:
+                        inferred_netmask = _get_default_netmask(ip)
+                        if inferred_netmask:
+                            logger.info(f"  - Netmask not provided for '{name}'. Auto-assigning default: '{inferred_netmask}'.")
+                            netmask = inferred_netmask
+
                     if ip and netmask:
                         logger.info(f"  - Mode: static, IP: {ip}, Netmask: {netmask}, Gateway: {gateway or 'N/A'}")
                         network_configurator.configure_static_ip(name, ip, netmask, gateway)
                     else:
-                        logger.warning(f"⚠️ Interface '{name}' is set to static mode, but IP or netmask is missing. Skipping configuration.")
+                        logger.warning(f"⚠️ Interface '{name}' is set to static mode, but IP or netmask is missing or invalid. Skipping configuration.")
                         logger.warning(f"  - Provided: IP='{ip}', Netmask='{netmask}'")
                 else:
                     logger.info(f"  - Mode: dhcp")

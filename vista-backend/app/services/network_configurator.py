@@ -4,6 +4,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _netmask_to_cidr(netmask: str) -> int:
+    """Converts a dotted-decimal netmask to CIDR prefix length."""
+    if not netmask:
+        return 0
+    try:
+        return sum(bin(int(x)).count('1') for x in netmask.split('.'))
+    except (ValueError, AttributeError):
+        logger.error(f"Invalid netmask format: {netmask}")
+        return 0
+
 def run_command(command):
     """Executes a shell command and logs its output."""
     try:
@@ -31,6 +41,11 @@ def configure_static_ip(interface_name, ip_address, netmask, gateway):
         logger.error(f"Provided: IP='{ip_address}', Netmask='{netmask}'")
         return
 
+    cidr_prefix = _netmask_to_cidr(netmask)
+    if not cidr_prefix:
+        logger.error(f"Invalid netmask '{netmask}' for interface '{interface_name}'. Aborting static configuration.")
+        return
+
     logger.info(f"Applying static IP configuration for '{interface_name}'...")
     
     # 1. Bring the interface down to safely change its settings
@@ -40,7 +55,7 @@ def configure_static_ip(interface_name, ip_address, netmask, gateway):
     run_command(['ip', 'addr', 'flush', 'dev', interface_name])
     
     # 3. Assign the new static IP address and netmask
-    run_command(['ip', 'addr', 'add', f'{ip_address}/{netmask}', 'dev', interface_name])
+    run_command(['ip', 'addr', 'add', f'{ip_address}/{cidr_prefix}', 'dev', interface_name])
     
     # 4. Bring the interface back up
     run_command(['ip', 'link', 'set', interface_name, 'up'])
