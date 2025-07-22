@@ -6,7 +6,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import hardware, dashboard, deploy
+from app.routers import dashboard, deploy, hardware, config
+from app.services.config_monitor import config_monitor
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +36,21 @@ app.add_middleware(
 # Include routers
 app.include_router(hardware.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(config.router, prefix="/api")
 app.include_router(deploy.router)
+
+# Application lifecycle events
+@app.on_event("startup")
+async def startup_event():
+    """Start configuration monitor on application startup"""
+    logger.info("Starting Vista IoT Backend...")
+    config_monitor.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop configuration monitor on application shutdown"""
+    logger.info("Shutting down Vista IoT Backend...")
+    config_monitor.stop()
 
 @app.get("/")
 async def root():
