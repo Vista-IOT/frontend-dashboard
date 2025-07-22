@@ -16,7 +16,7 @@ const nextConfig = {
     return [
       {
         source: '/api/dashboard/:path*',
-        destination: 'http://127.0.0.1:8000/api/dashboard/:path*',
+        ppdestination: 'http://127.0.0.1:8000/api/dashboard/:path*',
       },
       {
         source: '/api/hardware/:path*',

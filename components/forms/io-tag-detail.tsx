@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Save,
   FileDown,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +63,8 @@ import type { IOPortConfig } from "./io-tag-form";
 // import type { DeviceConfig } from "./device-form";
 // IOTag interface is defined and exported in this file, no need for self-import.
 
-import { usePolledTagValues } from "@/hooks/usePolledTagValues";
+import { usePolledTagValues, PolledTagValue } from "@/hooks/usePolledTagValues";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CONVERSION_OPTIONS = [
   { value: "UINT, Big Endian (ABCD)", defaultLength: 16 },
@@ -445,7 +448,42 @@ export function IOTagDetailView({
                       {tag.description}
                     </TableCell>
                     <TableCell>
-                      {polledValues[deviceToDisplay.name]?.[tag.id] ?? "--"}
+                      {(() => {
+                        const tagVal: PolledTagValue | undefined = polledValues[deviceToDisplay.name]?.[tag.id];
+                        if (!tagVal) {
+                          // Show a spinner for loading
+                          return (
+                            <span className="flex items-center justify-center text-gray-400">
+                              <Loader2 className="animate-spin w-4 h-4" />
+                            </span>
+                          );
+                        }
+                        if (tagVal.status === "ok") {
+                          return (
+                            <span className="font-mono text-green-600">{tagVal.value}</span>
+                          );
+                        }
+                        // For any error status, show error icon and tooltip
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="flex items-center justify-center text-red-500 cursor-pointer">
+                                  <AlertTriangle className="w-5 h-5" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                align="center"
+                                className="bg-white border border-red-500 shadow-lg rounded-lg px-4 py-3 flex items-center space-x-2 min-w-[220px] max-w-xs"
+                              >
+                                <AlertTriangle className="w-5 h-5 text-red-500" />
+                                <span className="text-red-700 font-semibold break-words">{tagVal.error || `Error: ${tagVal.status}`}</span>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))

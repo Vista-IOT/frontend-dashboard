@@ -51,6 +51,7 @@ import { DataConversionConfig } from "../forms/data-conversion-config";
 import CommunicationForwardDestinationsTab from "./communication-forward-destinations-tab";
 import DestinationForm from "../forms/destination-form";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 // --- Data Structures are now in configuration-store.ts ---
 
@@ -101,6 +102,7 @@ const BlockEditorModal = ({
     Record<string, boolean>
   >({});
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedBrokerId, setSelectedBrokerId] = useState<string | null>(null);
 
   // Helper function to render icons
   const renderIcon = (icon: any, className: string = "h-8 w-8") => {
@@ -403,6 +405,19 @@ const BlockEditorModal = ({
                           >
                             <div className="h-4 w-4 rounded-full bg-green-400" />
                             {dest.name}
+                            {dest.type === "mqtt-broker" && (
+                              <Input
+                                type="text"
+                                className="ml-2 border rounded px-2 py-1 w-56"
+                                placeholder="Enter topic"
+                                value={config?.config?.topic ?? ""}
+                                onChange={e => {
+                                  setSelectedBrokerId(dest.id);
+                                  onConfigChange({ ...config, config: { ...config.config, topic: e.target.value } });
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            )}
                             {dest.description && (
                               <span className="text-xs text-muted-foreground ml-2">
                                 ({dest.description})
@@ -525,7 +540,12 @@ const BlockEditorModal = ({
           >
             Cancel
           </Button>
-          <Button onClick={onSave} disabled={isSaveDisabled || showCreateForm}>
+          <Button
+            onClick={() => {
+              onSave();
+            }}
+            disabled={isSaveDisabled || showCreateForm}
+          >
             Select
           </Button>
         </div>
@@ -848,7 +868,7 @@ const BridgeBlockDisplay: FC<{
 
 // Bridges Tab Content Component
 const BridgesTabContent = () => {
-  const { config: appConfig, updateConfig } = useConfigStore();
+  const { config: appConfig, updateConfig, saveConfigToBackend } = useConfigStore();
   const bridges = useMemo(
     () => appConfig.communication_forward?.bridges || [],
     [appConfig.communication_forward]
@@ -929,7 +949,7 @@ const BridgesTabContent = () => {
     setBridges(newBridges);
   };
 
-  const handleSaveConfiguration = () => {
+  const handleSaveConfiguration = async () => {
     if (!editingBlock) return;
 
     const { bridgeId, blockId, atIndex } = editingBlock;
@@ -975,10 +995,13 @@ const BridgesTabContent = () => {
             // It's a dest or intermediate block
             if (block.type === "destination" && tempSelection.id) {
               // This is an existing destination being selected
-              updatedBlock.subType =
-                tempSelection.type as BridgeBlock["subType"];
+              updatedBlock.subType = tempSelection.type as BridgeBlock["subType"];
               updatedBlock.label = tempSelection.name;
-              updatedBlock.config = { destinationId: tempSelection.id };
+              // Merge topic from tempSelection.config.topic if present
+              updatedBlock.config = {
+                destinationId: tempSelection.id,
+                ...(tempSelection.config && tempSelection.config.topic ? { topic: tempSelection.config.topic } : {}),
+              };
             } else {
               // This is a new destination or intermediate block being configured
               updatedBlock.subType =
@@ -996,6 +1019,7 @@ const BridgesTabContent = () => {
       setBridges(newBridges);
     }
 
+    await saveConfigToBackend();
     setEditingBlock(null);
     setTempSelection(null);
   };

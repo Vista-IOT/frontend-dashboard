@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
 
-const API_BASE = "http://localhost:8000";
+export interface PolledTagValue {
+  value: number | null;
+  status: string;
+  error: string | null;
+  timestamp: number;
+}
 
 export function usePolledTagValues(pollInterval = 1000) {
-  const [values, setValues] = useState<{ [deviceName: string]: { [tagId: string]: number } }>({});
+  const [values, setValues] = useState<{ [deviceName: string]: { [tagId: string]: PolledTagValue } }>({});
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
     async function fetchValues() {
       try {
-        const res = await fetch(`${API_BASE}/deploy/api/io/polled-values`);
+        const res = await fetch("/api/io/polled-values");
         if (res.ok) {
           const data = await res.json();
-          setValues(data);
+          // If backend returns empty object or error, clear values
+          if (!data || Object.keys(data).length === 0) {
+            setValues({});
+          } else {
+            setValues(data);
+          }
+        } else {
+          setValues({});
         }
       } catch (e) {
-        // Optionally handle error
+        setValues({});
       }
       timer = setTimeout(fetchValues, pollInterval);
     }
