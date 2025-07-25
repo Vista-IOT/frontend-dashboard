@@ -5,8 +5,7 @@ from pymodbus.client import ModbusTcpClient
 import subprocess
 import struct
 
-# logger = logging.getLogger(__name__)
-logger = None
+logger = logging.getLogger(__name__)
 
 MODBUS_EXCEPTION_CODES = {
     1: "Illegal Function: The function code received in the query is not recognized or allowed.",
@@ -290,6 +289,9 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
 
 def start_polling_from_config(config):
     # logger.info('Starting polling from config...')
+    if config is None:
+        logger.warning('No configuration provided to start_polling_from_config. Skipping polling setup.')
+        return
     io_setup = config.get('io_setup', {})
     ports = io_setup.get('ports', [])
     for port in ports:

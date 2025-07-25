@@ -2,6 +2,7 @@
 import requests
 import yaml
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +10,10 @@ def load_latest_config():
     """
     Connects to the frontend API to load the latest configuration.
     """
-    config_url = "http://localhost:3000/deploy/config"
+    # Get hostname from environment variable, fallback to localhost
+    hostname = os.getenv('FRONTEND_HOST', 'localhost')
+    port = os.getenv('FRONTEND_PORT', '3000')
+    config_url = f"http://{hostname}:{port}/deploy/config"
     try:
         logger.info(f"Fetching latest configuration from: {config_url}")
         

@@ -72,7 +72,8 @@ export default function ConfigurationTab() {
         frontendError = errorMsg;
       }
       // 2. Deploy directly to backend
-      const backendRes = await fetch("http://localhost:8000/deploy/config", {
+      const backendApiBase = `http://${window.location.hostname}:8000`;
+      const backendRes = await fetch(`${backendApiBase}/deploy/config`, {
         method: "POST",
         headers: { "Content-Type": "text/yaml" },
         body: editorContent,

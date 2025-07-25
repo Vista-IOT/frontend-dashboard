@@ -5,8 +5,16 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 
-// Default backend API URL
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api';
+// Default backend API URL - dynamically use current hostname
+const getBackendApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const apiHost = window.location.hostname;
+    return `http://${apiHost}:8000/api`;
+  }
+  return process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api';
+};
+
+const BACKEND_API_URL = getBackendApiUrl();
 
 /**
  * Service to interact with the backend

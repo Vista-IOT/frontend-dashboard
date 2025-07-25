@@ -113,7 +113,7 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
 
   useEffect(() => {
     setLoadingHardware(true);
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    const apiBase = typeof window !== 'undefined' ? `http://${window.location.hostname}:8000` : 'http://localhost:8000';
     fetch(`${apiBase}/api/hardware/detect`)
       .then(res => res.json())
       .then(data => {

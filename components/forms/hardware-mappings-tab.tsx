@@ -56,7 +56,7 @@ export function HardwareMappingsTab() {
 
   useEffect(() => {
     setLoadingHardware(true);
-    const apiBase = "";
+    const apiBase = typeof window !== 'undefined' ? `http://${window.location.hostname}:8000` : 'http://localhost:8000';
     fetch(`${apiBase}/api/hardware/detect`)
       .then(res => res.json())
       .then(data => {

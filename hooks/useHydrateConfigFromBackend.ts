@@ -6,8 +6,8 @@ export function useHydrateConfigFromBackend() {
   const { updateConfig } = useConfigStore();
 
   useEffect(() => {
-    // Use window.location.origin to get the correct base URL
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    // Use window.location.hostname with port 8000 to get the correct base URL
+    const baseUrl = typeof window !== 'undefined' ? `http://${window.location.hostname}:8000` : 'http://localhost:8000';
     
     fetch(`${baseUrl}/deploy/config`)
       .then(async (res) => {

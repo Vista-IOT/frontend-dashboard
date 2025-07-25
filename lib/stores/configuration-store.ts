@@ -689,8 +689,8 @@ export interface ConfigState {
  * Fetches available network interfaces and serial ports from the backend and builds a dynamic default config.
  */
 export async function fetchDynamicDefaultConfig(): Promise<ConfigSchema> {
-  // Use NEXT_PUBLIC_API_BASE_URL or fallback
-  const apiBase = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000");
+  // Use window.location.hostname with port 8000 or fallback
+  const apiBase = typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000");
 
   // Fetch all hardware info from /api/hardware/detect
   const detectRes = await fetch(`${apiBase}/api/hardware/detect`);
