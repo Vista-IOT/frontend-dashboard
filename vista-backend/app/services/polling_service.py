@@ -1,9 +1,10 @@
 import time
 import logging
 import threading
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
+import serial
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,214 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         # logger.exception(f"Exception in polling thread for device {device_config.get('name')}: {e}")
         pass
 
+def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
+    """Poll Modbus RTU device over serial connection"""
+    try:
+        device_id = device_config.get('id', 'UnknownID')
+        device_name = device_config.get('name', 'UnknownDevice')
+        unit = device_config.get('unitNumber', 1)
+        
+        # Get serial settings from device's parent port
+        port_config = device_config.get('portConfig', {})
+        serial_settings = port_config.get('serialSettings', {})
+        
+        serial_port = serial_settings.get('port', '/dev/ttyUSB0')
+        baudrate = serial_settings.get('baudRate', 9600)
+        parity = serial_settings.get('parity', 'None')
+        stopbits = serial_settings.get('stopBit', 1)
+        bytesize = serial_settings.get('dataBit', 8)
+        
+        # Convert parity to pymodbus format
+        parity_map = {'None': 'N', 'Even': 'E', 'Odd': 'O'}
+        parity_char = parity_map.get(parity, 'N')
+        
+        logger.info(
+            f"Polling Modbus RTU device: id={device_id}, name={device_name}, "
+            f"port={serial_port}, baud={baudrate}, parity={parity_char}, "
+            f"stopbits={stopbits}, bytesize={bytesize}, unit={unit}, scan_time_ms={scan_time_ms}"
+        )
+        
+        # Initialize device in global storage
+        with _latest_polled_values_lock:
+            if device_name not in _latest_polled_values:
+                _latest_polled_values[device_name] = {}
+        
+        # Create Modbus RTU client
+        client = ModbusSerialClient(
+            port=serial_port,
+            baudrate=baudrate,
+            parity=parity_char,
+            stopbits=stopbits,
+            bytesize=bytesize,
+            timeout=3
+        )
+        
+        # Calculate address range similar to TCP implementation
+        addresses = []
+        for tag in tags:
+            try:
+                addr = int(tag['address'])
+                if addr >= 40001:
+                    addr = addr - 40001
+                addresses.append(addr)
+            except Exception as e:
+                logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
+                pass
+        
+        if not addresses:
+            logger.warning(f"No valid addresses found for RTU device {device_name}")
+            return
+        
+        min_addr = min(addresses)
+        max_registers_needed = 0
+        for tag in tags:
+            addr = int(tag['address'])
+            if addr >= 40001:
+                addr = addr - 40001
+            length_bit = get_tag_length_bit(tag)
+            registers_needed = 2 if length_bit == 32 else 1
+            max_registers_needed = max(max_registers_needed, addr + registers_needed - min_addr)
+        
+        count = max_registers_needed
+        MAX_REGISTERS_PER_READ = 125
+        
+        while True:
+            try:
+                if not client.connect():
+                    logger.error(f"Failed to connect to RTU device on {serial_port}")
+                    with _latest_polled_values_lock:
+                        for tag in tags:
+                            tag_id = tag.get('id', 'UnknownTagID')
+                            _latest_polled_values[device_name][tag_id] = {
+                                "value": None,
+                                "status": "serial_connect_failed",
+                                "error": f"Failed to connect to serial port {serial_port}",
+                                "timestamp": int(time.time()),
+                            }
+                    time.sleep(scan_time_ms / 1000.0)
+                    continue
+                
+                # Read registers in batches (same logic as TCP)
+                all_registers = []
+                total_needed = count
+                current_addr = min_addr
+                
+                while total_needed > 0:
+                    read_count = min(total_needed, MAX_REGISTERS_PER_READ)
+                    try:
+                        result = client.read_holding_registers(
+                            address=current_addr, 
+                            count=read_count, 
+                            slave=unit
+                        )
+                    except Exception as exc:
+                        now = int(time.time())
+                        error_msg = f"RTU read exception: {str(exc)}"
+                        logger.error(error_msg)
+                        with _latest_polled_values_lock:
+                            for tag in tags:
+                                tag_id = tag.get('id', 'UnknownTagID')
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": None,
+                                    "status": "rtu_exception",
+                                    "error": error_msg,
+                                    "timestamp": now,
+                                }
+                        break
+                    
+                    if result.isError():
+                        logger.error(f"RTU error reading registers from {device_name}: {result}")
+                        verbose_msg = None
+                        if hasattr(result, 'exception_code'):
+                            code = result.exception_code
+                            verbose_msg = get_modbus_exception_verbose(code)
+                            error_msg = f"RTU Modbus Error: {result} - {verbose_msg}"
+                        else:
+                            error_msg = f"RTU Error: {str(result)}"
+                        
+                        now = int(time.time())
+                        with _latest_polled_values_lock:
+                            for tag in tags:
+                                tag_id = tag.get('id', 'UnknownTagID')
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": None,
+                                    "status": "rtu_modbus_error",
+                                    "error": error_msg,
+                                    "timestamp": now,
+                                }
+                        break
+                    else:
+                        all_registers.extend(result.registers)
+                    
+                    current_addr += read_count
+                    total_needed -= read_count
+                else:
+                    # Process tags only if all reads succeeded
+                    now = int(time.time())
+                    logger.debug(f"RTU Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
+                    
+                    with _latest_polled_values_lock:
+                        for tag in tags:
+                            tag_id = tag.get('id', 'UnknownTagID')
+                            tag_name = tag.get('name', 'UnknownTag')
+                            try:
+                                address = int(tag['address'])
+                                if address >= 40001:
+                                    reg_addr = address - 40001
+                                else:
+                                    reg_addr = address
+                                pos = reg_addr - min_addr
+                                converted_value = convert_register_value(all_registers, pos, tag)
+                                
+                                logger.debug(f"RTU {device_name} [{tag_name} @ {address}] = {converted_value} "
+                                           f"({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
+                                
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": converted_value,
+                                    "status": "ok",
+                                    "error": None,
+                                    "timestamp": now,
+                                }
+                            except Exception as e:
+                                logger.error(f"Error processing RTU tag {tag_name}: {e}")
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": None,
+                                    "status": "rtu_conversion_error",
+                                    "error": str(e),
+                                    "timestamp": now,
+                                }
+                
+            except serial.SerialException as se:
+                logger.error(f"Serial port error for RTU device {device_name}: {se}")
+                with _latest_polled_values_lock:
+                    for tag in tags:
+                        tag_id = tag.get('id', 'UnknownTagID')
+                        _latest_polled_values[device_name][tag_id] = {
+                            "value": None,
+                            "status": "serial_port_error",
+                            "error": f"Serial port error: {str(se)}",
+                            "timestamp": int(time.time()),
+                        }
+            except Exception as e:
+                logger.error(f"Unexpected error in RTU polling for {device_name}: {e}")
+                with _latest_polled_values_lock:
+                    for tag in tags:
+                        tag_id = tag.get('id', 'UnknownTagID')
+                        _latest_polled_values[device_name][tag_id] = {
+                            "value": None,
+                            "status": "rtu_polling_error",
+                            "error": str(e),
+                            "timestamp": int(time.time()),
+                        }
+            finally:
+                if client.is_socket_open():
+                    client.close()
+            
+            time.sleep(scan_time_ms / 1000.0)
+            
+    except Exception as e:
+        logger.exception(f"Exception in RTU polling thread for device {device_config.get('name')}: {e}")
+
 def start_polling_from_config(config):
     # logger.info('Starting polling from config...')
     if config is None:
@@ -300,9 +509,20 @@ def start_polling_from_config(config):
         for device in port.get('devices', []):
             if not device.get('enabled', False):
                 continue
-            if device.get('deviceType', '').lower() == 'modbus tcp':
+            device_type = device.get('deviceType', '').lower()
+            
+            if device_type == 'modbus tcp':
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)
-                # logger.info(f"Spawning polling thread for device {device.get('name')} at {device.get('ipAddress')}:{device.get('portNumber')}")
+                logger.info(f"Spawning TCP polling thread for device {device.get('name')} at {device.get('ipAddress')}:{device.get('portNumber')}")
                 t = threading.Thread(target=poll_modbus_tcp_device, args=(device, tags, scan_time), daemon=True)
-                t.start() 
+                t.start()
+                
+            elif device_type == 'modbus rtu':
+                tags = device.get('tags', [])
+                scan_time = port.get('scanTime', 1000)
+                # Pass port config to device for serial settings
+                device_with_port = {**device, 'portConfig': port}
+                logger.info(f"Spawning RTU polling thread for device {device.get('name')} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
+                t = threading.Thread(target=poll_modbus_rtu_device, args=(device_with_port, tags, scan_time), daemon=True)
+                t.start()
