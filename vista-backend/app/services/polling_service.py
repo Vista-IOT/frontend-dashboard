@@ -210,7 +210,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 while total_needed > 0:
                     read_count = min(total_needed, MAX_REGISTERS_PER_READ)
                     try:
-                        result = client.read_holding_registers(address=current_addr, count=read_count, slave=unit)
+                        result = client.read_holding_registers(address=current_addr, count=read_count, device_id=unit)
                     except Exception as exc:
                         now = int(time.time())
                         error_msg = str(exc)
@@ -386,7 +386,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                         result = client.read_holding_registers(
                             address=current_addr, 
                             count=read_count, 
-                            slave=unit
+                            device_id=unit
                         )
                     except Exception as exc:
                         now = int(time.time())

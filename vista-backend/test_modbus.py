@@ -11,7 +11,7 @@ if not client.connect():
 
 # Read holding registers from 40001 (address 0) to 40012 (address 11)
 # 6 tags * 2 registers = 12 registers
-response = client.read_holding_registers(address=0, count=12, slave=180)
+response = client.read_holding_registers(address=0, count=12, device_id=180)
 
 if response.isError():
     print("Error reading registers:", response)
