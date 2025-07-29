@@ -3,6 +3,13 @@
 # Vista IoT Backend Startup Script
 echo "Starting Vista IoT Backend..."
 
+# Stop getty on ttyS0 (AS0)
+echo "Stopping getty service on ttyS0 (AS0)..."
+sudo systemctl stop serial-getty@ttyS0.service 2>/dev/null || {
+    echo "No active getty service found on ttyS0, checking for process..."
+    sudo pkill -f "getty.*ttyS0" 2>/dev/null && echo "Killed getty process on ttyS0" || echo "No getty process found on ttyS0"
+}
+
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 VENV_DIR="$SCRIPT_DIR/venv"
