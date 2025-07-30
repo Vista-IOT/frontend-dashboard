@@ -98,7 +98,7 @@ function InterfaceForm({ iface }: { iface: { name: string, type: string } }) {
 
 function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInterface, interfaceName: string }) {
   const { toast } = useToast()
-  const { updateConfig } = useConfigStore()
+  const { saveNetworkSettings } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   const [enabled, setEnabled] = useState(ifaceConfig.enabled)
   const [ipv4Mode, setIpv4Mode] = useState(ifaceConfig.ipv4.mode);
@@ -137,12 +137,21 @@ function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInt
         },
       }
       
-      updateConfig(['network', 'interfaces', interfaceName], interfaceData)
+      // Use the new saveNetworkSettings helper function
+      const result = saveNetworkSettings(['network', 'interfaces', interfaceName], interfaceData, `${interfaceName} interface`)
       
-      toast({
-        title: "Settings saved",
-        description: `Ethernet interface (${interfaceName}) settings have been updated.`,
-      })
+      if (result.success) {
+        toast({
+          title: "Settings saved",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error(`Error saving ${interfaceName} settings:`, error)
       toast({
@@ -298,7 +307,7 @@ function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInt
 
 function WifiForm({ ifaceConfig, interfaceName }: { ifaceConfig: WirelessInterface, interfaceName: string }) {
   const { toast } = useToast();
-  const { updateConfig } = useConfigStore();
+  const { saveNetworkSettings } = useConfigStore();
   const [isSaving, setIsSaving] = useState(false);
 
   const [enabled, setEnabled] = useState(ifaceConfig.enabled);
@@ -351,11 +360,22 @@ function WifiForm({ ifaceConfig, interfaceName }: { ifaceConfig: WirelessInterfa
           },
         },
       };
-      updateConfig(['network', 'interfaces', interfaceName], interfaceData);
-      toast({
-        title: "Settings saved",
-        description: `WiFi interface (${interfaceName}) settings have been updated.`,
-      });
+      
+      // Use the new saveNetworkSettings helper function
+      const result = saveNetworkSettings(['network', 'interfaces', interfaceName], interfaceData, `${interfaceName} interface`)
+      
+      if (result.success) {
+        toast({
+          title: "Settings saved",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error(`Error saving ${interfaceName} settings:`, error);
       toast({

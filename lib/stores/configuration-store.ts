@@ -681,6 +681,8 @@ export interface ConfigState {
   getConfig: () => ConfigSchema; // MODIFIED: Return type is ConfigSchema
   hydrateConfigFromBackend: () => Promise<void>;
   saveConfigToBackend: () => Promise<void>;
+  deployConfig: () => Promise<any>; // Add deployConfig method
+  saveNetworkSettings: (path: string[], value: any, settingName: string) => { success: boolean; message: string }; // Add saveNetworkSettings helper
 }
 
 // --- BEGIN: Dynamic Default Config Generator ---
@@ -845,6 +847,60 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       headers: { "Content-Type": "text/yaml" },
     });
     set({ isDirty: false });
+  },
+
+  // Add new deploy method that sends config to backend and triggers reinit
+  deployConfig: async () => {
+    try {
+      const yamlString = get().getYamlString();
+      
+      // Send to backend deploy endpoint
+      const backendApiBase = `http://${window.location.hostname}:8000`;
+      const deployRes = await fetch(`${backendApiBase}/deploy/config`, {
+        method: "POST",
+        headers: { "Content-Type": "text/yaml" },
+        body: yamlString,
+      });
+      
+      if (!deployRes.ok) {
+        throw new Error(`Backend deployment failed: ${deployRes.status} ${deployRes.statusText}`);
+      }
+      
+      const deployResult = await deployRes.json();
+      
+      // Also trigger backend reinitialization
+      const reinitRes = await fetch(`${backendApiBase}/deploy/reinit`, {
+        method: "POST",
+      });
+      
+      if (!reinitRes.ok) {
+        console.warn("Backend reinitialization failed, but deployment was successful");
+      }
+      
+      set({ isDirty: false });
+      return deployResult;
+    } catch (error) {
+      console.error("Error deploying configuration:", error);
+      throw error;
+    }
+  },
+
+  // Helper function for saving network settings with consistent toast notifications
+  saveNetworkSettings: (path: string[], value: any, settingName: string) => {
+    try {
+      get().updateConfig(path, value);
+      // Return success message for toast
+      return {
+        success: true,
+        message: `${settingName} settings have been updated successfully.`
+      };
+    } catch (error) {
+      console.error(`Error saving ${settingName} settings:`, error);
+      return {
+        success: false,
+        message: `Failed to save ${settingName} settings.`
+      };
+    }
   },
 }));
 

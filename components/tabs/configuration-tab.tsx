@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import YAML from 'yaml'
 
 export default function ConfigurationTab() {
-  const { getYamlString, getLastUpdated, updateConfig, resetConfig } = useConfigStore()
+  const { getYamlString, getLastUpdated, updateConfig, resetConfig, deployConfig } = useConfigStore()
   const lastUpdated = useConfigStore(state => state.lastUpdated);
   const [isDeploying, setIsDeploying] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
@@ -44,57 +44,13 @@ export default function ConfigurationTab() {
 
   const handleDeploy = async () => {
     setIsDeploying(true)
-    let frontendError = null;
-    let backendError = null;
     try {
-      // Dynamically construct the URL using the current window location
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      const port = process.env.NEXT_PUBLIC_FRONTEND_PORT || "3000";
-      const apiBase = `${protocol}//${hostname}:${port}`;
-      // 1. Deploy to frontend (proxy)
-      const frontendRes = await fetch(`${apiBase}/deploy/config`, {
-        method: "POST",
-        headers: { "Content-Type": "text/yaml" },
-        body: editorContent,
+      // Use the new deployConfig method from the store
+      const result = await deployConfig();
+      toast.success("Configuration deployed and backend reinitialized successfully!", {
+        description: result.message || "Your configuration has been applied to the backend",
+        duration: 5000,
       });
-      if (!frontendRes.ok) {
-        let errorMsg = "Failed to deploy (frontend proxy)";
-        try {
-          const data = await frontendRes.json();
-          if (data && data.error) errorMsg = data.error;
-        } catch (e) {
-          try {
-            const text = await frontendRes.text();
-            if (text) errorMsg = text;
-          } catch {}
-        }
-        frontendError = errorMsg;
-      }
-      // 2. Deploy directly to backend
-      const backendApiBase = `http://${window.location.hostname}:8000`;
-      const backendRes = await fetch(`${backendApiBase}/deploy/config`, {
-        method: "POST",
-        headers: { "Content-Type": "text/yaml" },
-        body: editorContent,
-      });
-      if (!backendRes.ok) {
-        let errorMsg = "Failed to deploy (backend direct)";
-        try {
-          const data = await backendRes.json();
-          if (data && data.error) errorMsg = data.error;
-        } catch (e) {
-          try {
-            const text = await backendRes.text();
-            if (text) errorMsg = text;
-          } catch {}
-        }
-        backendError = errorMsg;
-      }
-      if (frontendError || backendError) {
-        throw new Error([frontendError, backendError].filter(Boolean).join("; "));
-      }
-      toast.success("Configuration deployed and stored in database!");
     } catch (error) {
       toast.error("Failed to deploy configuration", {
         description: error instanceof Error ? error.message : String(error),

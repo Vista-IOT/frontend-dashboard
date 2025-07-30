@@ -8,10 +8,10 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } fr
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useToast } from "@/components/ui/use-toast"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
-import { toast } from "sonner"
 
 const wifiFormSchema = z.object({
   enabled: z.boolean(),
@@ -37,6 +37,7 @@ const wifiFormSchema = z.object({
 })
 
 export function WifiSettingsForm() {
+  const { toast } = useToast()
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
 
@@ -58,13 +59,16 @@ export function WifiSettingsForm() {
         ...values
       })
       
-      toast.success('WiFi settings saved successfully!', {
-        duration: 3000
+      toast({
+        title: "Settings saved",
+        description: "WiFi settings have been updated successfully.",
       })
     } catch (error) {
       console.error('Error saving WiFi settings:', error)
-      toast.error('Failed to save WiFi settings', {
-        duration: 5000
+      toast({
+        title: "Error",
+        description: "Failed to save WiFi settings.",
+        variant: "destructive",
       })
     } finally {
       setIsSaving(false)
