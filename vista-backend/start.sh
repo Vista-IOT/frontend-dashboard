@@ -3,11 +3,11 @@
 # Vista IoT Backend Startup Script
 echo "Starting Vista IoT Backend..."
 
-# Stop getty on ttyS0 (AS0)
-echo "Stopping getty service on ttyS0 (AS0)..."
-sudo systemctl stop serial-getty@ttyS0.service 2>/dev/null || {
-    echo "No active getty service found on ttyS0, checking for process..."
-    sudo pkill -f "getty.*ttyS0" 2>/dev/null && echo "Killed getty process on ttyS0" || echo "No getty process found on ttyS0"
+# Stop getty on ttyAS0 (AS0)
+echo "Stopping getty service on ttyAS0 (AS0)..."
+sudo systemctl stop serial-getty@ttyAS0.service 2>/dev/null || {
+    echo "No active serial-getty service found on ttyAS0, checking for process..."
+    sudo pkill -f "getty.*ttyAS0" 2>/dev/null && echo "Killed getty process on ttyAS0" || echo "No getty process found on ttyAS0"
 }
 
 # Get the directory where this script is located
