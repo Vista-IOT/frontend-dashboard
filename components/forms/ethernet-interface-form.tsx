@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { useConfigStore, EthernetInterface, WirelessInterface } from "@/lib/stores/configuration-store"
 import { RefreshCw } from "lucide-react"
 import { useNetworkInterfaces } from "@/hooks/useNetworkInterfaces"
@@ -41,7 +41,6 @@ export function EthernetInterfaceForm() {
 }
 
 function InterfaceForm({ iface }: { iface: { name: string, type: string } }) {
-  const { toast } = useToast()
   const { updateConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   
@@ -97,7 +96,6 @@ function InterfaceForm({ iface }: { iface: { name: string, type: string } }) {
 }
 
 function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInterface, interfaceName: string }) {
-  const { toast } = useToast()
   const { updateConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   const [enabled, setEnabled] = useState(ifaceConfig.enabled)
@@ -139,17 +137,10 @@ function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInt
       
       updateConfig(['network', 'interfaces', interfaceName], interfaceData)
       
-      toast({
-        title: "Settings saved",
-        description: `Ethernet interface (${interfaceName}) settings have been updated.`,
-      })
+toast.success(`Ethernet interface (${interfaceName}) settings have been updated!`, { duration: 3000 })
     } catch (error) {
       console.error(`Error saving ${interfaceName} settings:`, error)
-      toast({
-        title: "Error",
-        description: `Failed to save ${interfaceName} interface settings.`,
-        variant: "destructive",
-      })
+toast.error(`Failed to save ${interfaceName} interface settings.`, { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
@@ -297,7 +288,6 @@ function EthernetForm({ ifaceConfig, interfaceName }: { ifaceConfig: EthernetInt
 }
 
 function WifiForm({ ifaceConfig, interfaceName }: { ifaceConfig: WirelessInterface, interfaceName: string }) {
-  const { toast } = useToast();
   const { updateConfig } = useConfigStore();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -352,17 +342,10 @@ function WifiForm({ ifaceConfig, interfaceName }: { ifaceConfig: WirelessInterfa
         },
       };
       updateConfig(['network', 'interfaces', interfaceName], interfaceData);
-      toast({
-        title: "Settings saved",
-        description: `WiFi interface (${interfaceName}) settings have been updated.`,
-      });
+toast.success(`WiFi interface (${interfaceName}) settings have been updated!`, { duration: 3000 });
     } catch (error) {
       console.error(`Error saving ${interfaceName} settings:`, error);
-      toast({
-        title: "Error",
-        description: `Failed to save ${interfaceName} interface settings.`,
-        variant: "destructive",
-      });
+toast.error(`Failed to save ${interfaceName} interface settings.`, { duration: 5000 });
     } finally {
       setIsSaving(false);
     }

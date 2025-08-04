@@ -9,12 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { RefreshCw } from "lucide-react"
 
 export function DynamicDNSForm() {
-  const { toast } = useToast()
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   
@@ -41,17 +40,10 @@ export function DynamicDNSForm() {
       
       updateConfig(['network', 'dynamic_dns'], ddnsData)
       
-    toast({
-      title: "Settings saved",
-      description: "Dynamic DNS settings have been updated.",
-    })
+      toast.success("Dynamic DNS settings have been updated!", { duration: 3000 })
     } catch (error) {
       console.error('Error saving DDNS settings:', error)
-      toast({
-        title: "Error",
-        description: "Failed to save dynamic DNS settings.",
-        variant: "destructive",
-      })
+      toast.error("Failed to save dynamic DNS settings.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }

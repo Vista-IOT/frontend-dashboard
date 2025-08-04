@@ -8,12 +8,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { RefreshCw } from "lucide-react"
 
 export function DHCPServerForm() {
-  const { toast } = useToast()
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   
@@ -40,17 +39,10 @@ export function DHCPServerForm() {
       
       updateConfig(['network', 'dhcp_server'], dhcpData)
       
-    toast({
-      title: "Settings saved",
-      description: "DHCP server settings have been updated.",
-    })
+      toast.success("DHCP server settings have been updated!", { duration: 3000 })
     } catch (error) {
       console.error('Error saving DHCP settings:', error)
-      toast({
-        title: "Error",
-        description: "Failed to save DHCP server settings.",
-        variant: "destructive",
-      })
+      toast.error("Failed to save DHCP server settings.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }

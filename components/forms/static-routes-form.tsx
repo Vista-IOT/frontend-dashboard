@@ -8,12 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { PlusCircle, Trash2, RefreshCw } from "lucide-react"
 
 export function StaticRoutesForm() {
-  const { toast } = useToast()
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   const [addRouteDialogOpen, setAddRouteDialogOpen] = useState(false)
@@ -33,11 +32,7 @@ export function StaticRoutesForm() {
 
   const handleAddRoute = () => {
     if (!newRoute.destination || !newRoute.netmask || !newRoute.gateway) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
+      toast.error("Please fill in all required fields.", { duration: 5000 })
       return
     }
 
@@ -66,17 +61,10 @@ export function StaticRoutesForm() {
       })
       setAddRouteDialogOpen(false)
       
-    toast({
-      title: "Route added",
-      description: "A new static route has been added.",
-    })
+      toast.success("A new static route has been added!", { duration: 3000 })
     } catch (error) {
       console.error('Error adding route:', error)
-      toast({
-        title: "Error",
-        description: "Failed to add static route.",
-        variant: "destructive",
-      })
+      toast.error("Failed to add static route.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
@@ -89,17 +77,10 @@ export function StaticRoutesForm() {
       const updatedRoutes = staticRoutes.filter(route => route.id !== routeId)
       updateConfig(['network', 'static_routes'], updatedRoutes)
       
-      toast({
-        title: "Route deleted",
-        description: "Static route has been removed.",
-      })
+      toast.success("Static route has been removed!", { duration: 3000 })
     } catch (error) {
       console.error('Error deleting route:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete static route.",
-        variant: "destructive",
-      })
+      toast.error("Failed to delete static route.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
@@ -119,11 +100,7 @@ export function StaticRoutesForm() {
 
   const handleUpdateRoute = () => {
     if (!newRoute.destination || !newRoute.netmask || !newRoute.gateway) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
+      toast.error("Please fill in all required fields.", { duration: 5000 })
       return
     }
 
@@ -156,17 +133,10 @@ export function StaticRoutesForm() {
       setEditingRoute(null)
       setAddRouteDialogOpen(false)
       
-      toast({
-        title: "Route updated",
-        description: "Static route has been updated.",
-      })
+      toast.success("Static route has been updated!", { duration: 3000 })
     } catch (error) {
       console.error('Error updating route:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update static route.",
-        variant: "destructive",
-      })
+      toast.error("Failed to update static route.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }

@@ -8,12 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { PlusCircle, Trash2, RefreshCw } from "lucide-react"
 
 export function PortForwardingForm() {
-  const { toast } = useToast()
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
   const [addRuleDialogOpen, setAddRuleDialogOpen] = useState(false)
@@ -33,11 +32,7 @@ export function PortForwardingForm() {
 
   const handleAddRule = () => {
     if (!newRule.name || !newRule.internal_ip) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
+      toast.error("Please fill in all required fields.", { duration: 5000 })
       return
     }
 
@@ -66,17 +61,10 @@ export function PortForwardingForm() {
       })
       setAddRuleDialogOpen(false)
       
-    toast({
-      title: "Rule added",
-      description: "A new port forwarding rule has been added.",
-    })
+      toast.success("A new port forwarding rule has been added!", { duration: 3000 })
     } catch (error) {
       console.error('Error adding rule:', error)
-      toast({
-        title: "Error",
-        description: "Failed to add port forwarding rule.",
-        variant: "destructive",
-      })
+      toast.error("Failed to add port forwarding rule.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
@@ -89,17 +77,10 @@ export function PortForwardingForm() {
       const updatedRules = portForwarding.filter(rule => rule.id !== ruleId)
       updateConfig(['network', 'port_forwarding'], updatedRules)
       
-      toast({
-        title: "Rule deleted",
-        description: "Port forwarding rule has been removed.",
-      })
+      toast.success("Port forwarding rule has been removed!", { duration: 3000 })
     } catch (error) {
       console.error('Error deleting rule:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete port forwarding rule.",
-        variant: "destructive",
-      })
+      toast.error("Failed to delete port forwarding rule.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
@@ -119,11 +100,7 @@ export function PortForwardingForm() {
 
   const handleUpdateRule = () => {
     if (!newRule.name || !newRule.internal_ip) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
+      toast.error("Please fill in all required fields.", { duration: 5000 })
       return
     }
 
@@ -156,17 +133,10 @@ export function PortForwardingForm() {
       setEditingRule(null)
       setAddRuleDialogOpen(false)
       
-      toast({
-        title: "Rule updated",
-        description: "Port forwarding rule has been updated.",
-      })
+      toast.success("Port forwarding rule has been updated!", { duration: 3000 })
     } catch (error) {
       console.error('Error updating rule:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update port forwarding rule.",
-        variant: "destructive",
-      })
+      toast.error("Failed to update port forwarding rule.", { duration: 5000 })
     } finally {
       setIsSaving(false)
     }
