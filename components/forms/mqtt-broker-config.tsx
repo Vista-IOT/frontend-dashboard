@@ -2,7 +2,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import type { BridgeBlock } from "../tabs/communication-forward-tab";
 
 interface MqttBrokerConfigProps {
     config: any;

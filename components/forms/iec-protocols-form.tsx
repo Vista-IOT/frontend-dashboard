@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
 import { IEC61850Form } from "./iec61850-form"
 import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog"
+import { IOTag } from "@/lib/stores/configuration-store"
 
 // Edit IP Dialog Component
 function EditIPDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

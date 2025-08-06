@@ -1,9 +1,14 @@
 import { useState } from "react";
 
-export function MqttBrokerForm({ onSave, existingConfig }) {
+interface MqttBrokerFormProps {
+  onSave: (config: { topic: string }) => void;
+  existingConfig?: { topic?: string };
+}
+
+export function MqttBrokerForm({ onSave, existingConfig }: MqttBrokerFormProps) {
   const [topic, setTopic] = useState(existingConfig?.topic || "");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const brokerConfig = {
       topic,

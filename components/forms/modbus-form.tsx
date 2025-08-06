@@ -188,8 +188,8 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           setIoPorts(JSON.parse(storedPorts))
         }
         
-        const handleIoPortsUpdate = (event) => {
-          if (event.key === 'io_ports_data') {
+        const handleIoPortsUpdate = (event: StorageEvent) => {
+          if (event.key === 'io_ports_data' && event.newValue) {
             try {
               const updatedPorts = JSON.parse(event.newValue)
               if (updatedPorts) {
@@ -214,38 +214,39 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
     const config = getConfig()?.protocols?.modbus;
     
     if (config) {
-      setModbusTcpEnabled(config.tcp?.enabled || false)
+      setModbusTcpEnabled(config.enabled || false) // Use main config enabled, not tcp.enabled
       setModbusTcpPort(config.tcp?.port || 502)
       setModbusTcpMaxUsers(config.tcp?.max_connections || 4)
       setModbusTcpIdleTime(config.tcp?.timeout || 120)
-      setModbusRtuOverTcp(config.tcp?.rtu_over_tcp || false)
+      setModbusRtuOverTcp(false) // This property doesn't exist in the interface, default to false
       
-      setModbusRtuEnabled(config.rtu?.enabled || false)
-      setModbusRtuPort(config.rtu?.port || "COM1")
-      setModbusRtuBaudRate(config.rtu?.baudrate || 9600)
-      setModbusRtuDataBit(config.rtu?.data_bits || 8)
-      setModbusRtuStopBit(config.rtu?.stop_bits || 1)
-      setModbusRtuParity(config.rtu?.parity || "none")
+      setModbusRtuEnabled(config.enabled || false) // Use main config enabled, not rtu.enabled
+      setModbusRtuPort(config.serial?.port || "COM1")
+      setModbusRtuBaudRate(config.serial?.baudrate || 9600)
+      setModbusRtuDataBit(config.serial?.data_bits || 8)
+      setModbusRtuStopBit(config.serial?.stop_bits || 1)
+      const parity = config.serial?.parity
+      setModbusRtuParity(parity === "even" || parity === "odd" ? parity : "none")
       
       form.reset({
         enabled: config.enabled || false,
-        mode: config.mode || "tcp",
+        mode: (config.mode === "tcp" || config.mode === "rtu") ? config.mode : "tcp",
         tcp: {
           port: config.tcp?.port || 502,
           max_connections: config.tcp?.max_connections || 4,
           timeout: config.tcp?.timeout || 120
         },
         serial: {
-          port: config.rtu?.port || "COM1",
-          baudrate: config.rtu?.baudrate || 9600,
-          data_bits: config.rtu?.data_bits || 8,
-          parity: config.rtu?.parity || "none",
-          stop_bits: config.rtu?.stop_bits || 1
+          port: config.serial?.port || "COM1",
+          baudrate: config.serial?.baudrate || 9600,
+          data_bits: config.serial?.data_bits || 8,
+          parity: (config.serial?.parity === "even" || config.serial?.parity === "odd") ? config.serial.parity : "none",
+          stop_bits: config.serial?.stop_bits || 1
         },
         slave_id: config.slave_id || 1
       })
       
-      setActiveTab(config.mode || "tcp")
+      setActiveTab((config.mode === "tcp" || config.mode === "rtu") ? config.mode : "tcp")
     }
     
     fetchIoPorts()
@@ -293,13 +294,6 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   }
 
   // Helper functions
-  const handleTabChange = (tabId: string) => {
-    setConfigTabs(prev => prev.map(tab => ({
-      ...tab,
-      active: tab.id === tabId
-    })))
-  }
-  
   const handleDeviceIdChange = (value: number) => {
     setSelectedDeviceId(value)
     const device = devices.find(d => d.deviceId === value)
@@ -783,12 +777,12 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                               <div className="flex flex-col space-y-1">
                                 <div className="flex items-center space-x-2">
                                   <Checkbox 
-                                    id={`swap-bytes-${tag.id}`} 
-                                    checked={tag.swapBytes} 
+                                    id={`little-endian-${tag.id}`} 
+                                    checked={tag.littleEndian} 
                                     onCheckedChange={(checked) => {
                                       if (selectedDevice) {
                                         const updatedTags = selectedDevice.tags.map(t => 
-                                          t.id === tag.id ? { ...t, swapBytes: !!checked } : t
+                                          t.id === tag.id ? { ...t, littleEndian: !!checked } : t
                                         )
                                         const updatedDevice = { ...selectedDevice, tags: updatedTags }
                                         setSelectedDevice(updatedDevice)
@@ -796,7 +790,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                       }
                                     }} 
                                   />
-                                  <Label htmlFor={`swap-bytes-${tag.id}`} className="text-xs">Swap Bytes</Label>
+                                  <Label htmlFor={`little-endian-${tag.id}`} className="text-xs">Little Endian</Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                   <Checkbox 
@@ -1330,7 +1324,18 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                onClick={() => deleteTag(tag.id)}
+                                onClick={() => {
+                                  if (selectedDevice) {
+                                    const updatedDevice = {
+                                      ...selectedDevice,
+                                      tags: selectedDevice.tags.filter(t => t.id !== tag.id)
+                                    }
+                                    setSelectedDevice(updatedDevice)
+                                    setDevices(prev => prev.map(d => 
+                                      d.id === updatedDevice.id ? updatedDevice : d
+                                    ))
+                                  }
+                                }}
                                 className="h-8 w-8"
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />

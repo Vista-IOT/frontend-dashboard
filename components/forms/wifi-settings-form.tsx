@@ -8,7 +8,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } fr
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { useConfigStore } from "@/lib/stores/configuration-store"
+import { useConfigStore, type WirelessInterface } from "@/lib/stores/configuration-store"
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
@@ -39,14 +39,42 @@ const wifiFormSchema = z.object({
 export function WifiSettingsForm() {
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
+  
+  const wlanInterface = getConfig().network.interfaces.wlan0 as WirelessInterface
 
   const form = useForm<z.infer<typeof wifiFormSchema>>({
     resolver: zodResolver(wifiFormSchema),
     defaultValues: {
-      enabled: getConfig().network.interfaces.wlan0.enabled,
-      mode: getConfig().network.interfaces.wlan0.mode,
-      wifi: getConfig().network.interfaces.wlan0.wifi,
-      ipv4: getConfig().network.interfaces.wlan0.ipv4
+      enabled: wlanInterface.enabled,
+      mode: (wlanInterface.mode === "client" || wlanInterface.mode === "ap") 
+        ? wlanInterface.mode as "client" | "ap"
+        : "client",
+      wifi: {
+        ssid: wlanInterface.wifi.ssid || "",
+        security: {
+          mode: ["none", "wep", "wpa", "wpa2"].includes(wlanInterface.wifi.security.mode) 
+            ? wlanInterface.wifi.security.mode as "none" | "wep" | "wpa" | "wpa2"
+            : "none",
+          password: wlanInterface.wifi.security.password || ""
+        },
+        channel: ["auto", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"].includes(wlanInterface.wifi.channel)
+          ? wlanInterface.wifi.channel as "auto" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "11"
+          : "auto",
+        band: (wlanInterface.wifi.band === "2.4" || wlanInterface.wifi.band === "5")
+          ? wlanInterface.wifi.band as "2.4" | "5"
+          : "2.4",
+        hidden: wlanInterface.wifi.hidden || false
+      },
+      ipv4: {
+        mode: (wlanInterface.ipv4.mode === "dhcp" || wlanInterface.ipv4.mode === "static")
+          ? wlanInterface.ipv4.mode as "dhcp" | "static"
+          : "dhcp",
+        static: {
+          address: wlanInterface.ipv4.static?.address || "",
+          netmask: wlanInterface.ipv4.static?.netmask || "",
+          gateway: wlanInterface.ipv4.static?.gateway || ""
+        }
+      }
     }
   })
 

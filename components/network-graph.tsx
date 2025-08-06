@@ -28,8 +28,19 @@ import {
 import { useRouter } from "next/navigation"
 import { ChevronDown } from "lucide-react"
 
+// Interface for node data
+interface NodeData {
+  label: string;
+  status: string;
+  type: string;
+}
+
+interface NodeProps {
+  data: NodeData;
+}
+
 // Custom Node Components
-function GatewayNode({ data }) {
+function GatewayNode({ data }: NodeProps) {
   return (
     <div className="px-4 py-2 shadow-lg rounded-md border bg-white">
       <div className="flex items-center">
@@ -43,7 +54,7 @@ function GatewayNode({ data }) {
   )
 }
 
-function SensorNode({ data }) {
+function SensorNode({ data }: NodeProps) {
   return (
     <div className="px-4 py-2 shadow-lg rounded-md border bg-white">
       <div className="flex items-center">
@@ -57,7 +68,7 @@ function SensorNode({ data }) {
   )
 }
 
-function ControllerNode({ data }) {
+function ControllerNode({ data }: NodeProps) {
   return (
     <div className="px-4 py-2 shadow-lg rounded-md border bg-white">
       <div className="flex items-center">
@@ -71,7 +82,7 @@ function ControllerNode({ data }) {
   )
 }
 
-function ServerNode({ data }) {
+function ServerNode({ data }: NodeProps) {
   return (
     <div className="px-4 py-2 shadow-lg rounded-md border bg-white">
       <div className="flex items-center">
@@ -304,7 +315,7 @@ const initialEdges = [
   },
 ]
 
-function getStatusColor(status) {
+function getStatusColor(status: string): string {
   switch (status) {
     case "online":
       return "bg-green-500"
@@ -319,13 +330,13 @@ function getStatusColor(status) {
 
 export function NetworkGraph() {
   const router = useRouter()
-  const [selectedNode, setSelectedNode] = useState(null)
+  const [selectedNode, setSelectedNode] = useState<any>(null)
   
   // Initialize nodes and edges with the hooks
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
-  const onNodeClick = useCallback((event, node) => {
+  const onNodeClick = useCallback((event: any, node: any) => {
     setSelectedNode(node)
   }, [])
 
@@ -419,7 +430,7 @@ export function NetworkGraph() {
                 backgroundColor: '#fff',
               }}
             />
-            <Background color="#aaa" gap={16} variant="dots" />
+            <Background color="#aaa" gap={16} variant={"dots" as any} />
           </ReactFlow>
         </div>
       </CardContent>

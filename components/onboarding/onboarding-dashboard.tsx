@@ -380,13 +380,6 @@ export default function OnboardingDashboard() {
                             <Progress
                               value={device.cpu}
                               className="h-2"
-                              indicatorClassName={
-                                device.cpu > 80
-                                  ? "bg-red-500"
-                                  : device.cpu > 60
-                                  ? "bg-yellow-500"
-                                  : "bg-green-500"
-                              }
                             />
                           </div>
                           <div>
@@ -396,13 +389,6 @@ export default function OnboardingDashboard() {
                             <Progress
                               value={device.memory}
                               className="h-2"
-                              indicatorClassName={
-                                device.memory > 80
-                                  ? "bg-red-500"
-                                  : device.memory > 60
-                                  ? "bg-yellow-500"
-                                  : "bg-green-500"
-                              }
                             />
                           </div>
                         </div>

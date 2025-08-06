@@ -508,7 +508,7 @@ export function UserTagsForm() {
                     <TableCell>
                       {tag.dataType === "Analog"
                         ? tag.defaultValue
-                        : tag.defaultValue === "0"
+                        : tag.defaultValue === 0
                         ? "0"
                         : "1"}
                     </TableCell>

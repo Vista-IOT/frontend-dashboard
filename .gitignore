@@ -87,3 +87,10 @@ build/
 # Backup files
 *.backup
 *.bak
+
+# SSH keys and secrets
+keys
+keys.pub
+*.pem
+*.key
+id_rsa*

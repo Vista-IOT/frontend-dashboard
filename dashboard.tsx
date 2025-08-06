@@ -41,7 +41,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHydrateConfigFromBackend, useConfigStore } from "@/hooks/useHydrateConfigFromBackend";
+import { useHydrateConfigFromBackend } from "@/hooks/useHydrateConfigFromBackend";
+import { useConfigStore } from "@/lib/stores/configuration-store";
 
 // Types for the navigation items
 type NavItem = {

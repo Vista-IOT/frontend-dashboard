@@ -120,8 +120,14 @@ export function SecurityForm() {
     try {
       // Here you would typically upload the file to your server
       // For now, we'll just update the form with the filename
-      const fieldPath = `certificates.${index}.${fieldName}` as const
-      form.setValue(fieldPath, file.name)
+      const currentCerts = form.getValues("certificates")
+      const updatedCerts = [...currentCerts]
+      if (fieldName === 'file') {
+        updatedCerts[index] = { ...updatedCerts[index], file: file.name }
+      } else if (fieldName === 'key_file') {
+        updatedCerts[index] = { ...updatedCerts[index], key_file: file.name }
+      }
+      form.setValue("certificates", updatedCerts)
       toast.success(`File ${file.name} uploaded successfully`)
     } catch (error) {
       console.error('Error uploading file:', error)

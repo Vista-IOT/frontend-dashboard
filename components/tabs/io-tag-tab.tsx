@@ -214,6 +214,7 @@ export default function IOTagManagement({
         title: "Port Updated",
         description: `Port ${config.name} has been updated successfully.`,
       });
+      return true;
   };
 
   // Handle delete IO Port
@@ -293,6 +294,7 @@ export default function IOTagManagement({
           title: "Device Updated",
           description: `Device ${config.name} has been updated successfully.`,
         });
+        return true;
   };
 
   // Handle device deletion
@@ -794,6 +796,7 @@ export default function IOTagManagement({
           <IOPortForm onSubmit={(config) => {
             const success = handleAddPort(config);
             if (success) setShowAddPortForm(false);
+            return success;
           }} />
         </DialogContent>
       </Dialog>
@@ -867,6 +870,7 @@ export default function IOTagManagement({
                 setShowAddDeviceForm(false);
                 setAddingDeviceForPort(null);
               }
+              return success;
             }}
             />
         </DialogContent>

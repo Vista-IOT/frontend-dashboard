@@ -57,6 +57,7 @@ import { useConfigStore } from "@/lib/stores/configuration-store";
 const calculationTagSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Name is required"),
+  description: z.string().optional().default(""),
   defaultValue: z.coerce.number().default(0),
   formula: z.string().min(1, "Formula is required"),
   a: z.string().optional().default(""),
@@ -105,6 +106,9 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
       ...formValues,
       id: Date.now().toString(),
       defaultValue: formValues.defaultValue as number | string,
+      dataType: "Analog", // Default data type for calculation tags
+      address: "", // Calculation tags don't need physical addresses
+      description: "", // Default empty description
     };
 
     updateConfig(["calculation_tags"], [...calculationTags, newTag]);
@@ -123,7 +127,9 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
     const updatedTag: CalculationTag = {
       ...formValues,
       id: editingTag.id,
-      children: editingTag.children,
+      dataType: editingTag.dataType, // Preserve existing data type
+      address: editingTag.address, // Preserve existing address
+      description: editingTag.description, // Preserve existing description
     };
 
     updateConfig(
@@ -454,7 +460,26 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
             <CalculationTagForm
               onSubmit={handleUpdateTag}
               onCancel={() => setEditingTag(null)}
-              initialValues={editingTag}
+              initialValues={{
+                id: editingTag.id,
+                name: editingTag.name,
+                description: editingTag.description || "",
+                defaultValue: typeof editingTag.defaultValue === 'number' ? editingTag.defaultValue : Number(editingTag.defaultValue) || 0,
+                formula: editingTag.formula,
+                a: editingTag.a || "",
+                b: editingTag.b || "",
+                c: editingTag.c || "",
+                d: editingTag.d || "",
+                e: editingTag.e || "",
+                f: editingTag.f || "",
+                g: editingTag.g || "",
+                h: editingTag.h || "",
+                period: editingTag.period || 1,
+                readWrite: editingTag.readWrite || "Read/Write",
+                spanHigh: editingTag.spanHigh || 1000,
+                spanLow: editingTag.spanLow || 0,
+                isParent: editingTag.isParent || false,
+              }}
             />
           )}
         </DialogContent>

@@ -81,7 +81,6 @@ export function DeviceCard({ device, onRegister }: DeviceCardProps) {
             <Progress
               value={device.cpu}
               className="h-1"
-              indicatorClassName={device.cpu > 80 ? "bg-red-500" : device.cpu > 60 ? "bg-yellow-500" : "bg-green-500"}
             />
 
             <div className="flex justify-between text-sm">
@@ -91,9 +90,6 @@ export function DeviceCard({ device, onRegister }: DeviceCardProps) {
             <Progress
               value={device.memory}
               className="h-1"
-              indicatorClassName={
-                device.memory > 80 ? "bg-red-500" : device.memory > 60 ? "bg-yellow-500" : "bg-green-500"
-              }
             />
 
             <div className="flex justify-between text-sm">
@@ -103,9 +99,6 @@ export function DeviceCard({ device, onRegister }: DeviceCardProps) {
             <Progress
               value={device.storage}
               className="h-1"
-              indicatorClassName={
-                device.storage > 80 ? "bg-red-500" : device.storage > 60 ? "bg-yellow-500" : "bg-green-500"
-              }
             />
           </div>
         </div>

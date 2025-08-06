@@ -436,7 +436,7 @@ interface RemoteSyslogConfig {
 }
 
 interface LoggingConfig {
-  level: string;
+  level: "error" | "warn" | "info" | "debug";
   max_size: string;
   max_files: number;
   remote_syslog: RemoteSyslogConfig;
@@ -445,14 +445,15 @@ interface LoggingConfig {
 interface AutoUpdateConfig {
   enabled: boolean;
   schedule: string;
-  channel: string;
+  channel: "stable" | "beta" | "development";
 }
 
 interface BackupConfig {
   enabled: boolean;
   schedule: string;
   retain: number;
-  location: string;
+  location: "local" | "remote";
+  remote_path?: string;
 }
 
 interface MaintenanceConfig {
