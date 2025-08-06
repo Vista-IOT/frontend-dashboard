@@ -55,7 +55,7 @@ export default function BackendPage() {
                 </code>
               </pre>
               
-              <Alert variant="info" className="mt-4">
+              <Alert variant="default" className="mt-4">
                 <Info className="h-4 w-4" />
                 <AlertTitle>Quick Start</AlertTitle>
                 <AlertDescription>
@@ -104,7 +104,7 @@ export default function BackendPage() {
                 <li>Digital multimeter for electrical verification</li>
               </ul>
               
-              <Alert variant="warning" className="mt-4">
+              <Alert variant="destructive" className="mt-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Important Note</AlertTitle>
                 <AlertDescription>
@@ -168,7 +168,7 @@ export default function BackendPage() {
                 <li>Test restart and recovery procedures</li>
               </ul>
               
-              <Alert variant="info" className="mt-4">
+              <Alert variant="default" className="mt-4">
                 <Info className="h-4 w-4" />
                 <AlertTitle>Test Environment</AlertTitle>
                 <AlertDescription>

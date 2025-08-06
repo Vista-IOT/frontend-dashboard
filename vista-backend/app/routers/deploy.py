@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, HTTPException
 import yaml
 from typing import Dict, Any
 from app.services.initializer import initialize_backend
+from app.services.hardware_configurator import apply_network_configuration
 from app.utils.config_summary import generate_config_summary
 from app.services.polling_service import get_latest_polled_values
 import threading

@@ -109,7 +109,7 @@ export function BackendControl() {
                 Checking...
               </Badge>
             ) : isBackendRunning ? (
-              <Badge variant="success" className="px-3 py-1">
+              <Badge variant="secondary" className="px-3 py-1">
                 Running
               </Badge>
             ) : (

@@ -64,7 +64,6 @@ import DataCenterTab from "@/components/tabs/data-center-tab";
 import { MQTTForm } from "@/components/forms/mqtt-form";
 import { UserTagsForm } from "@/components/forms/user-tags-form";
 import { StatsTagsForm } from "@/components/forms/stats-tags-form";
-import { SystemTagsForm } from "@/components/forms/system-tags-form";
 import { RestartGatewayDialog } from "@/components/dialogs/restart-dialog";
 import { ExportConfigDialog } from "@/components/dialogs/export-config-dialog";
 import { ImportConfigDialog } from "@/components/dialogs/import-config-dialog";

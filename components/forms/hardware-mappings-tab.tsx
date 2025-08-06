@@ -22,9 +22,9 @@ const TAG_TYPES = [
 export function HardwareMappingsTab() {
   const hardwareMappings = useConfigStore(state => state.config.hardware_mappings || []);
   const updateConfig = useConfigStore(state => state.updateConfig);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newTag, setNewTag] = useState<HardwareMappingTag>({
-    id: Date.now(),
+    id: Date.now().toString(),
     name: "",
     type: "network",
     path: "",
@@ -36,22 +36,22 @@ export function HardwareMappingsTab() {
   const [customPathInput, setCustomPathInput] = useState<{ [id: string]: string }>({});
   const [newTagCustomPath, setNewTagCustomPath] = useState<string>("");
 
-  const handleEdit = (id: number) => setEditingId(id);
+  const handleEdit = (id: string) => setEditingId(id);
   const handleCancel = () => setEditingId(null);
-  const handleSave = (id: number, updated: HardwareMappingTag) => {
+  const handleSave = (id: string, updated: HardwareMappingTag) => {
     const updatedMappings = hardwareMappings.map(tag => tag.id === id ? updated : tag);
     updateConfig(["hardware_mappings"], updatedMappings);
     setEditingId(null);
   };
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     const updatedMappings = hardwareMappings.filter(tag => tag.id !== id);
     updateConfig(["hardware_mappings"], updatedMappings);
   };
   const handleAdd = () => {
     if (!newTag.name.trim() || !newTag.path.trim()) return;
-    const updatedMappings = [...hardwareMappings, { ...newTag, id: Date.now() }];
+    const updatedMappings = [...hardwareMappings, { ...newTag, id: Date.now().toString() }];
     updateConfig(["hardware_mappings"], updatedMappings);
-    setNewTag({ id: Date.now(), name: "", type: "network", path: "", description: "" });
+    setNewTag({ id: Date.now().toString(), name: "", type: "network", path: "", description: "" });
   };
 
   useEffect(() => {

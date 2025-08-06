@@ -5,6 +5,7 @@ from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
 import serial
+# from app.services.snmp_service import poll_snmp_device  # Not needed anymore, using command line snmpget
 
 logger = logging.getLogger(__name__)
 
@@ -496,6 +497,162 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
     except Exception as e:
         logger.exception(f"Exception in RTU polling thread for device {device_config.get('name')}: {e}")
 
+def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
+    """Poll SNMP device using synchronous SNMP operations to avoid asyncio issues"""
+    import subprocess
+    import json
+    
+    try:
+        device_id = device_config.get('id', 'UnknownID')
+        device_name = device_config.get('name', 'UnknownDevice')
+        ip = device_config.get('ipAddress')
+        port = device_config.get('portNumber', 161)
+        community = device_config.get('community', 'public')
+        
+        logger.info(
+            f"Polling SNMP device: id={device_id}, name={device_name}, "
+            f"ip={ip}, port={port}, community={community}, scan_time_ms={scan_time_ms}"
+        )
+        
+        # Initialize device in global storage
+        with _latest_polled_values_lock:
+            if device_name not in _latest_polled_values:
+                _latest_polled_values[device_name] = {}
+        
+        # Check if device is reachable
+        ping_ok, ping_err = ping_host(ip)
+        if not ping_ok:
+            with _latest_polled_values_lock:
+                for tag in tags:
+                    tag_id = tag.get('id', 'UnknownTagID')
+                    _latest_polled_values[device_name][tag_id] = {
+                        "value": None,
+                        "status": "ping_failed",
+                        "error": ping_err or f"Device {ip} is not reachable by ping.",
+                        "timestamp": int(time.time()),
+                    }
+            logger.error(f"SNMP Device {ip} is not reachable by ping. Skipping polling.")
+            return
+        
+        while True:
+            try:
+                now = int(time.time())
+                
+                # Poll each tag (OID) using snmpget command
+                for tag in tags:
+                    tag_id = tag.get('id', 'UnknownTagID')
+                    tag_name = tag.get('name', 'UnknownTag')
+                    oid = tag.get('address')  # Using 'address' field for OID
+                    
+                    if not oid:
+                        logger.warning(f"Tag {tag_name} missing OID address")
+                        with _latest_polled_values_lock:
+                            _latest_polled_values[device_name][tag_id] = {
+                                "value": None,
+                                "status": "missing_oid",
+                                "error": "No OID specified in tag address",
+                                "timestamp": now,
+                            }
+                        continue
+                    
+                    try:
+                        # Use snmpget command line tool instead of pysnmp to avoid asyncio issues
+                        cmd = [
+                            'snmpget',
+                            '-v2c',
+                            '-c', community,
+                            '-t', '5',  # 5 second timeout
+                            '-r', '1',  # 1 retry
+                            f'{ip}:{port}',
+                            oid
+                        ]
+                        
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        
+                        if result.returncode == 0 and result.stdout.strip():
+                            # Parse SNMP output
+                            output = result.stdout.strip()
+                            # Extract value from output like "SNMPv2-MIB::sysDescr.0 = STRING: Linux..."
+                            if '=' in output:
+                                value_part = output.split('=', 1)[1].strip()
+                                if ':' in value_part:
+                                    raw_value = value_part.split(':', 1)[1].strip()
+                                else:
+                                    raw_value = value_part
+                            else:
+                                raw_value = output
+                            
+                            # Apply scaling and offset if configured
+                            scale = tag.get('scale', 1)
+                            offset = tag.get('offset', 0)
+                            
+                            # Try to convert to numeric value for scaling
+                            try:
+                                numeric_value = float(raw_value)
+                                final_value = (numeric_value * scale) + offset
+                            except ValueError:
+                                # Keep as string if not numeric
+                                final_value = raw_value
+                            
+                            logger.debug(f"SNMP {device_name} [{tag_name} @ {oid}] = {final_value}")
+                            
+                            with _latest_polled_values_lock:
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": final_value,
+                                    "status": "ok",
+                                    "error": None,
+                                    "timestamp": now,
+                                }
+                        else:
+                            error_msg = f"SNMP GET failed for OID {oid}: {result.stderr.strip() if result.stderr else 'No response'}"
+                            logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
+                            with _latest_polled_values_lock:
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": None,
+                                    "status": "snmp_get_failed",
+                                    "error": error_msg,
+                                    "timestamp": now,
+                                }
+                    
+                    except subprocess.TimeoutExpired:
+                        error_msg = f"SNMP GET timeout for OID {oid}"
+                        logger.error(f"SNMP timeout for {tag_name} @ {oid}")
+                        with _latest_polled_values_lock:
+                            _latest_polled_values[device_name][tag_id] = {
+                                "value": None,
+                                "status": "snmp_timeout",
+                                "error": error_msg,
+                                "timestamp": now,
+                            }
+                    
+                    except Exception as e:
+                        logger.error(f"Error polling SNMP tag {tag_name}: {e}")
+                        with _latest_polled_values_lock:
+                            _latest_polled_values[device_name][tag_id] = {
+                                "value": None,
+                                "status": "snmp_error",
+                                "error": str(e),
+                                "timestamp": now,
+                            }
+                
+                # Wait for the next polling cycle
+                time.sleep(scan_time_ms / 1000.0)
+                
+            except KeyboardInterrupt:
+                logger.info(f"SNMP polling for {device_name} interrupted by user")
+                break
+            except Exception as e:
+                logger.exception(f"Unexpected error in SNMP polling cycle for {device_name}: {e}")
+                time.sleep(5)  # Wait 5 seconds before retrying
+            
+    except Exception as e:
+        logger.exception(f"Exception in SNMP polling thread for device {device_config.get('name')}: {e}")
+
 def start_polling_from_config(config):
     # logger.info('Starting polling from config...')
     if config is None:
@@ -525,4 +682,11 @@ def start_polling_from_config(config):
                 device_with_port = {**device, 'portConfig': port}
                 logger.info(f"Spawning RTU polling thread for device {device.get('name')} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
                 t = threading.Thread(target=poll_modbus_rtu_device, args=(device_with_port, tags, scan_time), daemon=True)
+                t.start()
+                
+            elif device_type == 'snmp':
+                tags = device.get('tags', [])
+                scan_time = port.get('scanTime', 60000)  # Default to 60 seconds for SNMP
+                logger.info(f"Spawning SNMP polling thread for device {device.get('name')} at {device.get('ipAddress')}:{device.get('portNumber', 161)}")
+                t = threading.Thread(target=poll_snmp_device_sync, args=(device, tags, scan_time), daemon=True)
                 t.start()

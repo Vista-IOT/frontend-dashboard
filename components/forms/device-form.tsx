@@ -74,6 +74,7 @@ export interface DeviceConfig {
   tags: IOTag[]; // Array to hold device tags
   ipAddress?: string; // For Modbus TCP
   portNumber?: number; // For Modbus TCP
+  community?: string; // For SNMP
 }
 
 interface DeviceFormProps {
@@ -90,6 +91,7 @@ export function DeviceForm({
   existingDeviceNames = [],
 }: DeviceFormProps) {
   const { updateConfig, getConfig } = useConfigStore();
+  const [community, setCommunity] = useState(existingConfig?.community || "public");
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true);
   const [name, setName] = useState(existingConfig?.name || "NewDevice");
   const [nameError, setNameError] = useState(() => {
@@ -145,7 +147,7 @@ export function DeviceForm({
     existingConfig?.portNumber || 502
   );
 
-  // 3. Autofill defaults when switching to Modbus TCP
+  // 3. Autofill defaults when switching device types
   useEffect(() => {
     if (
       deviceType === "Modbus TCP" &&
@@ -153,6 +155,13 @@ export function DeviceForm({
     ) {
       setIpAddress("11.0.0.1");
       setPortNumber(502);
+    } else if (
+      deviceType === "SNMP" &&
+      (!existingConfig || existingConfig.deviceType !== "SNMP")
+    ) {
+      setIpAddress("192.168.1.1");
+      setPortNumber(161);
+      setCommunity("public");
     }
   }, [deviceType]);
 
@@ -233,8 +242,8 @@ export function DeviceForm({
       return;
     }
 
-    // --- Unit Number validation ---
-    if (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247) {
+    // --- Unit Number validation (skip for SNMP) ---
+    if (deviceType !== "SNMP" && (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247)) {
       toast.error("Unit number must be an integer between 1 and 247.", {
         duration: 5000,
       });
@@ -291,16 +300,18 @@ export function DeviceForm({
       return;
     }
 
-    // --- Unit number conflict check ---
-    const unitConflict = thisPort.devices.some(
-      (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id
-    );
+    // --- Unit number conflict check (skip for SNMP) ---
+    if (deviceType !== "SNMP") {
+      const unitConflict = thisPort.devices.some(
+        (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id
+      );
 
-    if (unitConflict) {
-      toast.error(`Unit number ${unitNumber} is already in use on this port.`, {
-        duration: 5000,
-      });
-      return;
+      if (unitConflict) {
+        toast.error(`Unit number ${unitNumber} is already in use on this port.`, {
+          duration: 5000,
+        });
+        return;
+      }
     }
 
     // --- Construct new device config ---
@@ -320,6 +331,8 @@ export function DeviceForm({
       tags: existingConfig?.tags || [],
       ...(deviceType === "Modbus TCP"
         ? { ipAddress, portNumber }
+        : deviceType === "SNMP"
+        ? { ipAddress, portNumber, community }
         : {}),
     };
 
@@ -339,6 +352,7 @@ export function DeviceForm({
         setAnalogBlockSize(64);
         setIpAddress("11.0.0.1");
         setPortNumber(502);
+        setCommunity("public");
       }
     }
   };
@@ -347,6 +361,7 @@ export function DeviceForm({
   const DEVICE_TYPES = [
     "Modbus RTU",
     "Modbus TCP",
+    "SNMP",
     "Advantech ADAM 2000 Series (Modbus RTU)",
     "Advantech ADAM 4000 Series (ADAM ASCII/Modbus RTU)",
     "Advantech WebCon 2000 Series",
@@ -421,16 +436,16 @@ export function DeviceForm({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Modbus TCP fields */}
-              {deviceType === "Modbus TCP" && (
-                <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Modbus TCP and SNMP fields */}
+              {(deviceType === "Modbus TCP" || deviceType === "SNMP") && (
+                <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : "grid-cols-2"} gap-4 mb-4`}>
                   <div className="space-y-2">
                     <Label htmlFor="ipAddress">IP Address</Label>
                     <Input
                       id="ipAddress"
                       value={ipAddress}
                       onChange={(e) => setIpAddress(e.target.value)}
-                      placeholder="11.0.0.1"
+                      placeholder={deviceType === "SNMP" ? "192.168.1.1" : "11.0.0.1"}
                     />
                   </div>
                   <div className="space-y-2">
@@ -442,9 +457,20 @@ export function DeviceForm({
                       onChange={(e) => setPortNumber(Number(e.target.value))}
                       min={1}
                       max={65535}
-                      placeholder="502"
+                      placeholder={deviceType === "SNMP" ? "161" : "502"}
                     />
                   </div>
+                  {deviceType === "SNMP" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="community">Community</Label>
+                      <Input
+                        id="community"
+                        value={community}
+                        onChange={(e) => setCommunity(e.target.value)}
+                        placeholder="public"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -466,18 +492,20 @@ export function DeviceForm({
                 </Button>
               </div>
 
-              {/* Unit Number */}
-              <div className="space-y-2 mb-4">
-                <Label htmlFor="unitNumber">Unit Number</Label>
-                <Input
-                  id="unitNumber"
-                  type="number"
-                  value={unitNumber}
-                  onChange={(e) => setUnitNumber(Number(e.target.value))}
-                  min={1}
-                  max={255}
-                />
-              </div>
+              {/* Unit Number - Hide for SNMP devices */}
+              {deviceType !== "SNMP" && (
+                <div className="space-y-2 mb-4">
+                  <Label htmlFor="unitNumber">Unit Number</Label>
+                  <Input
+                    id="unitNumber"
+                    type="number"
+                    value={unitNumber}
+                    onChange={(e) => setUnitNumber(Number(e.target.value))}
+                    min={1}
+                    max={255}
+                  />
+                </div>
+              )}
 
               {/* Tag Write Type dropdown */}
               <div className="space-y-2 mb-4">

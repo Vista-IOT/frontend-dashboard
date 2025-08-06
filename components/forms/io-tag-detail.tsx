@@ -279,9 +279,20 @@ export function IOTagDetailView({
       toast.error("Address is required.", { duration: 5000 });
       return;
     }
-    if (!/^0x[0-9a-fA-F]+$/.test(newTag.address) && !/^\d+$/.test(newTag.address)) {
-      toast.error("Address must be a valid integer or hex (e.g., 0x1000 or 4096).", { duration: 5000 });
-      return;
+    
+    // Different validation for SNMP vs other device types
+    if (deviceToDisplay.deviceType === "SNMP") {
+      // SNMP OID validation: must be in format like 1.3.6.1.2.1.1.1.0
+      if (!/^\d+(\.\d+)+$/.test(newTag.address)) {
+        toast.error("Address must be a valid SNMP OID (e.g., 1.3.6.1.2.1.1.1.0).", { duration: 5000 });
+        return;
+      }
+    } else {
+      // Standard Modbus address validation
+      if (!/^0x[0-9a-fA-F]+$/.test(newTag.address) && !/^\d+$/.test(newTag.address)) {
+        toast.error("Address must be a valid integer or hex (e.g., 0x1000 or 4096).", { duration: 5000 });
+        return;
+      }
     }
 
     // --- Data Type validation ---
@@ -510,6 +521,7 @@ export function IOTagDetailView({
             onSave={handleSaveTag}
             onCancel={() => setTagFormOpen(false)}
             existingTag={editingTag}
+            device={deviceToDisplay}
           />
         </DialogContent>
       </Dialog>
@@ -540,9 +552,10 @@ interface TagFormProps {
   onSave: (tag: IOTag) => void;
   onCancel: () => void;
   existingTag?: IOTag | null;
+  device: DeviceConfig;
 }
 
-function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
+function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
   const [activeTab, setActiveTab] = useState("basic");
 
   // Form state
@@ -575,6 +588,11 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
   );
   const [value0, setValue0] = useState(existingTag?.value0 || "");
   const [value1, setValue1] = useState(existingTag?.value1 || "");
+  
+  // SNMP-specific fields
+  const [asnType, setAsnType] = useState(existingTag?.asnType || "Integer32");
+  const [objectId, setObjectId] = useState(existingTag?.objectId || "");
+  const [fullObjectId, setFullObjectId] = useState(existingTag?.fullObjectId || "");
 
   // When dataType changes, reset registerType and set default if applicable
   useEffect(() => {
@@ -715,6 +733,10 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
       signalReversal: dataType === "Discrete" ? signalReversal : undefined,
       value0: dataType === "Discrete" ? value0 : undefined,
       value1: dataType === "Discrete" ? value1 : undefined,
+      // SNMP-specific fields
+      asnType: device.deviceType === "SNMP" ? asnType : undefined,
+      objectId: device.deviceType === "SNMP" ? objectId : undefined,
+      fullObjectId: device.deviceType === "SNMP" ? fullObjectId : undefined,
     };
 
     onSave(newTag); // make sure onSave is defined in props
@@ -832,6 +854,24 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                         {opt.value}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {device.deviceType === "SNMP" && (
+              <div className="space-y-2">
+                <Label htmlFor="asnType">ASN Type</Label>
+                <Select value={asnType} onValueChange={setAsnType}>
+                  <SelectTrigger id="asnType">
+                    <SelectValue placeholder="Select ASN type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Integer32">Integer32</SelectItem>
+                    <SelectItem value="String">String</SelectItem>
+                    <SelectItem value="Ipaddress">Ipaddress</SelectItem>
+                    <SelectItem value="Timeticks">Timeticks</SelectItem>
+                    <SelectItem value="Oid">Oid</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

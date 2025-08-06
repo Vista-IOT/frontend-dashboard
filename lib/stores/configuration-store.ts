@@ -33,6 +33,10 @@ export interface IOTag {
   signalReversal?: boolean;
   value0?: string;
   value1?: string;
+  // SNMP-specific fields
+  asnType?: string;
+  objectId?: string;
+  fullObjectId?: string;
 }
 
 export interface CalculationTag extends IOTag {

@@ -24,6 +24,7 @@ pydantic==2.11.7
 pydantic_core==2.33.2
 pymodbus==3.10.0
 pyserial==3.5
+pysnmp==7.1.21
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-multipart==0.0.20

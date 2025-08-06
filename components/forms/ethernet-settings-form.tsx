@@ -41,9 +41,9 @@ export function EthernetSettingsForm() {
     resolver: zodResolver(ethernetFormSchema),
     defaultValues: {
       enabled: getConfig().network.interfaces.eth0.enabled,
-      mode: getConfig().network.interfaces.eth0.ipv4.mode,
+      mode: getConfig().network.interfaces.eth0.ipv4.mode as "dhcp" | "static",
       ipv4: getConfig().network.interfaces.eth0.ipv4,
-      link: getConfig().network.interfaces.eth0.link
+      link: (getConfig().network.interfaces.eth0 as any).link || { speed: "auto", duplex: "auto" }
     }
   })
 

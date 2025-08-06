@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import type { BridgeBlock } from "../tabs/communication-forward-tab";
+import type { BridgeBlock } from "@/lib/stores/configuration-store";
 
 interface AwsIotConfigProps {
     config: any;

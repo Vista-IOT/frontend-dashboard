@@ -399,11 +399,30 @@ export function IECProtocolsForm() {
   
   const handleTagSelection = (tag: any) => {
     if (selectedPointIdForTag !== null) {
-      setIecPoints(points => 
+      // Update points based on current section
+      const updatePoints = (points: any[]) => 
         points.map(point => 
           point.id === selectedPointIdForTag ? { ...point, tagName: tag.name, selectedTag: tag.id } : point
         )
-      )
+      
+      switch (currentSection) {
+        case "DI":
+          setDiPoints(updatePoints)
+          break
+        case "DO":
+          setDoPoints(updatePoints)
+          break
+        case "AI":
+          setAiPoints(updatePoints)
+          break
+        case "Counter":
+          setCounterPoints(updatePoints)
+          break
+        case "AO":
+          setAoPoints(updatePoints)
+          break
+      }
+      
       setTagSelectionDialogOpen(false)
       setSelectedPointIdForTag(null)
     }
@@ -434,11 +453,30 @@ export function IECProtocolsForm() {
   // Select a tag from the tree and add it to the current section
   const selectTagFromTree = (tag: IOTag, deviceName: string, portName: string) => {
     if (selectedPointIdForTag !== null) {
-      setIecPoints(points => 
+      // Update points based on current section
+      const updatePoints = (points: any[]) => 
         points.map(point => 
           point.id === selectedPointIdForTag ? { ...point, tagName: `${deviceName}:${tag.name}`, selectedTag: tag.id } : point
         )
-      )
+      
+      switch (currentSection) {
+        case "DI":
+          setDiPoints(updatePoints)
+          break
+        case "DO":
+          setDoPoints(updatePoints)
+          break
+        case "AI":
+          setAiPoints(updatePoints)
+          break
+        case "Counter":
+          setCounterPoints(updatePoints)
+          break
+        case "AO":
+          setAoPoints(updatePoints)
+          break
+      }
+      
       setTagSelectionDialogOpen(false)
       setSelectedPointIdForTag(null)
     }

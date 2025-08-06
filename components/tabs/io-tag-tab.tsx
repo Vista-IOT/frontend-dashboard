@@ -63,6 +63,7 @@ function getTypeDisplayName(type: string): string {
     builtin: "Built-in Serial Port",
     serial: "Serial Port",
     tcpip: "TCP/IP",
+    snmp: "SNMP",
     api: "API Connection",
     "modbus-rtu": "Modbus RTU",
     "modbus-tcp": "Modbus TCP",

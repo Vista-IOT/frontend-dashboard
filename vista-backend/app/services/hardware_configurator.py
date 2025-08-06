@@ -23,7 +23,7 @@ def _get_default_netmask(ip_address: str) -> str:
         logger.error(f"Invalid IP address format: {ip_address}. Cannot determine default netmask.")
         return ""
 
-def _configure_network(config, detected_interfaces):
+def _configure_network(config, detected_interfaces, apply_changes=False):
     """Checks and logs network interface configurations."""
     logger.info("--- Configuring Network Interfaces ---")
     configured_interfaces = config.get('network', {}).get('interfaces', {})
@@ -32,10 +32,18 @@ def _configure_network(config, detected_interfaces):
     logger.info(f"Detected: {detected_names}")
     logger.info(f"Configured: {list(configured_interfaces.keys())}")
 
+    if not apply_changes:
+        logger.info("🔒 Network configuration check mode - no changes will be applied")
+        logger.info("    This prevents disruption of existing network connections")
+    
     for name, iface_config in configured_interfaces.items():
         if iface_config.get('enabled', False):
             if name in detected_names:
-                logger.info(f"✅ Interface '{name}' is configured and available. Applying settings...")
+                if apply_changes:
+                    logger.info(f"✅ Interface '{name}' is configured and available. Applying settings...")
+                else:
+                    logger.info(f"✅ Interface '{name}' is configured and available. Would apply settings if requested.")
+                    
                 ipv4_config = iface_config.get('ipv4', {})
                 mode = ipv4_config.get('mode', 'dhcp')
                 
@@ -53,13 +61,19 @@ def _configure_network(config, detected_interfaces):
 
                     if ip and netmask:
                         logger.info(f"  - Mode: static, IP: {ip}, Netmask: {netmask}, Gateway: {gateway or 'N/A'}")
-                        network_configurator.configure_static_ip(name, ip, netmask, gateway)
+                        if apply_changes:
+                            success = network_configurator.configure_static_ip(name, ip, netmask, gateway)
+                            if not success:
+                                logger.error(f"❌ Failed to configure static IP for interface '{name}'")
+                            else:
+                                logger.info(f"✅ Successfully configured static IP for interface '{name}': {ip}")
                     else:
                         logger.warning(f"⚠️ Interface '{name}' is set to static mode, but IP or netmask is missing or invalid. Skipping configuration.")
                         logger.warning(f"  - Provided: IP='{ip}', Netmask='{netmask}'")
                 else:
                     logger.info(f"  - Mode: dhcp")
-                    network_configurator.configure_dhcp(name)
+                    if apply_changes:
+                        network_configurator.configure_dhcp(name)
             else:
                 logger.warning(f"⚠️ Interface '{name}' is configured but not available on the system.")
         else:
@@ -97,9 +111,14 @@ def _configure_gpio(config, detected_gpio):
     else:
         logger.warning("⚠️ GPIO is not available on the system, but is present in configuration.")
 
-def configure_hardware(config):
+def configure_hardware(config, apply_network_changes=False):
     """
     Checks the loaded configuration against all detected hardware and logs the status.
+    
+    Args:
+        config: The configuration dictionary
+        apply_network_changes: If True, actually applies network configuration changes.
+                             If False (default), only checks and logs without changing network settings.
     """
     if not config:
         logger.warning("No configuration provided. Skipping hardware configuration.")
@@ -113,8 +132,15 @@ def configure_hardware(config):
         logger.error("Could not detect any hardware. Aborting configuration.")
         return
 
-    _configure_network(config, all_hardware.get('network_interfaces', []))
+    _configure_network(config, all_hardware.get('network_interfaces', []), apply_network_changes)
     _configure_serial(config, all_hardware.get('serial_ports', []))
     _configure_gpio(config, all_hardware.get('gpio', {}))
 
-    logger.info("--- Hardware configuration check complete ---") 
+    logger.info("--- Hardware configuration check complete ---")
+
+def apply_network_configuration(config):
+    """
+    Applies network configuration changes. Use this when you want to actually change network settings.
+    """
+    logger.info("🔧 Applying network configuration changes...")
+    configure_hardware(config, apply_network_changes=True)
