@@ -205,6 +205,11 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         # If count > MAX_REGISTERS_PER_READ, split into multiple reads
         try:
             while True:
+                # Check if stop was requested (for graceful shutdown)
+                current_thread = threading.current_thread()
+                if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
+                    logger.info(f"TCP polling for {device_name} stopped by request")
+                    break
                 all_registers = []
                 total_needed = count
                 current_addr = min_addr
@@ -361,6 +366,12 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
         MAX_REGISTERS_PER_READ = 125
         
         while True:
+            # Check if stop was requested (for graceful shutdown)
+            current_thread = threading.current_thread()
+            if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
+                logger.info(f"RTU polling for {device_name} stopped by request")
+                break
+                
             try:
                 if not client.connect():
                     logger.error(f"Failed to connect to RTU device on {serial_port}")
@@ -535,6 +546,12 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
             return
         
         while True:
+            # Check if stop was requested (for graceful shutdown)
+            current_thread = threading.current_thread()
+            if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
+                logger.info(f"SNMP polling for {device_name} stopped by request")
+                break
+                
             try:
                 now = int(time.time())
                 
@@ -654,10 +671,21 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
         logger.exception(f"Exception in SNMP polling thread for device {device_config.get('name')}: {e}")
 
 def start_polling_from_config(config):
+    # Import here to avoid circular import issues
+    from gateway_manager import gateway_manager
+    
     # logger.info('Starting polling from config...')
     if config is None:
         logger.warning('No configuration provided to start_polling_from_config. Skipping polling setup.')
         return
+    
+    # First, stop all existing polling threads
+    logger.info('Stopping existing polling threads before starting new ones...')
+    gateway_manager.stop_all_polling_threads()
+    
+    # Wait a moment for threads to stop
+    time.sleep(1)
+    
     io_setup = config.get('io_setup', {})
     ports = io_setup.get('ports', [])
     for port in ports:
@@ -667,26 +695,49 @@ def start_polling_from_config(config):
             if not device.get('enabled', False):
                 continue
             device_type = device.get('deviceType', '').lower()
+            device_name = device.get('name', 'UnknownDevice')
             
             if device_type == 'modbus tcp':
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)
-                logger.info(f"Spawning TCP polling thread for device {device.get('name')} at {device.get('ipAddress')}:{device.get('portNumber')}")
-                t = threading.Thread(target=poll_modbus_tcp_device, args=(device, tags, scan_time), daemon=True)
-                t.start()
+                thread_name = f"tcp-{device_name}"
+                logger.info(f"Starting managed TCP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber')}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_modbus_tcp_device,
+                    (device, tags, scan_time)
+                )
                 
             elif device_type == 'modbus rtu':
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)
                 # Pass port config to device for serial settings
                 device_with_port = {**device, 'portConfig': port}
-                logger.info(f"Spawning RTU polling thread for device {device.get('name')} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
-                t = threading.Thread(target=poll_modbus_rtu_device, args=(device_with_port, tags, scan_time), daemon=True)
-                t.start()
+                thread_name = f"rtu-{device_name}"
+                logger.info(f"Starting managed RTU polling thread for device {device_name} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_modbus_rtu_device,
+                    (device_with_port, tags, scan_time)
+                )
                 
             elif device_type == 'snmp':
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 60000)  # Default to 60 seconds for SNMP
-                logger.info(f"Spawning SNMP polling thread for device {device.get('name')} at {device.get('ipAddress')}:{device.get('portNumber', 161)}")
-                t = threading.Thread(target=poll_snmp_device_sync, args=(device, tags, scan_time), daemon=True)
-                t.start()
+                thread_name = f"snmp-{device_name}"
+                logger.info(f"Starting managed SNMP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber', 161)}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_snmp_device_sync,
+                    (device, tags, scan_time)
+                )
+
+def stop_all_polling():
+    """Stop all active polling threads"""
+    from gateway_manager import gateway_manager
+    return gateway_manager.stop_all_polling_threads()
+
+def get_polling_threads_status():
+    """Get status of all polling threads"""
+    from gateway_manager import gateway_manager
+    return gateway_manager.get_active_threads_status()

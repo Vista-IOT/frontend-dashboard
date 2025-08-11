@@ -9,7 +9,7 @@ from typing import Dict, Any
 from app.services.initializer import initialize_backend
 from app.services.hardware_configurator import apply_network_configuration
 from app.utils.config_summary import generate_config_summary
-from app.services.polling_service import get_latest_polled_values
+from app.services.polling_service import get_latest_polled_values, stop_all_polling, get_polling_threads_status
 import threading
 from pathlib import Path
 import requests
@@ -60,7 +60,8 @@ def restart_backend():
 @router.post("/config")
 async def deploy_config(request: Request):
     """
-    Accepts a YAML configuration, saves it, and triggers backend reinitialization.
+    Accepts a YAML configuration, saves it, and triggers a full clean backend restart.
+    This ensures all protocol threads are properly stopped and restarted without conflicts.
     """
     try:
         body = await request.body()
@@ -78,23 +79,40 @@ async def deploy_config(request: Request):
         
         logger.info(f"Configuration saved to {config_file}")
         
-        # Trigger backend reinitialization in background to allow response to be sent
-        def delayed_reinit():
+        # Trigger clean restart in background to allow response to be sent
+        def delayed_clean_restart():
             import time
             time.sleep(1)  # Give time for response to be sent
             try:
-                initialize_backend()
-                logger.info("Backend reinitialized with new configuration")
+                logger.info("Performing clean restart to deploy new configuration...")
+                
+                # First, stop all existing polling threads
+                stopped_count = stop_all_polling()
+                logger.info(f"Stopped {stopped_count} existing polling threads")
+                
+                # Give threads a moment to fully stop
+                time.sleep(2)
+                
+                # Now restart the entire backend process for a completely clean state
+                restart_backend()
+                
             except Exception as e:
-                logger.error(f"Error during backend reinitialization: {e}")
+                logger.error(f"Error during clean restart: {e}")
+                # Fallback: just initialize in-process (less clean but better than nothing)
+                try:
+                    initialize_backend()
+                    logger.info("Fallback: Backend reinitialized in-process with new configuration")
+                except Exception as fallback_e:
+                    logger.error(f"Fallback initialization also failed: {fallback_e}")
         
-        threading.Thread(target=delayed_reinit, daemon=True).start()
+        threading.Thread(target=delayed_clean_restart, daemon=True).start()
         
         return {
             "status": "success", 
-            "message": "Configuration deployed successfully. Backend is reinitializing...",
+            "message": "Configuration deployed successfully. Performing clean backend restart...",
             "config_summary": summary,
-            "config_file": str(config_file)
+            "config_file": str(config_file),
+            "restart_type": "full_clean_restart"
         }
     except yaml.YAMLError as e:
         logger.error(f"Error parsing YAML: {e}")
