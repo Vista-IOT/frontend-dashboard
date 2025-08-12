@@ -56,6 +56,28 @@ export const deviceConfigSchema = z.object({
       description: z.string(),
     })
   ),
+  // SNMP extensions (optional to keep backward compatibility)
+  snmpVersion: z.enum(["v1", "v2c", "v3"]).optional(),
+  snmpTimeoutMs: z.coerce.number().int().min(100).max(60000).optional(),
+  snmpRetries: z.coerce.number().int().min(0).max(5).optional(),
+  readCommunity: z.string().optional(),
+  // v3 specific
+  snmpV3SecurityLevel: z.enum(["noAuthNoPriv", "authNoPriv", "authPriv"]).optional(),
+  snmpV3Username: z.string().optional(),
+  snmpV3AuthProtocol: z
+    .enum(["MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512"])
+    .optional(),
+  snmpV3AuthPassword: z.string().optional(),
+  snmpV3PrivProtocol: z
+    .enum(["DES", "AES128", "AES192", "AES256"])
+    .optional(),
+  snmpV3PrivPassword: z.string().optional(),
+  snmpV3ContextName: z.string().optional(),
+  snmpV3ContextEngineId: z.string().optional(),
+  // Advanced
+  snmpMaxPduSize: z.coerce.number().int().min(484).max(65535).optional(),
+  snmpBulkNonRepeaters: z.coerce.number().int().min(0).max(10).optional(),
+  snmpBulkMaxRepetitions: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 export interface DeviceConfig {
@@ -75,6 +97,24 @@ export interface DeviceConfig {
   ipAddress?: string; // For Modbus TCP
   portNumber?: number; // For Modbus TCP
   community?: string; // For SNMP
+  // SNMP extensions (frontend-only for now)
+  snmpVersion?: "v1" | "v2c" | "v3";
+  snmpTimeoutMs?: number;
+  snmpRetries?: number;
+  readCommunity?: string; // kept separate for clarity; `community` maintained for backend compat
+  // v3 specific
+  snmpV3SecurityLevel?: "noAuthNoPriv" | "authNoPriv" | "authPriv";
+  snmpV3Username?: string;
+  snmpV3AuthProtocol?: "MD5" | "SHA1" | "SHA224" | "SHA256" | "SHA384" | "SHA512";
+  snmpV3AuthPassword?: string;
+  snmpV3PrivProtocol?: "DES" | "AES128" | "AES192" | "AES256";
+  snmpV3PrivPassword?: string;
+  snmpV3ContextName?: string;
+  snmpV3ContextEngineId?: string;
+  // Advanced
+  snmpMaxPduSize?: number;
+  snmpBulkNonRepeaters?: number;
+  snmpBulkMaxRepetitions?: number;
 }
 
 interface DeviceFormProps {
@@ -92,6 +132,52 @@ export function DeviceForm({
 }: DeviceFormProps) {
   const { updateConfig, getConfig } = useConfigStore();
   const [community, setCommunity] = useState(existingConfig?.community || "public");
+  // SNMP: extended fields
+  const [snmpVersion, setSnmpVersion] = useState<"v1" | "v2c" | "v3">(
+    (existingConfig?.snmpVersion as any) || "v2c"
+  );
+  const [snmpTimeoutMs, setSnmpTimeoutMs] = useState<number>(
+    existingConfig?.snmpTimeoutMs ?? 2000
+  );
+  const [snmpRetries, setSnmpRetries] = useState<number>(
+    existingConfig?.snmpRetries ?? 1
+  );
+  // v3
+  const [snmpV3SecurityLevel, setSnmpV3SecurityLevel] = useState<
+    "noAuthNoPriv" | "authNoPriv" | "authPriv"
+  >((existingConfig?.snmpV3SecurityLevel as any) || "noAuthNoPriv");
+  const [snmpV3Username, setSnmpV3Username] = useState<string>(
+    existingConfig?.snmpV3Username || ""
+  );
+  const [snmpV3AuthProtocol, setSnmpV3AuthProtocol] = useState<
+    "MD5" | "SHA1" | "SHA224" | "SHA256" | "SHA384" | "SHA512" | ""
+  >(((existingConfig?.snmpV3AuthProtocol as any) || "") as any);
+  const [snmpV3AuthPassword, setSnmpV3AuthPassword] = useState<string>(
+    existingConfig?.snmpV3AuthPassword || ""
+  );
+  const [snmpV3PrivProtocol, setSnmpV3PrivProtocol] = useState<
+    "DES" | "AES128" | "AES192" | "AES256" | ""
+  >(((existingConfig?.snmpV3PrivProtocol as any) || "") as any);
+  const [snmpV3PrivPassword, setSnmpV3PrivPassword] = useState<string>(
+    existingConfig?.snmpV3PrivPassword || ""
+  );
+  const [snmpV3ContextName, setSnmpV3ContextName] = useState<string>(
+    existingConfig?.snmpV3ContextName || ""
+  );
+  const [snmpV3ContextEngineId, setSnmpV3ContextEngineId] = useState<string>(
+    existingConfig?.snmpV3ContextEngineId || ""
+  );
+  // Advanced
+  const [snmpMaxPduSize, setSnmpMaxPduSize] = useState<number>(
+    existingConfig?.snmpMaxPduSize ?? 1400
+  );
+  const [snmpBulkNonRepeaters, setSnmpBulkNonRepeaters] = useState<number>(
+    existingConfig?.snmpBulkNonRepeaters ?? 0
+  );
+  const [snmpBulkMaxRepetitions, setSnmpBulkMaxRepetitions] = useState<number>(
+    existingConfig?.snmpBulkMaxRepetitions ?? 10
+  );
+  const [showSnmpAdvanced, setShowSnmpAdvanced] = useState<boolean>(false);
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true);
   const [name, setName] = useState(existingConfig?.name || "NewDevice");
   const [nameError, setNameError] = useState(() => {
@@ -162,6 +248,20 @@ export function DeviceForm({
       setIpAddress("192.168.1.1");
       setPortNumber(161);
       setCommunity("public");
+      setSnmpVersion("v2c");
+      setSnmpTimeoutMs(2000);
+      setSnmpRetries(1);
+      setSnmpV3SecurityLevel("noAuthNoPriv");
+      setSnmpV3Username("");
+      setSnmpV3AuthProtocol("");
+      setSnmpV3AuthPassword("");
+      setSnmpV3PrivProtocol("");
+      setSnmpV3PrivPassword("");
+      setSnmpV3ContextName("");
+      setSnmpV3ContextEngineId("");
+      setSnmpMaxPduSize(1400);
+      setSnmpBulkNonRepeaters(0);
+      setSnmpBulkMaxRepetitions(10);
     }
   }, [deviceType]);
 
@@ -273,6 +373,57 @@ export function DeviceForm({
       return;
     }
 
+    // --- SNMP validations ---
+    if (deviceType === "SNMP") {
+      if (!ipAddress || portNumber < 1 || portNumber > 65535) {
+        toast.error("Provide a valid IP and port (1-65535) for SNMP.");
+        return;
+      }
+      if (!Number.isInteger(snmpTimeoutMs) || snmpTimeoutMs < 100 || snmpTimeoutMs > 60000) {
+        toast.error("SNMP timeout must be between 100 and 60000 ms.");
+        return;
+      }
+      if (!Number.isInteger(snmpRetries) || snmpRetries < 0 || snmpRetries > 5) {
+        toast.error("SNMP retries must be between 0 and 5.");
+        return;
+      }
+      if (snmpVersion === "v1" || snmpVersion === "v2c") {
+        if (!community?.trim()) {
+          toast.error("Community is required for SNMP v1/v2c.");
+          return;
+        }
+      } else if (snmpVersion === "v3") {
+        if (!snmpV3Username.trim()) {
+          toast.error("SNMPv3 username is required.");
+          return;
+        }
+        if (snmpV3SecurityLevel === "authNoPriv" || snmpV3SecurityLevel === "authPriv") {
+          if (!snmpV3AuthProtocol || !snmpV3AuthPassword || snmpV3AuthPassword.length < 8) {
+            toast.error("Auth protocol and password (min 8 chars) are required for auth* levels.");
+            return;
+          }
+        }
+        if (snmpV3SecurityLevel === "authPriv") {
+          if (!snmpV3PrivProtocol || !snmpV3PrivPassword || snmpV3PrivPassword.length < 8) {
+            toast.error("Privacy protocol and password (min 8 chars) are required for authPriv.");
+            return;
+          }
+        }
+      }
+      if (snmpMaxPduSize < 484 || snmpMaxPduSize > 65535) {
+        toast.error("SNMP Max PDU size must be between 484 and 65535.");
+        return;
+      }
+      if (snmpBulkNonRepeaters < 0 || snmpBulkNonRepeaters > 10) {
+        toast.error("SNMP Non-repeaters must be between 0 and 10.");
+        return;
+      }
+      if (snmpBulkMaxRepetitions < 1 || snmpBulkMaxRepetitions > 50) {
+        toast.error("SNMP Max-repetitions must be between 1 and 50.");
+        return;
+      }
+    }
+
     // --- Digital Block Size validation ---
     if (!Number.isInteger(digitalBlockSize) || digitalBlockSize < 0) {
       toast.error("Digital block size must be a non-negative integer.", {
@@ -332,7 +483,28 @@ export function DeviceForm({
       ...(deviceType === "Modbus TCP"
         ? { ipAddress, portNumber }
         : deviceType === "SNMP"
-        ? { ipAddress, portNumber, community }
+        ? {
+            ipAddress,
+            portNumber,
+            // maintain `community` for current backend compatibility (v1/v2c)
+            community: snmpVersion === "v3" ? "" : community,
+            // store extended SNMP config in the device
+            snmpVersion,
+            snmpTimeoutMs,
+            snmpRetries,
+            readCommunity: snmpVersion === "v3" ? undefined : community,
+            snmpV3SecurityLevel,
+            snmpV3Username,
+            snmpV3AuthProtocol: snmpV3SecurityLevel !== "noAuthNoPriv" ? (snmpV3AuthProtocol || undefined) : undefined,
+            snmpV3AuthPassword: snmpV3SecurityLevel !== "noAuthNoPriv" ? (snmpV3AuthPassword || undefined) : undefined,
+            snmpV3PrivProtocol: snmpV3SecurityLevel === "authPriv" ? (snmpV3PrivProtocol || undefined) : undefined,
+            snmpV3PrivPassword: snmpV3SecurityLevel === "authPriv" ? (snmpV3PrivPassword || undefined) : undefined,
+            snmpV3ContextName: snmpV3ContextName || undefined,
+            snmpV3ContextEngineId: snmpV3ContextEngineId || undefined,
+            snmpMaxPduSize,
+            snmpBulkNonRepeaters,
+            snmpBulkMaxRepetitions,
+          }
         : {}),
     };
 
@@ -353,6 +525,20 @@ export function DeviceForm({
         setIpAddress("11.0.0.1");
         setPortNumber(502);
         setCommunity("public");
+        setSnmpVersion("v2c");
+        setSnmpTimeoutMs(2000);
+        setSnmpRetries(1);
+        setSnmpV3SecurityLevel("noAuthNoPriv");
+        setSnmpV3Username("");
+        setSnmpV3AuthProtocol("");
+        setSnmpV3AuthPassword("");
+        setSnmpV3PrivProtocol("");
+        setSnmpV3PrivPassword("");
+        setSnmpV3ContextName("");
+        setSnmpV3ContextEngineId("");
+        setSnmpMaxPduSize(1400);
+        setSnmpBulkNonRepeaters(0);
+        setSnmpBulkMaxRepetitions(10);
       }
     }
   };
@@ -438,37 +624,235 @@ export function DeviceForm({
               </div>
               {/* Modbus TCP and SNMP fields */}
               {(deviceType === "Modbus TCP" || deviceType === "SNMP") && (
-                <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : "grid-cols-2"} gap-4 mb-4`}>
-                  <div className="space-y-2">
-                    <Label htmlFor="ipAddress">IP Address</Label>
-                    <Input
-                      id="ipAddress"
-                      value={ipAddress}
-                      onChange={(e) => setIpAddress(e.target.value)}
-                      placeholder={deviceType === "SNMP" ? "192.168.1.1" : "11.0.0.1"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="portNumber">Port Number</Label>
-                    <Input
-                      id="portNumber"
-                      type="number"
-                      value={portNumber}
-                      onChange={(e) => setPortNumber(Number(e.target.value))}
-                      min={1}
-                      max={65535}
-                      placeholder={deviceType === "SNMP" ? "161" : "502"}
-                    />
-                  </div>
-                  {deviceType === "SNMP" && (
+                <div className="space-y-4 mb-4">
+                  <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
                     <div className="space-y-2">
-                      <Label htmlFor="community">Community</Label>
+                      <Label htmlFor="ipAddress">IP Address</Label>
                       <Input
-                        id="community"
-                        value={community}
-                        onChange={(e) => setCommunity(e.target.value)}
-                        placeholder="public"
+                        id="ipAddress"
+                        value={ipAddress}
+                        onChange={(e) => setIpAddress(e.target.value)}
+                        placeholder={deviceType === "SNMP" ? "192.168.1.1" : "11.0.0.1"}
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="portNumber">Port Number</Label>
+                      <Input
+                        id="portNumber"
+                        type="number"
+                        value={portNumber}
+                        onChange={(e) => setPortNumber(Number(e.target.value))}
+                        min={1}
+                        max={65535}
+                        placeholder={deviceType === "SNMP" ? "161" : "502"}
+                      />
+                    </div>
+                    {deviceType === "SNMP" && snmpVersion !== "v3" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="community">Community</Label>
+                        <Input
+                          id="community"
+                          value={community}
+                          onChange={(e) => setCommunity(e.target.value)}
+                          placeholder="public"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {deviceType === "SNMP" && (
+                    <div className="space-y-4 border rounded-md p-4">
+                      <h4 className="text-sm font-medium">SNMP Settings</h4>
+
+                      {/* Version, Timeout, Retries */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="snmpVersion">Version</Label>
+                          <Select value={snmpVersion} onValueChange={(v) => setSnmpVersion(v as any)}>
+                            <SelectTrigger id="snmpVersion">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="v1">v1</SelectItem>
+                              <SelectItem value="v2c">v2c</SelectItem>
+                              <SelectItem value="v3">v3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="snmpTimeoutMs">Timeout (ms)</Label>
+                          <Input
+                            id="snmpTimeoutMs"
+                            type="number"
+                            value={snmpTimeoutMs}
+                            onChange={(e) => setSnmpTimeoutMs(Number(e.target.value))}
+                            min={100}
+                            max={60000}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="snmpRetries">Retries</Label>
+                          <Input
+                            id="snmpRetries"
+                            type="number"
+                            value={snmpRetries}
+                            onChange={(e) => setSnmpRetries(Number(e.target.value))}
+                            min={0}
+                            max={5}
+                          />
+                        </div>
+                      </div>
+
+                      {/* v3 Security */}
+                      {snmpVersion === "v3" && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpV3SecurityLevel">Security Level</Label>
+                              <Select value={snmpV3SecurityLevel} onValueChange={(v) => setSnmpV3SecurityLevel(v as any)}>
+                                <SelectTrigger id="snmpV3SecurityLevel">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="noAuthNoPriv">noAuthNoPriv</SelectItem>
+                                  <SelectItem value="authNoPriv">authNoPriv</SelectItem>
+                                  <SelectItem value="authPriv">authPriv</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpV3Username">Username</Label>
+                              <Input
+                                id="snmpV3Username"
+                                value={snmpV3Username}
+                                onChange={(e) => setSnmpV3Username(e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          {(snmpV3SecurityLevel === "authNoPriv" || snmpV3SecurityLevel === "authPriv") && (
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="snmpV3AuthProtocol">Auth Protocol</Label>
+                                <Select value={snmpV3AuthProtocol || ""} onValueChange={(v) => setSnmpV3AuthProtocol(v as any)}>
+                                  <SelectTrigger id="snmpV3AuthProtocol">
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="MD5">MD5</SelectItem>
+                                    <SelectItem value="SHA1">SHA1</SelectItem>
+                                    <SelectItem value="SHA224">SHA224</SelectItem>
+                                    <SelectItem value="SHA256">SHA256</SelectItem>
+                                    <SelectItem value="SHA384">SHA384</SelectItem>
+                                    <SelectItem value="SHA512">SHA512</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="snmpV3AuthPassword">Auth Password</Label>
+                                <Input
+                                  id="snmpV3AuthPassword"
+                                  type="password"
+                                  value={snmpV3AuthPassword}
+                                  onChange={(e) => setSnmpV3AuthPassword(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {snmpV3SecurityLevel === "authPriv" && (
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="snmpV3PrivProtocol">Privacy Protocol</Label>
+                                <Select value={snmpV3PrivProtocol || ""} onValueChange={(v) => setSnmpV3PrivProtocol(v as any)}>
+                                  <SelectTrigger id="snmpV3PrivProtocol">
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="DES">DES</SelectItem>
+                                    <SelectItem value="AES128">AES128</SelectItem>
+                                    <SelectItem value="AES192">AES192</SelectItem>
+                                    <SelectItem value="AES256">AES256</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="snmpV3PrivPassword">Privacy Password</Label>
+                                <Input
+                                  id="snmpV3PrivPassword"
+                                  type="password"
+                                  value={snmpV3PrivPassword}
+                                  onChange={(e) => setSnmpV3PrivPassword(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* v3 Advanced */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpV3ContextName">Context Name (optional)</Label>
+                              <Input
+                                id="snmpV3ContextName"
+                                value={snmpV3ContextName}
+                                onChange={(e) => setSnmpV3ContextName(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpV3ContextEngineId">Context Engine ID (optional)</Label>
+                              <Input
+                                id="snmpV3ContextEngineId"
+                                value={snmpV3ContextEngineId}
+                                onChange={(e) => setSnmpV3ContextEngineId(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Advanced (common) */}
+                      <div className="space-y-2">
+                        <Button type="button" variant="outline" onClick={() => setShowSnmpAdvanced((s) => !s)}>
+                          {showSnmpAdvanced ? "Hide Advanced" : "Show Advanced"}
+                        </Button>
+                        {showSnmpAdvanced && (
+                          <div className="grid grid-cols-3 gap-4 mt-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpMaxPduSize">Max PDU Size</Label>
+                              <Input
+                                id="snmpMaxPduSize"
+                                type="number"
+                                value={snmpMaxPduSize}
+                                onChange={(e) => setSnmpMaxPduSize(Number(e.target.value))}
+                                min={484}
+                                max={65535}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpBulkNonRepeaters">GETBULK Non-repeaters</Label>
+                              <Input
+                                id="snmpBulkNonRepeaters"
+                                type="number"
+                                value={snmpBulkNonRepeaters}
+                                onChange={(e) => setSnmpBulkNonRepeaters(Number(e.target.value))}
+                                min={0}
+                                max={10}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="snmpBulkMaxRepetitions">GETBULK Max-repetitions</Label>
+                              <Input
+                                id="snmpBulkMaxRepetitions"
+                                type="number"
+                                value={snmpBulkMaxRepetitions}
+                                onChange={(e) => setSnmpBulkMaxRepetitions(Number(e.target.value))}
+                                min={1}
+                                max={50}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
