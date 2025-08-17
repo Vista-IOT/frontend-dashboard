@@ -559,6 +559,10 @@ export function DeviceForm({
     "YASKAWA MP900 series, MemoBus Modbus compatible (Modbus RTU)",
   ];
 
+  // Derived: map community to a select-friendly value for v1/v2c
+  const communitySelectValue =
+    community === "public" || community === "private" ? community : "custom";
+
   return (
     <Card>
       <CardHeader>
@@ -650,12 +654,36 @@ export function DeviceForm({
                     {deviceType === "SNMP" && snmpVersion !== "v3" && (
                       <div className="space-y-2">
                         <Label htmlFor="community">Community</Label>
-                        <Input
-                          id="community"
-                          value={community}
-                          onChange={(e) => setCommunity(e.target.value)}
-                          placeholder="public"
-                        />
+                        <Select
+                          value={communitySelectValue}
+                          onValueChange={(v) => {
+                            if (v === "custom") {
+                              // Preserve existing custom value or clear for user input
+                              if (community === "public" || community === "private") {
+                                setCommunity("");
+                              }
+                            } else {
+                              setCommunity(v);
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="community">
+                            <SelectValue placeholder="Select community" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="public">public</SelectItem>
+                            <SelectItem value="private">private</SelectItem>
+                            <SelectItem value="custom">Custom...</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {communitySelectValue === "custom" && (
+                          <Input
+                            id="community-custom"
+                            value={community}
+                            onChange={(e) => setCommunity(e.target.value)}
+                            placeholder="Enter custom community"
+                          />
+                        )}
                       </div>
                     )}
                   </div>

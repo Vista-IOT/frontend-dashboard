@@ -64,6 +64,7 @@ import type { IOPortConfig } from "./io-tag-form";
 // IOTag interface is defined and exported in this file, no need for self-import.
 
 import { usePolledTagValues, PolledTagValue } from "@/hooks/usePolledTagValues";
+import { SnmpSetDialog } from "@/components/dialogs/snmp-set-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CONVERSION_OPTIONS = [
@@ -135,6 +136,8 @@ export function IOTagDetailView({
   const [tagFormOpen, setTagFormOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<IOTag | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [snmpSetOpen, setSnmpSetOpen] = useState(false);
+  const [snmpSetTag, setSnmpSetTag] = useState<IOTag | null>(null);
 
   const handleTagSelection = (tagId: string) => {
     setSelectedTags((prev) => {
@@ -415,6 +418,7 @@ export function IOTagDetailView({
                 <TableHead>Read Write</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Value</TableHead>
+                <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -496,6 +500,22 @@ export function IOTagDetailView({
                         );
                       })()}
                     </TableCell>
+                    <TableCell>
+                      {deviceToDisplay.deviceType === "SNMP" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSnmpSetTag(tag);
+                            setSnmpSetOpen(true);
+                          }}
+                          disabled={(tag.readWrite || "Read/Write") === "Read Only"}
+                        >
+                          Set
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -544,6 +564,16 @@ export function IOTagDetailView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* SNMP Set Dialog */}
+      {deviceToDisplay.deviceType === "SNMP" && snmpSetTag && (
+        <SnmpSetDialog
+          open={snmpSetOpen}
+          onOpenChange={setSnmpSetOpen}
+          device={deviceToDisplay}
+          tag={snmpSetTag}
+        />
+      )}
     </div>
   );
 }

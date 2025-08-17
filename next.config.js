@@ -26,6 +26,10 @@ const nextConfig = {
         source: "/api/io/polled-values",
         destination: "http://127.0.0.1:8000/deploy/api/io/polled-values",
       },
+      {
+        source: "/deploy/api/:path*",
+        destination: "http://127.0.0.1:8000/deploy/api/:path*",
+      },
     ];
   },
 };

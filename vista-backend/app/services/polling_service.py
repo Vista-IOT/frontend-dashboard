@@ -5,7 +5,7 @@ from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
 import serial
-# from app.services.snmp_service import poll_snmp_device  # Not needed anymore, using command line snmpget
+from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
 
 logger = logging.getLogger(__name__)
 
@@ -516,13 +516,30 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
     try:
         device_id = device_config.get('id', 'UnknownID')
         device_name = device_config.get('name', 'UnknownDevice')
-        ip = device_config.get('ipAddress')
-        port = device_config.get('portNumber', 161)
+        ip = device_config.get('ipAddress') or device_config.get('ip')
+        port = device_config.get('portNumber', 161) or device_config.get('port', 161)
         community = device_config.get('community', 'public')
+        
+        # Create normalized device config for SNMP service
+        snmp_device_config = {
+            'ip': ip,
+            'port': port,
+            'community': community,
+            'snmpVersion': device_config.get('snmpVersion', 'v2c'),
+            'snmpV3SecurityLevel': device_config.get('snmpV3SecurityLevel', 'noAuthNoPriv'),
+            'snmpV3Username': device_config.get('snmpV3Username', ''),
+            'snmpV3AuthProtocol': device_config.get('snmpV3AuthProtocol', ''),
+            'snmpV3AuthPassword': device_config.get('snmpV3AuthPassword', ''),
+            'snmpV3PrivProtocol': device_config.get('snmpV3PrivProtocol', ''),
+            'snmpV3PrivPassword': device_config.get('snmpV3PrivPassword', ''),
+            'snmpV3ContextName': device_config.get('snmpV3ContextName', ''),
+            'snmpV3ContextEngineId': device_config.get('snmpV3ContextEngineId', ''),
+        }
         
         logger.info(
             f"Polling SNMP device: id={device_id}, name={device_name}, "
-            f"ip={ip}, port={port}, community={community}, scan_time_ms={scan_time_ms}"
+            f"ip={ip}, port={port}, version={snmp_device_config['snmpVersion']}, "
+            f"community={community}, scan_time_ms={scan_time_ms}"
         )
         
         # Initialize device in global storage
@@ -573,37 +590,10 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                         continue
                     
                     try:
-                        # Use snmpget command line tool instead of pysnmp to avoid asyncio issues
-                        cmd = [
-                            'snmpget',
-                            '-v2c',
-                            '-c', community,
-                            '-t', '5',  # 5 second timeout
-                            '-r', '1',  # 1 retry
-                            f'{ip}:{port}',
-                            oid
-                        ]
+                        # Use enhanced SNMP service for all versions (v1, v2c, v3)
+                        raw_value, snmp_error = snmp_get_with_error(snmp_device_config, oid)
                         
-                        result = subprocess.run(
-                            cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=10
-                        )
-                        
-                        if result.returncode == 0 and result.stdout.strip():
-                            # Parse SNMP output
-                            output = result.stdout.strip()
-                            # Extract value from output like "SNMPv2-MIB::sysDescr.0 = STRING: Linux..."
-                            if '=' in output:
-                                value_part = output.split('=', 1)[1].strip()
-                                if ':' in value_part:
-                                    raw_value = value_part.split(':', 1)[1].strip()
-                                else:
-                                    raw_value = value_part
-                            else:
-                                raw_value = output
-                            
+                        if raw_value is not None:
                             # Apply scaling and offset if configured
                             scale = tag.get('scale', 1)
                             offset = tag.get('offset', 0)
@@ -626,7 +616,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "timestamp": now,
                                 }
                         else:
-                            error_msg = f"SNMP GET failed for OID {oid}: {result.stderr.strip() if result.stderr else 'No response'}"
+                            error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
                             logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {
@@ -635,17 +625,6 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
-                    
-                    except subprocess.TimeoutExpired:
-                        error_msg = f"SNMP GET timeout for OID {oid}"
-                        logger.error(f"SNMP timeout for {tag_name} @ {oid}")
-                        with _latest_polled_values_lock:
-                            _latest_polled_values[device_name][tag_id] = {
-                                "value": None,
-                                "status": "snmp_timeout",
-                                "error": error_msg,
-                                "timestamp": now,
-                            }
                     
                     except Exception as e:
                         logger.error(f"Error polling SNMP tag {tag_name}: {e}")
