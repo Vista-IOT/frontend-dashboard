@@ -1,6 +1,7 @@
 import threading
 import time
 import os
+import platform
 from .config_loader import load_latest_config
 from .hardware_configurator import configure_hardware, apply_network_configuration
 from .polling_service import start_polling_from_config

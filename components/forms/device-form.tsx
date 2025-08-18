@@ -794,10 +794,20 @@ export function DeviceForm({
                               variant="outline"
                               onClick={async () => {
                                 try {
-                                  const res = await fetch(`/api/opcua/discover?url=${encodeURIComponent(opcuaServerUrl)}`);
-                                  const endpoints = await res.json();
-                                  setOpcuaDiscoveredEndpoints(endpoints || []);
-                                  toast.success("Endpoints discovered");
+                                  const res = await fetch('/api/opcua/discover', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({ url: opcuaServerUrl }),
+                                  });
+                                  const response = await res.json();
+                                  if (response.success && response.data?.endpoints) {
+                                    setOpcuaDiscoveredEndpoints(response.data.endpoints);
+                                    toast.success("Endpoints discovered");
+                                  } else {
+                                    toast.error(response.error || "Endpoint discovery failed");
+                                  }
                                 } catch {
                                   toast.error("Endpoint discovery failed");
                                 }
@@ -979,20 +989,26 @@ export function DeviceForm({
                               try {
                                 const body = {
                                   url: opcuaEndpointSelection || opcuaServerUrl,
+                                  endpointSelection: opcuaEndpointSelection,
                                   securityMode: opcuaSecurityMode,
                                   securityPolicy: opcuaSecurityPolicy,
-                                  auth: {
-                                    type: opcuaAuthType,
-                                    username: opcuaUsername,
-                                  },
+                                  authType: opcuaAuthType,
+                                  username: opcuaAuthType === "UsernamePassword" ? opcuaUsername : undefined,
+                                  password: opcuaAuthType === "UsernamePassword" ? opcuaPassword : undefined,
+                                  sessionTimeout: opcuaSessionTimeout,
+                                  requestTimeout: opcuaRequestTimeout,
                                 };
                                 const res = await fetch("/api/opcua/test-connection", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify(body),
                                 });
-                                if (!res.ok) throw new Error("failed");
-                                toast.success("Test connection succeeded");
+                                const response = await res.json();
+                                if (response.success) {
+                                  toast.success("Test connection succeeded");
+                                } else {
+                                  toast.error(response.error || "Test connection failed");
+                                }
                               } catch {
                                 toast.error("Test connection failed");
                               }

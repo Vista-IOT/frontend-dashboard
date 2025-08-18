@@ -6,7 +6,6 @@ import { Database } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DNP3Form } from "@/components/forms/dnp3-form"
-import { OPCUAForm } from "@/components/forms/opcua-form"
 import { ModbusForm } from "@/components/forms/modbus-form"
 import { SNMPForm } from "@/components/forms/snmp-form"
 import { IECProtocolsForm } from "@/components/forms/iec-protocols-form"
@@ -50,7 +49,10 @@ export default function ProtocolsTab() {
           </TabsContent>
 
           <TabsContent value="opcua">
-            <OPCUAForm />
+            <div className="p-6 text-center text-muted-foreground">
+              <p>OPC-UA configuration is available in the IO Setup section.</p>
+              <p>Create devices with device type "OPC-UA" to configure OPC-UA connections.</p>
+            </div>
           </TabsContent>
 
           {config.protocols.modbus.enabled && <TabsContent value="modbus">

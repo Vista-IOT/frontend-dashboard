@@ -6,6 +6,7 @@ import subprocess
 import struct
 import serial
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
+from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 
 logger = logging.getLogger(__name__)
 
@@ -708,6 +709,17 @@ def start_polling_from_config(config):
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_snmp_device_sync,
+                    (device, tags, scan_time)
+                )
+                
+            elif device_type == 'opc-ua':
+                tags = device.get('tags', [])
+                scan_time = port.get('scanTime', 1000)  # Default to 1 second for OPC-UA
+                thread_name = f"opcua-{device_name}"
+                logger.info(f"Starting managed OPC-UA polling thread for device {device_name} at {device.get('opcuaServerUrl')}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_opcua_device_sync,
                     (device, tags, scan_time)
                 )
 

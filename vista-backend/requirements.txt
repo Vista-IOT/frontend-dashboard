@@ -25,7 +25,7 @@ pydantic_core==2.33.2
 pymodbus==3.10.0
 pyserial==3.5
 pysnmp==7.1.21
-pysnmp-mibs==0.1.7
+pysnmp-mibs==0.1.6
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-multipart==0.0.20
@@ -42,6 +42,9 @@ urllib3==2.5.0
 uvicorn==0.35.0
 websockets==15.0.1
 yarl==1.20.1
+
+# OPC-UA Dependencies
+asyncua==1.1.6
 
 # SNMP Enhancement Dependencies (Optional but Recommended)
 # net-snmp-utils - Provides snmpget, snmpwalk, snmpset command line tools
