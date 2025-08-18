@@ -312,6 +312,8 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
         return ["network"];
       case "snmp":
         return ["network"];
+      case "opc-ua":
+        return ["network"];
       case "usb":
         return ["usb"];
       // Add more cases as needed
@@ -384,6 +386,7 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
                   <SelectItem value="xbee">Serial (XBee/XBee-PRO)</SelectItem>
                   <SelectItem value="tcpip">TCPIP</SelectItem>
                   <SelectItem value="snmp">SNMP</SelectItem>
+                  <SelectItem value="opc-ua">OPC-UA</SelectItem>
                   <SelectItem value="goose">API (IEC-61850 GOOSE)</SelectItem>
                   <SelectItem value="io">API (I/O)</SelectItem>
                 </SelectContent>
