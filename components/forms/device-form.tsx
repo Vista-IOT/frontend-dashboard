@@ -78,6 +78,25 @@ export const deviceConfigSchema = z.object({
   snmpMaxPduSize: z.coerce.number().int().min(484).max(65535).optional(),
   snmpBulkNonRepeaters: z.coerce.number().int().min(0).max(10).optional(),
   snmpBulkMaxRepetitions: z.coerce.number().int().min(1).max(50).optional(),
+  opcuaServerUrl: z.string().optional(),
+  opcuaEndpointSelection: z.string().optional(),
+  opcuaSecurityMode: z.enum(["None", "Sign", "SignAndEncrypt"]).optional(),
+  opcuaSecurityPolicy: z.string().optional(),
+  opcuaAuthType: z.enum(["Anonymous", "UsernamePassword", "Certificate"]).optional(),
+  opcuaUsername: z.string().optional(),
+  // Note: do not attempt to store File objects here - store refs/ids instead
+  opcuaClientCertRef: z.string().optional(),
+  opcuaClientKeyRef: z.string().optional(),
+  opcuaAcceptServerCert: z.enum(["auto", "prompt", "reject"]).optional(),
+  opcuaSessionTimeout: z.coerce.number().int().min(0).optional(),
+  opcuaRequestTimeout: z.coerce.number().int().min(0).optional(),
+  opcuaKeepAliveInterval: z.coerce.number().int().min(0).optional(),
+  opcuaReconnectRetries: z.coerce.number().int().min(0).optional(),
+  opcuaPublishingInterval: z.coerce.number().int().min(0).optional(),
+  opcuaSamplingInterval: z.coerce.number().int().min(0).optional(),
+  opcuaQueueSize: z.coerce.number().int().min(0).optional(),
+  opcuaDeadbandType: z.enum(["None", "Absolute", "Percent"]).optional(),
+  opcuaDeadbandValue: z.coerce.number().optional(),
 });
 
 export interface DeviceConfig {
@@ -115,6 +134,24 @@ export interface DeviceConfig {
   snmpMaxPduSize?: number;
   snmpBulkNonRepeaters?: number;
   snmpBulkMaxRepetitions?: number;
+  opcuaServerUrl?: string; // For OPC UA
+  opcuaEndpointSelection?: string;
+  opcuaSecurityMode?: "None" | "Sign" | "SignAndEncrypt";
+  opcuaSecurityPolicy?: string;
+  opcuaAuthType?: "Anonymous" | "UsernamePassword" | "Certificate";
+  opcuaUsername?: string;
+  opcuaClientCertRef?: string;
+  opcuaClientKeyRef?: string;
+  opcuaAcceptServerCert?: "auto" | "prompt" | "reject";
+  opcuaSessionTimeout?: number;
+  opcuaRequestTimeout?: number;
+  opcuaKeepAliveInterval?: number;
+  opcuaReconnectRetries?: number;
+  opcuaPublishingInterval?: number;
+  opcuaSamplingInterval?: number;
+  opcuaQueueSize?: number;
+  opcuaDeadbandType?: "None" | "Absolute" | "Percent";
+  opcuaDeadbandValue?: number;
 }
 
 interface DeviceFormProps {
@@ -233,6 +270,32 @@ export function DeviceForm({
     existingConfig?.portNumber || 502
   );
 
+  // 3. Add state for OPC UA fields
+  const [opcuaServerUrl, setOpcuaServerUrl] = useState(
+    existingConfig?.opcuaServerUrl || "opc.tcp://192.168.1.100:4840"
+  );
+
+  // --- NEW OPC UA state (security / auth / session / subscription / trust) ---
+  const [opcuaEndpointSelection, setOpcuaEndpointSelection] = useState<string | null>(null);
+  const [opcuaDiscoveredEndpoints, setOpcuaDiscoveredEndpoints] = useState<string[]>([]);
+  const [opcuaSecurityMode, setOpcuaSecurityMode] = useState<"None"|"Sign"|"SignAndEncrypt">("None");
+  const [opcuaSecurityPolicy, setOpcuaSecurityPolicy] = useState<string>("Basic256Sha256");
+  const [opcuaAuthType, setOpcuaAuthType] = useState<"Anonymous"|"UsernamePassword"|"Certificate">("Anonymous");
+  const [opcuaUsername, setOpcuaUsername] = useState<string>("");
+  const [opcuaPassword, setOpcuaPassword] = useState<string>("");
+  const [opcuaClientCert, setOpcuaClientCert] = useState<File | null>(null);
+  const [opcuaClientKey, setOpcuaClientKey] = useState<File | null>(null);
+  const [opcuaAcceptServerCert, setOpcuaAcceptServerCert] = useState<"auto"|"prompt"|"reject">("prompt");
+  const [opcuaSessionTimeout, setOpcuaSessionTimeout] = useState<number>(60000);
+  const [opcuaRequestTimeout, setOpcuaRequestTimeout] = useState<number>(5000);
+  const [opcuaKeepAliveInterval, setOpcuaKeepAliveInterval] = useState<number>(10000);
+  const [opcuaReconnectRetries, setOpcuaReconnectRetries] = useState<number>(3);
+  const [opcuaPublishingInterval, setOpcuaPublishingInterval] = useState<number>(1000);
+  const [opcuaSamplingInterval, setOpcuaSamplingInterval] = useState<number>(1000);
+  const [opcuaQueueSize, setOpcuaQueueSize] = useState<number>(10);
+  const [opcuaDeadbandType, setOpcuaDeadbandType] = useState<"None"|"Absolute"|"Percent">("None");
+  const [opcuaDeadbandValue, setOpcuaDeadbandValue] = useState<number>(0);
+
   // 3. Autofill defaults when switching device types
   useEffect(() => {
     if (
@@ -262,6 +325,11 @@ export function DeviceForm({
       setSnmpMaxPduSize(1400);
       setSnmpBulkNonRepeaters(0);
       setSnmpBulkMaxRepetitions(10);
+    } else if (
+      deviceType === "OPC-UA" &&
+      (!existingConfig || existingConfig.deviceType !== "OPC-UA")
+    ) {
+      setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
     }
   }, [deviceType]);
 
@@ -300,7 +368,7 @@ export function DeviceForm({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // --- Name validation ---
@@ -465,6 +533,28 @@ export function DeviceForm({
       }
     }
 
+    // --- If OPC-UA and client certs present: upload certs and get refs ---
+    let opcuaClientCertRef: string | undefined;
+    let opcuaClientKeyRef: string | undefined;
+    if (deviceType === "OPC-UA" && (opcuaClientCert || opcuaClientKey)) {
+      const fd = new FormData();
+      if (opcuaClientCert) fd.append("cert", opcuaClientCert);
+      if (opcuaClientKey) fd.append("key", opcuaClientKey);
+      try {
+        const up = await fetch("/api/files/upload-opcua-cert", { method: "POST", body: fd });
+        if (!up.ok) {
+          toast.error("Certificate upload failed");
+          return;
+        }
+        const uploaded = await up.json();
+        opcuaClientCertRef = uploaded.certRef;
+        opcuaClientKeyRef = uploaded.keyRef;
+      } catch (err) {
+        toast.error("Certificate upload failed");
+        return;
+      }
+    }
+
     // --- Construct new device config ---
     const newDeviceConfig: DeviceConfig = {
       id: existingConfig?.id || `device-${Date.now()}`,
@@ -505,6 +595,28 @@ export function DeviceForm({
             snmpBulkNonRepeaters,
             snmpBulkMaxRepetitions,
           }
+        : deviceType === "OPC-UA"
+        ? {
+            opcuaServerUrl,
+            opcuaEndpointSelection: opcuaEndpointSelection || undefined,
+            opcuaSecurityMode,
+            opcuaSecurityPolicy,
+            opcuaAuthType,
+            opcuaUsername: opcuaAuthType === "UsernamePassword" ? opcuaUsername : undefined,
+            // use uploaded cert refs (backend returns these IDs)
+            opcuaClientCertRef: opcuaClientCertRef,
+            opcuaClientKeyRef: opcuaClientKeyRef,
+            opcuaAcceptServerCert,
+            opcuaSessionTimeout,
+            opcuaRequestTimeout,
+            opcuaKeepAliveInterval,
+            opcuaReconnectRetries,
+            opcuaPublishingInterval,
+            opcuaSamplingInterval,
+            opcuaQueueSize,
+            opcuaDeadbandType,
+            opcuaDeadbandValue,
+          }
         : {}),
     };
 
@@ -539,6 +651,7 @@ export function DeviceForm({
         setSnmpMaxPduSize(1400);
         setSnmpBulkNonRepeaters(0);
         setSnmpBulkMaxRepetitions(10);
+        setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
       }
     }
   };
@@ -548,6 +661,7 @@ export function DeviceForm({
     "Modbus RTU",
     "Modbus TCP",
     "SNMP",
+    "OPC-UA",
     "Advantech ADAM 2000 Series (Modbus RTU)",
     "Advantech ADAM 4000 Series (ADAM ASCII/Modbus RTU)",
     "Advantech WebCon 2000 Series",
@@ -626,31 +740,277 @@ export function DeviceForm({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Modbus TCP and SNMP fields */}
-              {(deviceType === "Modbus TCP" || deviceType === "SNMP") && (
+              {/* Modbus TCP, SNMP, and OPC UA fields */}
+              {(deviceType === "Modbus TCP" || deviceType === "SNMP" || deviceType === "OPC-UA") && (
                 <div className="space-y-4 mb-4">
-                  <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
-                    <div className="space-y-2">
-                      <Label htmlFor="ipAddress">IP Address</Label>
-                      <Input
-                        id="ipAddress"
-                        value={ipAddress}
-                        onChange={(e) => setIpAddress(e.target.value)}
-                        placeholder={deviceType === "SNMP" ? "192.168.1.1" : "11.0.0.1"}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="portNumber">Port Number</Label>
-                      <Input
-                        id="portNumber"
-                        type="number"
-                        value={portNumber}
-                        onChange={(e) => setPortNumber(Number(e.target.value))}
-                        min={1}
-                        max={65535}
-                        placeholder={deviceType === "SNMP" ? "161" : "502"}
-                      />
-                    </div>
+                  <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : deviceType === "OPC-UA" ? "grid-cols-1" : "grid-cols-2"} gap-4`}>
+                    {deviceType !== "OPC-UA" && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="ipAddress">IP Address</Label>
+                          <Input
+                            id="ipAddress"
+                            value={ipAddress}
+                            onChange={(e) => setIpAddress(e.target.value)}
+                            placeholder={deviceType === "SNMP" ? "192.168.1.1" : "11.0.0.1"}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="portNumber">Port Number</Label>
+                          <Input
+                            id="portNumber"
+                            type="number"
+                            value={portNumber}
+                            onChange={(e) => setPortNumber(Number(e.target.value))}
+                            min={1}
+                            max={65535}
+                            placeholder={deviceType === "SNMP" ? "161" : "502"}
+                          />
+                        </div>
+                      </>
+                    )}
+                    {deviceType === "OPC-UA" && (
+                      <div className="p-3 border rounded-md bg-gray-50/40 space-y-3">
+                        {/* Connection row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                          <div className="sm:col-span-2">
+                            <Label htmlFor="opcuaServerUrl">Server URL</Label>
+                            <Input
+                              id="opcuaServerUrl"
+                              value={opcuaServerUrl}
+                              onChange={(e) => setOpcuaServerUrl(e.target.value)}
+                              placeholder="opc.tcp://192.168.1.100:4840"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Enter endpoint or use Discover to fetch endpoints from the server.</p>
+                          </div>
+                          <div className="flex gap-2">
+                            
+                          </div>
+                          
+                        </div>
+
+                        <Button
+                              type="button"
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/opcua/discover?url=${encodeURIComponent(opcuaServerUrl)}`);
+                                  const endpoints = await res.json();
+                                  setOpcuaDiscoveredEndpoints(endpoints || []);
+                                  toast.success("Endpoints discovered");
+                                } catch {
+                                  toast.error("Endpoint discovery failed");
+                                }
+                              }}
+                            >
+                              Discover
+                            </Button>
+
+                        {/* Endpoint selection */}
+                        <div className="space-y-1">
+                          <Label>Endpoint</Label>
+                          <Select
+                            value={opcuaEndpointSelection ?? "USE_SERVER_URL"}
+                            onValueChange={(v) =>
+                              setOpcuaEndpointSelection(v === "USE_SERVER_URL" ? null : v)
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Use Server URL" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="USE_SERVER_URL">Use Server URL</SelectItem>
+                              {opcuaDiscoveredEndpoints.map((ep: string) => (
+                                <SelectItem key={ep} value={ep}>
+                                  {ep}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Grouped settings */}
+                        
+                        <div className="space-y-1">
+                          <Label>Security & Authentication</Label>
+                          {/* Security & Authentication (stacked) */}
+                          
+                              
+                            
+                          <div className="p-3 border rounded">
+                            
+                            <div className="mt-3 space-y-3">
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <Select value={opcuaSecurityMode} onValueChange={(v) => setOpcuaSecurityMode(v as any)}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Security Mode" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="None">None</SelectItem>
+                                    <SelectItem value="Sign">Sign</SelectItem>
+                                    <SelectItem value="SignAndEncrypt">Sign And Encrypt</SelectItem>
+                                  </SelectContent>
+                                </Select>
+
+                                <Select value={opcuaSecurityPolicy} onValueChange={setOpcuaSecurityPolicy}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Security Policy" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Basic128Rsa15">Basic128Rsa15</SelectItem>
+                                    <SelectItem value="Basic256">Basic256</SelectItem>
+                                    <SelectItem value="Basic256Sha256">Basic256Sha256</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div>
+                                <Label>Authentication Type</Label>
+                                <Select value={opcuaAuthType} onValueChange={(v) => setOpcuaAuthType(v as any)}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Authentication Type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Anonymous">Anonymous</SelectItem>
+                                    <SelectItem value="UsernamePassword">Username / Password</SelectItem>
+                                    <SelectItem value="Certificate">Certificate</SelectItem>
+                                  </SelectContent>
+                                </Select>
+
+                                {opcuaAuthType === "UsernamePassword" && (
+                                  <div className="mt-2 grid grid-cols-1 gap-2">
+                                    <Input placeholder="Username" value={opcuaUsername} onChange={(e) => setOpcuaUsername(e.target.value)} />
+                                    <Input placeholder="Password" type="password" value={opcuaPassword} onChange={(e) => setOpcuaPassword(e.target.value)} />
+                                  </div>
+                                )}
+
+                                {opcuaAuthType === "Certificate" && (
+                                  <div className="mt-2 grid grid-cols-1 gap-2">
+                                    <div className="flex flex-col">
+                                      <Label className="text-xs">Client Certificate (.pem/.crt)</Label>
+                                      <input type="file" accept=".pem,.crt" onChange={(e) => setOpcuaClientCert(e.target.files?.[0] ?? null)} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <Label className="text-xs">Client Key (.key/.pfx)</Label>
+                                      <input type="file" accept=".pem,.key,.pfx" onChange={(e) => setOpcuaClientKey(e.target.files?.[0] ?? null)} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Server Trust (stacked below security) */}
+                          <div className="mt-6 space-y-2">
+                            <Label>Server Trust</Label> 
+                          <div className="p-3 border rounded">
+                          
+                            <div className="mt-3 space-y-1">
+                              <div>
+                                <Label>Trust Policy</Label>
+                                <Select value={opcuaAcceptServerCert} onValueChange={(v) => setOpcuaAcceptServerCert(v as any)}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Trust Policy" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="prompt">Prompt to Trust</SelectItem>
+                                    <SelectItem value="auto">Auto Accept</SelectItem>
+                                    <SelectItem value="reject">Reject Untrusted</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Server certificate fingerprint will appear here after discovery or test connection.
+                              </div>
+                              <div className="text-xs break-all"> {/* placeholder for fingerprint */}
+                                {/** show fingerprint when available: e.g. opcuaServerCertFingerprint */}
+                              </div>
+                            </div>
+                          </div>
+                          </div>
+                        </div>
+
+
+
+                        {/* Session & Subscription */}
+                        <div className="space-y-4">
+                          <div className="p-3 border rounded">
+                            <h4 className="text-sm font-medium">Session / Timeouts</h4>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <Input type="number" value={opcuaSessionTimeout} onChange={(e) => setOpcuaSessionTimeout(Number(e.target.value))} placeholder="Session (ms)" />
+                              <Input type="number" value={opcuaRequestTimeout} onChange={(e) => setOpcuaRequestTimeout(Number(e.target.value))} placeholder="Request (ms)" />
+                              <Input type="number" value={opcuaKeepAliveInterval} onChange={(e) => setOpcuaKeepAliveInterval(Number(e.target.value))} placeholder="KeepAlive (ms)" />
+                              <Input type="number" value={opcuaReconnectRetries} onChange={(e) => setOpcuaReconnectRetries(Number(e.target.value))} placeholder="Reconnect tries" />
+                            </div>
+                          </div>
+
+                          <div className="p-3 border rounded">
+                            <h4 className="text-sm font-medium">Subscription Defaults</h4>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <Input type="number" value={opcuaPublishingInterval} onChange={(e) => setOpcuaPublishingInterval(Number(e.target.value))} placeholder="Publishing (ms)" />
+                              <Input type="number" value={opcuaSamplingInterval} onChange={(e) => setOpcuaSamplingInterval(Number(e.target.value))} placeholder="Sampling (ms)" />
+                              <Input type="number" value={opcuaQueueSize} onChange={(e) => setOpcuaQueueSize(Number(e.target.value))} placeholder="Queue size" />
+                              <div>
+                                <Label className="sr-only">Deadband</Label>
+                                <Select value={opcuaDeadbandType} onValueChange={(v) => setOpcuaDeadbandType(v as any)}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Deadband" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="None">None</SelectItem>
+                                    <SelectItem value="Absolute">Absolute</SelectItem>
+                                    <SelectItem value="Percent">Percent</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {opcuaDeadbandType !== "None" && (
+                                  <Input className="mt-2" type="number" value={opcuaDeadbandValue} onChange={(e) => setOpcuaDeadbandValue(Number(e.target.value))} placeholder="Deadband value" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={async () => {
+                              try {
+                                const body = {
+                                  url: opcuaEndpointSelection || opcuaServerUrl,
+                                  securityMode: opcuaSecurityMode,
+                                  securityPolicy: opcuaSecurityPolicy,
+                                  auth: {
+                                    type: opcuaAuthType,
+                                    username: opcuaUsername,
+                                  },
+                                };
+                                const res = await fetch("/api/opcua/test-connection", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(body),
+                                });
+                                if (!res.ok) throw new Error("failed");
+                                toast.success("Test connection succeeded");
+                              } catch {
+                                toast.error("Test connection failed");
+                              }
+                            }}
+                          >
+                            Test Connection
+                          </Button>
+
+                          <Button type="button" variant="outline" onClick={() => {
+                            setOpcuaSecurityMode("None");
+                            setOpcuaSecurityPolicy("Basic256Sha256");
+                            setOpcuaAuthType("Anonymous");
+                          }}>
+                            Reset
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {deviceType === "SNMP" && snmpVersion !== "v3" && (
                       <div className="space-y-2">
                         <Label htmlFor="community">Community</Label>
@@ -904,8 +1264,8 @@ export function DeviceForm({
                 </Button>
               </div>
 
-              {/* Unit Number - Hide for SNMP devices */}
-              {deviceType !== "SNMP" && (
+              {/* Unit Number - show only for Modbus devices */}
+              {(deviceType === "Modbus RTU" || deviceType === "Modbus TCP") && (
                 <div className="space-y-2 mb-4">
                   <Label htmlFor="unitNumber">Unit Number</Label>
                   <Input
@@ -914,7 +1274,7 @@ export function DeviceForm({
                     value={unitNumber}
                     onChange={(e) => setUnitNumber(Number(e.target.value))}
                     min={1}
-                    max={255}
+                    max={247}
                   />
                 </div>
               )}
