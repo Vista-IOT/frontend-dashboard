@@ -283,11 +283,20 @@ export function IOTagDetailView({
       return;
     }
     
-    // Different validation for SNMP vs other device types
+    // Different validation for SNMP, OPC-UA vs other device types
     if (deviceToDisplay.deviceType === "SNMP") {
       // SNMP OID validation: must be in format like 1.3.6.1.2.1.1.1.0
       if (!/^\d+(\.\d+)+$/.test(newTag.address)) {
         toast.error("Address must be a valid SNMP OID (e.g., 1.3.6.1.2.1.1.1.0).", { duration: 5000 });
+        return;
+      }
+    } else if (deviceToDisplay.deviceType === "OPC-UA") {
+      // OPC-UA Node ID validation following Advantech EdgeLink format
+      // Support formats: ns=<namespace>;s=<string>, ns=<namespace>;i=<numeric>, 
+      // ns=<namespace>;g=<guid>, ns=<namespace>;b=<bytestring>
+      const opcuaNodeIdRegex = /^ns=\d+;[sigb]=[^;]+$/;
+      if (!opcuaNodeIdRegex.test(newTag.address)) {
+        toast.error("Address must be a valid OPC-UA Node ID (e.g., ns=2;s=Device.Temperature, ns=2;i=1001, ns=2;g=72962B91-FA75-4AE6-8D28-B404DC7DAF63, or ns=2;b=M/RbKBsRVkePCePcx24oRA==).", { duration: 5000 });
         return;
       }
     } else {
@@ -623,6 +632,17 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
   const [asnType, setAsnType] = useState(existingTag?.asnType || "Integer32");
   const [objectId, setObjectId] = useState(existingTag?.objectId || "");
   const [fullObjectId, setFullObjectId] = useState(existingTag?.fullObjectId || "");
+  
+  // OPC-UA specific fields (following Advantech EdgeLink format)
+  const [opcuaDataType, setOpcuaDataType] = useState(existingTag?.opcuaDataType || "Double");
+  const [opcuaNodeIdType, setOpcuaNodeIdType] = useState(existingTag?.opcuaNodeIdType || "String");
+  const [opcuaNamespace, setOpcuaNamespace] = useState(existingTag?.opcuaNamespace || "2");
+  const [opcuaIdentifier, setOpcuaIdentifier] = useState(existingTag?.opcuaIdentifier || "");
+  const [opcuaBrowseName, setOpcuaBrowseName] = useState(existingTag?.opcuaBrowseName || "");
+  const [opcuaDisplayName, setOpcuaDisplayName] = useState(existingTag?.opcuaDisplayName || "");
+  const [opcuaPublishingInterval, setOpcuaPublishingInterval] = useState(existingTag?.opcuaPublishingInterval || 1000);
+  const [opcuaSamplingInterval, setOpcuaSamplingInterval] = useState(existingTag?.opcuaSamplingInterval || 100);
+  const [opcuaQueueSize, setOpcuaQueueSize] = useState(existingTag?.opcuaQueueSize || 1);
 
   // When dataType changes, reset registerType and set default if applicable
   useEffect(() => {
@@ -767,6 +787,16 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       asnType: device.deviceType === "SNMP" ? asnType : undefined,
       objectId: device.deviceType === "SNMP" ? objectId : undefined,
       fullObjectId: device.deviceType === "SNMP" ? fullObjectId : undefined,
+      // OPC-UA specific fields
+      opcuaDataType: device.deviceType === "OPC-UA" ? opcuaDataType : undefined,
+      opcuaNodeIdType: device.deviceType === "OPC-UA" ? opcuaNodeIdType : undefined,
+      opcuaNamespace: device.deviceType === "OPC-UA" ? opcuaNamespace : undefined,
+      opcuaIdentifier: device.deviceType === "OPC-UA" ? opcuaIdentifier : undefined,
+      opcuaBrowseName: device.deviceType === "OPC-UA" ? opcuaBrowseName : undefined,
+      opcuaDisplayName: device.deviceType === "OPC-UA" ? opcuaDisplayName : undefined,
+      opcuaPublishingInterval: device.deviceType === "OPC-UA" ? opcuaPublishingInterval : undefined,
+      opcuaSamplingInterval: device.deviceType === "OPC-UA" ? opcuaSamplingInterval : undefined,
+      opcuaQueueSize: device.deviceType === "OPC-UA" ? opcuaQueueSize : undefined,
     };
 
     onSave(newTag); // make sure onSave is defined in props
@@ -905,6 +935,50 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
                   </SelectContent>
                 </Select>
               </div>
+            )}
+
+            {device.deviceType === "OPC-UA" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="opcuaDataType">OPC-UA Data Type</Label>
+                  <Select value={opcuaDataType} onValueChange={setOpcuaDataType}>
+                    <SelectTrigger id="opcuaDataType">
+                      <SelectValue placeholder="Select OPC-UA data type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Boolean">Boolean</SelectItem>
+                      <SelectItem value="Byte">Byte</SelectItem>
+                      <SelectItem value="SByte">SByte</SelectItem>
+                      <SelectItem value="Int16">Int16</SelectItem>
+                      <SelectItem value="UInt16">UInt16</SelectItem>
+                      <SelectItem value="Int32">Int32</SelectItem>
+                      <SelectItem value="UInt32">UInt32</SelectItem>
+                      <SelectItem value="Int64">Int64</SelectItem>
+                      <SelectItem value="UInt64">UInt64</SelectItem>
+                      <SelectItem value="Float">Float</SelectItem>
+                      <SelectItem value="Double">Double</SelectItem>
+                      <SelectItem value="String">String</SelectItem>
+                      <SelectItem value="DateTime">DateTime</SelectItem>
+                      <SelectItem value="StatusCode">StatusCode</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="opcuaNodeIdType">Node ID Type</Label>
+                  <Select value={opcuaNodeIdType} onValueChange={setOpcuaNodeIdType}>
+                    <SelectTrigger id="opcuaNodeIdType">
+                      <SelectValue placeholder="Select Node ID type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="String">String</SelectItem>
+                      <SelectItem value="Numeric">Numeric</SelectItem>
+                      <SelectItem value="GUID">GUID</SelectItem>
+                      <SelectItem value="ByteString">ByteString</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
