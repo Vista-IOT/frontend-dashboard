@@ -83,6 +83,7 @@ const CONVERSION_OPTIONS = [
   { value: "UINT, Packed BCD, Big Endian Swap Word (CDAB)", defaultLength: 16 },
   { value: "INT, Little Endian (DCBA)", defaultLength: 16 },
   { value: "UINT, Little Endian (DCBA)", defaultLength: 16 },
+  { value: "DOUBLE", defaultLength: 32 },
   { value: "DOUBLE, Big Endian (ABCDEFGH)", defaultLength: 64 },
   { value: "DOUBLE, Little Endian (HGFEDCBA)", defaultLength: 64 },
   { value: "DOUBLE, Big Endian, Swap Byte (BADCFEHG)", defaultLength: 64 },
