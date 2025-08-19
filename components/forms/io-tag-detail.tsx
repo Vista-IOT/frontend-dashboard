@@ -74,6 +74,7 @@ const CONVERSION_OPTIONS = [
     value: "UINT32, Modicon Double Precision (reg1*10000+reg2)",
     defaultLength: 32,
   },
+  {value: "UInt32", defaultLength: 32},
   { value: "FLOAT, Big Endian (ABCD)", defaultLength: 32 },
   { value: "FLOAT, Big Endian, Swap Word (CDAB)", defaultLength: 32 },
   { value: "INT, Big Endian, Swap Word (CDAB)", defaultLength: 16 },

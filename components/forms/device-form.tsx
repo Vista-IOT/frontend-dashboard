@@ -870,6 +870,7 @@ export function DeviceForm({
                                     <SelectItem value="Basic128Rsa15">Basic128Rsa15</SelectItem>
                                     <SelectItem value="Basic256">Basic256</SelectItem>
                                     <SelectItem value="Basic256Sha256">Basic256Sha256</SelectItem>
+                                    <SelectItem value="None">None</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
