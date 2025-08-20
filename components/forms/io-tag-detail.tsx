@@ -65,6 +65,8 @@ import type { IOPortConfig } from "./io-tag-form";
 
 import { usePolledTagValues, PolledTagValue } from "@/hooks/usePolledTagValues";
 import { SnmpSetDialog } from "@/components/dialogs/snmp-set-dialog";
+import { OpcuaWriteDialog } from "@/components/dialogs/opcua-write-dialog";
+import { useSnmpSet } from "@/hooks/useSnmpSet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CONVERSION_OPTIONS = [
@@ -140,6 +142,9 @@ export function IOTagDetailView({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [snmpSetOpen, setSnmpSetOpen] = useState(false);
   const [snmpSetTag, setSnmpSetTag] = useState<IOTag | null>(null);
+  const [opcuaWriteOpen, setOpcuaWriteOpen] = useState(false);
+  const [opcuaWriteTag, setOpcuaWriteTag] = useState<IOTag | null>(null);
+  const { snmpSet } = useSnmpSet();
 
   const handleTagSelection = (tagId: string) => {
     setSelectedTags((prev) => {
@@ -526,6 +531,20 @@ export function IOTagDetailView({
                           Set
                         </Button>
                       )}
+                      {deviceToDisplay.deviceType === "OPC-UA" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpcuaWriteTag(tag);
+                            setOpcuaWriteOpen(true);
+                          }}
+                          disabled={(tag.readWrite || "Read/Write") === "Read Only"}
+                        >
+                          Write
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -583,6 +602,14 @@ export function IOTagDetailView({
           onOpenChange={setSnmpSetOpen}
           device={deviceToDisplay}
           tag={snmpSetTag}
+        />
+      )}
+      {deviceToDisplay.deviceType === "OPC-UA" && opcuaWriteTag && (
+        <OpcuaWriteDialog
+          open={opcuaWriteOpen}
+          onOpenChange={setOpcuaWriteOpen}
+          device={deviceToDisplay}
+          tag={opcuaWriteTag}
         />
       )}
     </div>

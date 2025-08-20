@@ -37,6 +37,16 @@ export interface IOTag {
   asnType?: string;
   objectId?: string;
   fullObjectId?: string;
+  // OPC-UA specific fields
+  opcuaDataType?: string;
+  opcuaNodeIdType?: string;
+  opcuaNamespace?: string;
+  opcuaIdentifier?: string;
+  opcuaBrowseName?: string;
+  opcuaDisplayName?: string;
+  opcuaPublishingInterval?: number;
+  opcuaSamplingInterval?: number;
+  opcuaQueueSize?: number;
 }
 
 export interface CalculationTag extends IOTag {

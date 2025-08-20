@@ -12,7 +12,7 @@ from app.services.opcua_service import (
     ASYNCUA_AVAILABLE
 )
 
-router = APIRouter(prefix="/opcua", tags=["opcua"])
+router = APIRouter(prefix="/deploy", tags=["opcua"])
 logger = logging.getLogger(__name__)
 
 
@@ -174,7 +174,7 @@ async def read_node(request: OPCUAReadRequest):
         )
 
 
-@router.post("/write")
+@router.post("/api/opcua/write")
 async def write_node(request: OPCUAWriteRequest):
     """
     Write a value to an OPC-UA node.

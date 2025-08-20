@@ -161,14 +161,14 @@ async def reinit_backend():
 @router.get("/api/io/polled-values")
 def get_polled_values():
     values = get_latest_polled_values()
-    logger.info(f"Polled values: {values}")
+    # logger.info(f"Polled values: {values}")
     
-    # Log each tag's value or error message
-    for device_name, tags in values.items():
-        for tag_id, tag_info in tags.items():
-            if tag_info['status'] == 'ok':
-                logger.info(f"Tag {tag_id} from device {device_name} polled successfully with value: {tag_info['value']}")
-            else:
-                logger.error(f"Tag {tag_id} from device {device_name} failed to poll with error: {tag_info['error']}")
+    # # Log each tag's value or error message
+    # for device_name, tags in values.items():
+    #     for tag_id, tag_info in tags.items():
+    #         if tag_info['status'] == 'ok':
+    #             logger.info(f"Tag {tag_id} from device {device_name} polled successfully with value: {tag_info['value']}")
+    #         else:
+    #             logger.error(f"Tag {tag_id} from device {device_name} failed to poll with error: {tag_info['error']}")
     
     return JSONResponse(values)
