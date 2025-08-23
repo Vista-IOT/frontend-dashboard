@@ -186,36 +186,46 @@ async def write_node(request: OPCUAWriteRequest):
         )
     
     try:
-        # Extract endpoint from device config
-        device_config = request.deviceConfig
-        server_url = device_config.get("opcuaServerUrl") or "Unknown endpoint"
+        # Create OPCUADeviceConfig to get the actual endpoint URL that will be used
+        opcua_config = OPCUADeviceConfig(request.deviceConfig)
+        actual_endpoint_url = opcua_config.get_endpoint_url()
         
-        logger.info(f"[OPCUA] Writing to node {request.nodeId} on endpoint {server_url} with value: {request.value}")
+        # Extract base server URL for additional logging
+        base_server_url = request.deviceConfig.get("opcuaServerUrl", "Unknown")
+        endpoint_selection = request.deviceConfig.get("opcuaEndpointSelection")
+        
+        logger.info(f"[OPCUA WRITE] Device Config Details:")
+        logger.info(f"  - Base Server URL: {base_server_url}")
+        logger.info(f"  - Endpoint Selection: {endpoint_selection}")
+        logger.info(f"  - ACTUAL Endpoint URL to connect: {actual_endpoint_url}")
+        logger.info(f"  - Node ID: {request.nodeId}")
+        logger.info(f"  - Value: {request.value}")
+        logger.info(f"  - Data Type: {request.dataType}")
 
         success, error = await opcua_set_with_error_async(
-            device_config, 
+            request.deviceConfig, 
             request.nodeId, 
             request.value, 
             request.dataType
         )
         
         if error:
-            logger.error(f"[OPCUA] Failed to write to node {request.nodeId} on {server_url}: {error}")
+            logger.error(f"[OPCUA WRITE] FAILED to write to node {request.nodeId} on {actual_endpoint_url}: {error}")
             return OPCUAResponse(
                 success=False,
                 data=None,
                 error=error
             )
         else:
-            logger.info(f"[OPCUA] Successfully wrote value to node {request.nodeId} on {server_url}")
+            logger.info(f"[OPCUA WRITE] SUCCESS: Wrote value {request.value} to node {request.nodeId} on {actual_endpoint_url}")
             return OPCUAResponse(
                 success=True,
-                data={"nodeId": request.nodeId, "value": request.value, "written": True},
+                data={"nodeId": request.nodeId, "value": request.value, "written": True, "endpoint": actual_endpoint_url},
                 error=None
             )
             
     except Exception as e:
-        logger.error(f"[OPCUA] Exception writing to node {request.nodeId} on {server_url}: {e}")
+        logger.error(f"[OPCUA WRITE] EXCEPTION writing to node {request.nodeId}: {e}")
         return OPCUAResponse(
             success=False,
             data=None,
