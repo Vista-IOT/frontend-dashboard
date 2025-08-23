@@ -186,21 +186,28 @@ async def write_node(request: OPCUAWriteRequest):
         )
     
     try:
-        logger.info(f"Writing to OPC-UA node {request.nodeId}: {request.value}")
+        # Extract endpoint from device config
+        device_config = request.deviceConfig
+        server_url = device_config.get("opcuaServerUrl") or "Unknown endpoint"
+        
+        logger.info(f"[OPCUA] Writing to node {request.nodeId} on endpoint {server_url} with value: {request.value}")
+
         success, error = await opcua_set_with_error_async(
-            request.deviceConfig, 
+            device_config, 
             request.nodeId, 
             request.value, 
             request.dataType
         )
         
         if error:
+            logger.error(f"[OPCUA] Failed to write to node {request.nodeId} on {server_url}: {error}")
             return OPCUAResponse(
                 success=False,
                 data=None,
                 error=error
             )
         else:
+            logger.info(f"[OPCUA] Successfully wrote value to node {request.nodeId} on {server_url}")
             return OPCUAResponse(
                 success=True,
                 data={"nodeId": request.nodeId, "value": request.value, "written": True},
@@ -208,12 +215,13 @@ async def write_node(request: OPCUAWriteRequest):
             )
             
     except Exception as e:
-        logger.error(f"Error writing to OPC-UA node {request.nodeId}: {e}")
+        logger.error(f"[OPCUA] Exception writing to node {request.nodeId} on {server_url}: {e}")
         return OPCUAResponse(
             success=False,
             data=None,
             error=str(e)
         )
+
 
 
 @router.get("/health")
