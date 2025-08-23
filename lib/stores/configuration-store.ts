@@ -138,6 +138,24 @@ export interface DeviceConfig {
   digitalBlockSize: number;
   analogBlockSize: number;
   tags: IOTag[];
+  // OPC UA specific fields
+  opcuaServerUrl?: string;
+  opcuaEndpointSelection?: string;
+  opcuaSecurityMode?: string;
+  opcuaSecurityPolicy?: string;
+  opcuaAuthType?: string;
+  opcuaUsername?: string;
+  opcuaPassword?: string;
+  opcuaSessionTimeout?: number;
+  opcuaRequestTimeout?: number;
+  opcuaKeepAliveInterval?: number;
+  opcuaPublishingInterval?: number;
+  opcuaSamplingInterval?: number;
+  opcuaQueueSize?: number;
+  opcuaDeadbandType?: string;
+  opcuaDeadbandValue?: number;
+  opcuaReconnectRetries?: number;
+  opcuaAcceptServerCert?: string;
 }
 
 // Canonical SerialPortSettings definition (originally from io-tag-form.tsx)

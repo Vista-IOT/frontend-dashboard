@@ -29,24 +29,32 @@ export function useOpcuaWrite() {
         timeoutMs = 5000,
       } = params;
 
-      const payload = {
-        deviceConfig,
-        device: {
-          name: device?.name,
-          endpointUrl: device?.endpointUrl || device?.url,
-          username: device?.username,
-          password: device?.password,
-          securityMode: device?.securityMode || "None",
-          securityPolicy: device?.securityPolicy || "None",
-        },
-        nodeId,    // ✅ moved to root
-        value,     // ✅ moved to root
-        dataType,  // ✅ moved to root
-        timeoutMs, // ✅ moved to root
+      // 🔧 FIXED: Build proper deviceConfig structure for backend
+      const properDeviceConfig = {
+        // Use provided deviceConfig first, then extract from device object
+        ...deviceConfig,
+        name: device?.name || deviceConfig?.name || 'UnknownDevice',
+        opcuaServerUrl: device?.opcuaServerUrl || device?.endpointUrl || device?.url || deviceConfig?.opcuaServerUrl,
+        opcuaEndpointSelection: device?.opcuaEndpointSelection || deviceConfig?.opcuaEndpointSelection,
+        opcuaSecurityMode: device?.opcuaSecurityMode || device?.securityMode || deviceConfig?.opcuaSecurityMode || 'None',
+        opcuaSecurityPolicy: device?.opcuaSecurityPolicy || device?.securityPolicy || deviceConfig?.opcuaSecurityPolicy || 'Basic256Sha256',
+        opcuaAuthType: device?.opcuaAuthType || deviceConfig?.opcuaAuthType || 'Anonymous',
+        opcuaUsername: device?.opcuaUsername || device?.username || deviceConfig?.opcuaUsername || '',
+        opcuaPassword: device?.opcuaPassword || device?.password || deviceConfig?.opcuaPassword || '',
+        opcuaSessionTimeout: device?.opcuaSessionTimeout || deviceConfig?.opcuaSessionTimeout || 60000,
+        opcuaRequestTimeout: device?.opcuaRequestTimeout || timeoutMs || deviceConfig?.opcuaRequestTimeout || 5000,
       };
 
-      // 🔍 Log what you’re sending
+      const payload = {
+        deviceConfig: properDeviceConfig,
+        nodeId,
+        value,
+        dataType,
+      };
+
+      // 🔍 Log what you're sending
       console.log("📤 OPC-UA Write Payload:", JSON.stringify(payload, null, 2));
+      console.log("🔧 Device object received:", JSON.stringify(device, null, 2));
 
       const res = await fetch("/deploy/api/opcua/write", {
         method: "POST",
