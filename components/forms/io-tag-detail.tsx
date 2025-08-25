@@ -306,6 +306,18 @@ export function IOTagDetailView({
         toast.error("Address must be a valid OPC-UA Node ID (e.g., ns=2;s=Device.Temperature, ns=2;i=1001, ns=2;g=72962B91-FA75-4AE6-8D28-B404DC7DAF63, or ns=2;b=M/RbKBsRVkePCePcx24oRA==).", { duration: 5000 });
         return;
       }
+    } else if (deviceToDisplay.deviceType === "DNP3.0") {
+      // DNP3 point address validation following Advantech EdgeLink format
+      const dnp3AddressRegex = /^(AI|AO|BI|BO|CTR|DBI)\.(\d{1,5})$/;
+      if (!dnp3AddressRegex.test(newTag.address)) {
+        toast.error("Address must be a valid DNP3 point address (e.g., AI.001, BO.005, BI.010).", { duration: 5000 });
+        return;
+      }
+      const match = newTag.address.match(dnp3AddressRegex);
+      if (match && parseInt(match[2]) > 65535) {
+        toast.error("DNP3 point number must be between 0 and 65535.", { duration: 5000 });
+        return;
+      }
     } else {
       // Standard Modbus address validation
       if (!/^0x[0-9a-fA-F]+$/.test(newTag.address) && !/^\d+$/.test(newTag.address)) {
@@ -672,6 +684,14 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
   const [opcuaPublishingInterval, setOpcuaPublishingInterval] = useState(existingTag?.opcuaPublishingInterval || 1000);
   const [opcuaSamplingInterval, setOpcuaSamplingInterval] = useState(existingTag?.opcuaSamplingInterval || 100);
   const [opcuaQueueSize, setOpcuaQueueSize] = useState(existingTag?.opcuaQueueSize || 1);
+  // DNP3 specific fields
+  const [dnp3PointType, setDnp3PointType] = useState(existingTag?.dnp3PointType || "AI");
+  const [dnp3PointIndex, setDnp3PointIndex] = useState(existingTag?.dnp3PointIndex || 0);
+  const [dnp3Class, setDnp3Class] = useState(existingTag?.dnp3Class || "Class 2");
+  const [dnp3EventMode, setDnp3EventMode] = useState(existingTag?.dnp3EventMode || "SOE");
+  const [dnp3DeadbandValue, setDnp3DeadbandValue] = useState(existingTag?.dnp3DeadbandValue || 0);
+  const [dnp3StaticVariation, setDnp3StaticVariation] = useState(existingTag?.dnp3StaticVariation || "Default");
+  const [dnp3EventVariation, setDnp3EventVariation] = useState(existingTag?.dnp3EventVariation || "Default");
 
   // When dataType changes, reset registerType and set default if applicable
   useEffect(() => {
@@ -686,6 +706,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       // Otherwise, default to 64 or existing if no specific conversion is yet picked.
       if (!conversion) {
         setLengthBit(existingTag?.lengthBit || 64);
+
       }
       if (activeTab === "tagValueDescriptor") {
         setActiveTab("basic");
@@ -826,6 +847,14 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       opcuaPublishingInterval: device.deviceType === "OPC-UA" ? opcuaPublishingInterval : undefined,
       opcuaSamplingInterval: device.deviceType === "OPC-UA" ? opcuaSamplingInterval : undefined,
       opcuaQueueSize: device.deviceType === "OPC-UA" ? opcuaQueueSize : undefined,
+      // DNP3 specific fields
+      dnp3PointType: device.deviceType === "DNP3.0" ? dnp3PointType : undefined,
+      dnp3PointIndex: device.deviceType === "DNP3.0" ? dnp3PointIndex : undefined,
+      dnp3Class: device.deviceType === "DNP3.0" ? dnp3Class : undefined,
+      dnp3EventMode: device.deviceType === "DNP3.0" ? dnp3EventMode : undefined,
+      dnp3DeadbandValue: device.deviceType === "DNP3.0" ? dnp3DeadbandValue : undefined,
+      dnp3StaticVariation: device.deviceType === "DNP3.0" ? dnp3StaticVariation : undefined,
+      dnp3EventVariation: device.deviceType === "DNP3.0" ? dnp3EventVariation : undefined,
     };
 
     onSave(newTag); // make sure onSave is defined in props
@@ -1032,6 +1061,129 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
                 max={255}
               />
             </div>
+
+            {device.deviceType === "DNP3.0" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3PointType">DNP3 Point Type</Label>
+                  <Select value={dnp3PointType} onValueChange={setDnp3PointType}>
+                    <SelectTrigger id="dnp3PointType">
+                      <SelectValue placeholder="Select DNP3 point type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AI">Analog Input (AI)</SelectItem>
+                      <SelectItem value="AO">Analog Output (AO)</SelectItem>
+                      <SelectItem value="BI">Binary Input (BI)</SelectItem>
+                      <SelectItem value="BO">Binary Output (BO)</SelectItem>
+                      <SelectItem value="CTR">Counter (CTR)</SelectItem>
+                      <SelectItem value="DBI">Double-bit Input (DBI)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3PointIndex">Point Index</Label>
+                  <Input
+                    id="dnp3PointIndex"
+                    type="number"
+                    value={dnp3PointIndex}
+                    onChange={(e) => setDnp3PointIndex(Number(e.target.value))}
+                    min={0}
+                    max={65535}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3Class">Event Class</Label>
+                  <Select value={dnp3Class} onValueChange={setDnp3Class}>
+                    <SelectTrigger id="dnp3Class">
+                      <SelectValue placeholder="Select event class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Class 0">Class 0 (Static)</SelectItem>
+                      <SelectItem value="Class 1">Class 1 (Priority)</SelectItem>
+                      <SelectItem value="Class 2">Class 2 (Normal)</SelectItem>
+                      <SelectItem value="Class 3">Class 3 (Low Priority)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3EventMode">Event Mode</Label>
+                  <Select value={dnp3EventMode} onValueChange={setDnp3EventMode}>
+                    <SelectTrigger id="dnp3EventMode">
+                      <SelectValue placeholder="Select event mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SOE">SOE (Sequence of Events)</SelectItem>
+                      <SelectItem value="COV">COV (Change of Value)</SelectItem>
+                      <SelectItem value="Periodic">Periodic</SelectItem>
+                      <SelectItem value="None">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {(dnp3PointType === "AI" || dnp3PointType === "AO") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dnp3DeadbandValue">Deadband Value</Label>
+                    <Input
+                      id="dnp3DeadbandValue"
+                      type="number"
+                      value={dnp3DeadbandValue}
+                      onChange={(e) => setDnp3DeadbandValue(Number(e.target.value))}
+                      min={0}
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Analog deadband for event generation
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3StaticVariation">Static Variation</Label>
+                  <Select value={dnp3StaticVariation} onValueChange={setDnp3StaticVariation}>
+                    <SelectTrigger id="dnp3StaticVariation">
+                      <SelectValue placeholder="Select static variation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Default">Default</SelectItem>
+                      <SelectItem value="Group1Var1">Group 1 Variation 1</SelectItem>
+                      <SelectItem value="Group1Var2">Group 1 Variation 2</SelectItem>
+                      <SelectItem value="Group30Var1">Group 30 Variation 1</SelectItem>
+                      <SelectItem value="Group30Var2">Group 30 Variation 2</SelectItem>
+                      <SelectItem value="Group30Var3">Group 30 Variation 3</SelectItem>
+                      <SelectItem value="Group30Var4">Group 30 Variation 4</SelectItem>
+                      <SelectItem value="Group30Var5">Group 30 Variation 5</SelectItem>
+                      <SelectItem value="Group30Var6">Group 30 Variation 6</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dnp3EventVariation">Event Variation</Label>
+                  <Select value={dnp3EventVariation} onValueChange={setDnp3EventVariation}>
+                    <SelectTrigger id="dnp3EventVariation">
+                      <SelectValue placeholder="Select event variation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Default">Default</SelectItem>
+                      <SelectItem value="Group2Var1">Group 2 Variation 1</SelectItem>
+                      <SelectItem value="Group2Var2">Group 2 Variation 2</SelectItem>
+                      <SelectItem value="Group32Var1">Group 32 Variation 1</SelectItem>
+                      <SelectItem value="Group32Var2">Group 32 Variation 2</SelectItem>
+                      <SelectItem value="Group32Var3">Group 32 Variation 3</SelectItem>
+                      <SelectItem value="Group32Var4">Group 32 Variation 4</SelectItem>
+                      <SelectItem value="Group32Var5">Group 32 Variation 5</SelectItem>
+                      <SelectItem value="Group32Var6">Group 32 Variation 6</SelectItem>
+                      <SelectItem value="Group32Var7">Group 32 Variation 7</SelectItem>
+                      <SelectItem value="Group32Var8">Group 32 Variation 8</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
 
             {/* Length (bit) - Conditional display and behavior */}
             {(dataType === "Analog" || dataType === "Discrete") && (
