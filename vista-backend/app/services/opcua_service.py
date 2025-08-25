@@ -194,34 +194,29 @@ async def read_opcua_node(client: Client, node_id: str) -> Tuple[Any, Optional[s
 async def write_opcua_node(client: Client, node_id: str, value: Any, data_type: Optional[str] = None) -> Tuple[bool, Optional[str]]:
     """
     Write a value to an OPC-UA node.
-
+    
     Args:
         client: OPC-UA client instance
         node_id: Node ID to write
         value: Value to write
         data_type: Optional data type hint
-
+    
     Returns:
         Tuple of (success, error_message)
     """
     try:
-        logger.info(f"[OPCUA CORE] Getting OPC-UA node for ID: {node_id}")
         # Get node by ID
         node = client.get_node(node_id)
         
-        logger.info(f"[OPCUA CORE] Original value: {value}, Data type: {data_type}")
         # Convert value if data type is specified
         converted_value = value
         if data_type:
             converted_value = convert_value_for_opcua(value, data_type)
         
-        logger.info(f"[OPCUA CORE] Converted value: {converted_value} (type: {type(converted_value)})")
-        logger.info(f"[OPCUA CORE] Writing value {converted_value} to node {node_id}...")
-        
         # Write value
         await node.write_value(converted_value)
         
-        logger.info(f"[OPCUA CORE] SUCCESS: Wrote value {converted_value} to OPC-UA node {node_id}")
+        logger.debug(f"Successfully wrote to OPC-UA node {node_id}: {converted_value}")
         return True, None
         
     except Exception as e:
@@ -733,11 +728,7 @@ async def opcua_set_with_error_async(device_config: Dict[str, Any], node_id: str
     client = None
     
     try:
-        endpoint_url = opcua_config.get_endpoint_url()
-        logger.info(f"[OPCUA SERVICE] Creating OPC-UA client for endpoint: {endpoint_url}")
-        logger.info(f"[OPCUA SERVICE] Security Mode: {opcua_config.security_mode}, Auth Type: {opcua_config.auth_type}")
-        client = Client(url=endpoint_url)
-        logger.info(f"[OPCUA SERVICE] Client created successfully for {endpoint_url}")
+        client = Client(url=opcua_config.get_endpoint_url())
         
         # Configure security and authentication (simplified for single writes)
         if opcua_config.security_mode != 'None':
@@ -753,8 +744,6 @@ async def opcua_set_with_error_async(device_config: Dict[str, Any], node_id: str
                 client.set_password(opcua_config.password)
         
         await client.connect()
-        logger.info(f"[OPCUA SERVICE] Successfully connected to OPC-UA server: {endpoint_url}")
-        logger.info(f"[OPCUA SERVICE] Attempting to write to node {node_id} with value {value}")
         return await write_opcua_node(client, node_id, value, data_type)
         
     except Exception as e:
@@ -763,9 +752,6 @@ async def opcua_set_with_error_async(device_config: Dict[str, Any], node_id: str
     finally:
         if client:
             try:
-        endpoint_url = opcua_config.get_endpoint_url()
-        logger.info(f"[OPCUA SERVICE] Creating OPC-UA client for endpoint: {endpoint_url}")
-        logger.info(f"[OPCUA SERVICE] Security Mode: {opcua_config.security_mode}, Auth Type: {opcua_config.auth_type}")
                 await client.disconnect()
             except Exception:
                 pass
@@ -776,15 +762,9 @@ def opcua_set_with_error(device_config: Dict[str, Any], node_id: str, value: Any
     Write a value to an OPC-UA node with error handling (sync version).
     """
     try:
-        endpoint_url = opcua_config.get_endpoint_url()
-        logger.info(f"[OPCUA SERVICE] Creating OPC-UA client for endpoint: {endpoint_url}")
-        logger.info(f"[OPCUA SERVICE] Security Mode: {opcua_config.security_mode}, Auth Type: {opcua_config.auth_type}")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-        endpoint_url = opcua_config.get_endpoint_url()
-        logger.info(f"[OPCUA SERVICE] Creating OPC-UA client for endpoint: {endpoint_url}")
-        logger.info(f"[OPCUA SERVICE] Security Mode: {opcua_config.security_mode}, Auth Type: {opcua_config.auth_type}")
             return loop.run_until_complete(opcua_set_with_error_async(device_config, node_id, value, data_type))
         finally:
             loop.close()
