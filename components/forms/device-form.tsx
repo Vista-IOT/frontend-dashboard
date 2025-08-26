@@ -97,6 +97,13 @@ export const deviceConfigSchema = z.object({
   opcuaQueueSize: z.coerce.number().int().min(0).optional(),
   opcuaDeadbandType: z.enum(["None", "Absolute", "Percent"]).optional(),
   opcuaDeadbandValue: z.coerce.number().optional(),
+  // DNP3.0 extensions
+  dnp3IpAddress: z.string().optional(),
+  dnp3PortNumber: z.coerce.number().int().min(1).max(65535).optional(),
+  dnp3LocalAddress: z.coerce.number().int().min(0).max(65535).optional(),
+  dnp3RemoteAddress: z.coerce.number().int().min(0).max(65535).optional(),
+  dnp3TimeoutMs: z.coerce.number().int().min(1000).max(30000).optional(),
+  dnp3Retries: z.coerce.number().int().min(0).max(5).optional(),
 });
 
 export interface DeviceConfig {
@@ -152,6 +159,13 @@ export interface DeviceConfig {
   opcuaQueueSize?: number;
   opcuaDeadbandType?: "None" | "Absolute" | "Percent";
   opcuaDeadbandValue?: number;
+  // DNP3.0 specific fields
+  dnp3IpAddress?: string;
+  dnp3PortNumber?: number;
+  dnp3LocalAddress?: number;
+  dnp3RemoteAddress?: number;
+  dnp3TimeoutMs?: number;
+  dnp3Retries?: number;
 }
 
 interface DeviceFormProps {
@@ -296,6 +310,26 @@ export function DeviceForm({
   const [opcuaDeadbandType, setOpcuaDeadbandType] = useState<"None"|"Absolute"|"Percent">("None");
   const [opcuaDeadbandValue, setOpcuaDeadbandValue] = useState<number>(0);
 
+  // DNP3.0 state fields
+  const [dnp3IpAddress, setDnp3IpAddress] = useState(
+    existingConfig?.dnp3IpAddress || "192.168.1.100"
+  );
+  const [dnp3PortNumber, setDnp3PortNumber] = useState(
+    existingConfig?.dnp3PortNumber || 20000
+  );
+  const [dnp3LocalAddress, setDnp3LocalAddress] = useState(
+    existingConfig?.dnp3LocalAddress || 1
+  );
+  const [dnp3RemoteAddress, setDnp3RemoteAddress] = useState(
+    existingConfig?.dnp3RemoteAddress || 4
+  );
+  const [dnp3TimeoutMs, setDnp3TimeoutMs] = useState(
+    existingConfig?.dnp3TimeoutMs || 5000
+  );
+  const [dnp3Retries, setDnp3Retries] = useState(
+    existingConfig?.dnp3Retries || 3
+  );
+
   // 3. Autofill defaults when switching device types
   useEffect(() => {
     if (
@@ -327,9 +361,19 @@ export function DeviceForm({
       setSnmpBulkMaxRepetitions(10);
     } else if (
       deviceType === "OPC-UA" &&
-      (!existingConfig || existingConfig.deviceType !== "OPC-UA")
+      (!existingConfig || existingConfig.deviceType !== "OPC-UA" && deviceType !== "DNP3.0")
     ) {
       setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
+    } else if (
+      deviceType === "DNP3.0" &&
+      (!existingConfig || existingConfig.deviceType !== "DNP3.0")
+    ) {
+      setDnp3IpAddress("192.168.1.100");
+      setDnp3PortNumber(20000);
+      setDnp3LocalAddress(1);
+      setDnp3RemoteAddress(4);
+      setDnp3TimeoutMs(5000);
+      setDnp3Retries(3);
     }
   }, [deviceType]);
 
@@ -492,6 +536,34 @@ export function DeviceForm({
       }
     }
 
+    // --- DNP3 validations ---
+    if (deviceType === "DNP3.0") {
+      if (!dnp3IpAddress || !/^(\d{1,3}\.){3}\d{1,3}$/.test(dnp3IpAddress)) {
+        toast.error("Please provide a valid IP address for DNP3.");
+        return;
+      }
+      if (!Number.isInteger(dnp3PortNumber) || dnp3PortNumber < 1 || dnp3PortNumber > 65535) {
+        toast.error("DNP3 port must be between 1 and 65535.");
+        return;
+      }
+      if (!Number.isInteger(dnp3LocalAddress) || dnp3LocalAddress < 0 || dnp3LocalAddress > 65535) {
+        toast.error("DNP3 local address must be between 0 and 65535.");
+        return;
+      }
+      if (!Number.isInteger(dnp3RemoteAddress) || dnp3RemoteAddress < 0 || dnp3RemoteAddress > 65535) {
+        toast.error("DNP3 remote address must be between 0 and 65535.");
+        return;
+      }
+      if (!Number.isInteger(dnp3TimeoutMs) || dnp3TimeoutMs < 1000 || dnp3TimeoutMs > 30000) {
+        toast.error("DNP3 timeout must be between 1000 and 30000 ms.");
+        return;
+      }
+      if (!Number.isInteger(dnp3Retries) || dnp3Retries < 0 || dnp3Retries > 5) {
+        toast.error("DNP3 retries must be between 0 and 5.");
+        return;
+      }
+    }
+
     // --- Digital Block Size validation ---
     if (!Number.isInteger(digitalBlockSize) || digitalBlockSize < 0) {
       toast.error("Digital block size must be a non-negative integer.", {
@@ -617,6 +689,15 @@ export function DeviceForm({
             opcuaDeadbandType,
             opcuaDeadbandValue,
           }
+        : deviceType === "DNP3.0"
+        ? {
+            dnp3IpAddress,
+            dnp3PortNumber,
+            dnp3LocalAddress,
+            dnp3RemoteAddress,
+            dnp3TimeoutMs,
+            dnp3Retries,
+          }
         : {}),
     };
 
@@ -652,6 +733,12 @@ export function DeviceForm({
         setSnmpBulkNonRepeaters(0);
         setSnmpBulkMaxRepetitions(10);
         setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
+        setDnp3IpAddress("192.168.1.100");
+        setDnp3PortNumber(20000);
+        setDnp3LocalAddress(1);
+        setDnp3RemoteAddress(4);
+        setDnp3TimeoutMs(5000);
+        setDnp3Retries(3);
       }
     }
   };
@@ -662,6 +749,7 @@ export function DeviceForm({
     "Modbus TCP",
     "SNMP",
     "OPC-UA",
+    "DNP3.0",
     "Advantech ADAM 2000 Series (Modbus RTU)",
     "Advantech ADAM 4000 Series (ADAM ASCII/Modbus RTU)",
     "Advantech WebCon 2000 Series",
@@ -741,10 +829,10 @@ export function DeviceForm({
                 </Select>
               </div>
               {/* Modbus TCP, SNMP, and OPC UA fields */}
-              {(deviceType === "Modbus TCP" || deviceType === "SNMP" || deviceType === "OPC-UA") && (
+              {(deviceType === "Modbus TCP" || deviceType === "SNMP" || deviceType === "OPC-UA" || deviceType === "DNP3.0") && (
                 <div className="space-y-4 mb-4">
                   <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : deviceType === "OPC-UA" ? "grid-cols-1" : "grid-cols-2"} gap-4`}>
-                    {deviceType !== "OPC-UA" && (
+                    {deviceType !== "OPC-UA" && deviceType !== "DNP3.0" && (
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="ipAddress">IP Address</Label>
@@ -1257,6 +1345,121 @@ export function DeviceForm({
                             </div>
                           </div>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {deviceType === "DNP3.0" && (
+                    <div className="space-y-4 border rounded-md p-4">
+                      <h4 className="text-sm font-medium">DNP3 Configuration</h4>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3IpAddress">IP Address</Label>
+                          <Input
+                            id="dnp3IpAddress"
+                            value={dnp3IpAddress}
+                            onChange={(e) => setDnp3IpAddress(e.target.value)}
+                            placeholder="192.168.1.100"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3PortNumber">Port Number</Label>
+                          <Input
+                            id="dnp3PortNumber"
+                            type="number"
+                            value={dnp3PortNumber}
+                            onChange={(e) => setDnp3PortNumber(Number(e.target.value))}
+                            min={1}
+                            max={65535}
+                            placeholder="20000"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3LocalAddress">Local Address (Master)</Label>
+                          <Input
+                            id="dnp3LocalAddress"
+                            type="number"
+                            value={dnp3LocalAddress}
+                            onChange={(e) => setDnp3LocalAddress(Number(e.target.value))}
+                            min={0}
+                            max={65535}
+                            placeholder="1"
+                          />
+                          <p className="text-xs text-muted-foreground">DNP3 Master station address</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3RemoteAddress">Remote Address (Slave)</Label>
+                          <Input
+                            id="dnp3RemoteAddress"
+                            type="number"
+                            value={dnp3RemoteAddress}
+                            onChange={(e) => setDnp3RemoteAddress(Number(e.target.value))}
+                            min={0}
+                            max={65535}
+                            placeholder="4"
+                          />
+                          <p className="text-xs text-muted-foreground">DNP3 Outstation (slave) address</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3TimeoutMs">Timeout (ms)</Label>
+                          <Input
+                            id="dnp3TimeoutMs"
+                            type="number"
+                            value={dnp3TimeoutMs}
+                            onChange={(e) => setDnp3TimeoutMs(Number(e.target.value))}
+                            min={1000}
+                            max={30000}
+                            placeholder="5000"
+                          />
+                          <p className="text-xs text-muted-foreground">Response timeout in milliseconds</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="dnp3Retries">Retries</Label>
+                          <Input
+                            id="dnp3Retries"
+                            type="number"
+                            value={dnp3Retries}
+                            onChange={(e) => setDnp3Retries(Number(e.target.value))}
+                            min={0}
+                            max={5}
+                            placeholder="3"
+                          />
+                          <p className="text-xs text-muted-foreground">Number of retry attempts on failure</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            // Test DNP3 connection functionality can be added here
+                            toast.success("DNP3 Test Connection - Not implemented yet");
+                          }}
+                        >
+                          Test Connection
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => {
+                            setDnp3IpAddress("192.168.1.100");
+                            setDnp3PortNumber(20000);
+                            setDnp3LocalAddress(1);
+                            setDnp3RemoteAddress(4);
+                            setDnp3TimeoutMs(5000);
+                            setDnp3Retries(3);
+                          }}
+                        >
+                          Reset to Defaults
+                        </Button>
                       </div>
                     </div>
                   )}

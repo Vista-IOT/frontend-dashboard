@@ -47,6 +47,15 @@ export interface IOTag {
   opcuaPublishingInterval?: number;
   opcuaSamplingInterval?: number;
   opcuaQueueSize?: number;
+  
+  // DNP3 specific fields
+  dnp3PointType?: string;
+  dnp3PointIndex?: number;
+  dnp3Class?: string;
+  dnp3EventMode?: string;
+  dnp3DeadbandValue?: number;
+  dnp3StaticVariation?: string;
+  dnp3EventVariation?: string;
 }
 
 export interface CalculationTag extends IOTag {
