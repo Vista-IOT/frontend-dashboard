@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  vista-backend:
+    build: ./vista-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./vista-backend:/app
+      - /dev:/dev  # For serial port access if needed
+    privileged: true  # For hardware access
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/dashboard/status')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - vista-backend
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+  # DNP3 Test Outstation (optional - for testing)
+  dnp3-simulator:
+    image: alpine:latest
+    command: sh -c "apk add --no-cache socat && socat TCP-LISTEN:20000,fork,reuseaddr EXEC:'/bin/echo test'"
+    ports:
+      - "20000:20000"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "20000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    name: iot-gateway-network

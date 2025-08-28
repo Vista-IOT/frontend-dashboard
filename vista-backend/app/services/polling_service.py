@@ -7,6 +7,7 @@ import struct
 import serial
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
+from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
 
 logger = logging.getLogger(__name__)
 
@@ -722,6 +723,19 @@ def start_polling_from_config(config):
                     poll_opcua_device_sync,
                     (device, tags, scan_time)
                 )
+                
+            elif device_type == 'dnp3.0' or device_type == 'dnp-3':
+                tags = device.get('tags', [])
+                scan_time = port.get('scanTime', 2000)  # Default to 2 seconds for DNP3
+                thread_name = f"dnp3-{device_name}"
+                logger.info(f"Starting managed DNP3 polling thread for device {device_name} at {device.get('dnp3IpAddress', 'unknown')}:{device.get('dnp3PortNumber', 20000)}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_dnp3_device_sync,
+                    (device, tags, scan_time)
+                )
+            else:
+                logger.warning(f"Unknown device type: {device_type} for device {device_name}")
 
 def stop_all_polling():
     """Stop all active polling threads"""

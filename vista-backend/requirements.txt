@@ -51,3 +51,7 @@ asyncua==1.1.6
 # Note: On Ubuntu/Debian: sudo apt-get install snmp
 # Note: On CentOS/RHEL: sudo yum install net-snmp-utils
 # Note: On macOS: brew install net-snmp
+
+# DNP3 Protocol Support (optional)
+# pydnp3>=0.2.3b2  # Uncomment to enable full DNP3 library support
+# opendnp3>=1.1.0  # Alternative DNP3 library

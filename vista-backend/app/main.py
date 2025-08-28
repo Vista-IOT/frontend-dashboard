@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import dashboard, deploy, hardware, config
+from app.routers import dnp3
 from app.routers import snmp_set, opcua
 from app.services.config_monitor import config_monitor
 
@@ -40,6 +41,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(deploy.router)
 app.include_router(snmp_set.router)
+app.include_router(dnp3.router, prefix="/api")
 app.include_router(opcua.router)
 
 # Application lifecycle events
