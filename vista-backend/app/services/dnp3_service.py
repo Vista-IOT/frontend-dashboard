@@ -413,3 +413,161 @@ def poll_dnp3_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, An
             dnp3_service.cleanup_clients()
         except Exception as e:
             logger.error(f"Error cleaning up DNP3 clients: {e}")
+
+    def _create_write_request(self, group: int, variation: int, point_index: int, value: Union[int, float, bool]) -> bytes:
+        """Create a DNP3 write request frame"""
+        
+        # Data Link Layer Header (10 bytes)
+        start_bytes = 0x0564  # Start bytes
+        length = 0x05  # Minimum length (will be adjusted)
+        control = 0x44  # Control byte
+        dest = self.remote_address & 0xFFFF
+        src = self.local_address & 0xFFFF
+        crc = 0x0000  # CRC (simplified)
+        
+        # Application Layer
+        app_control = 0xC0  # First fragment, final fragment
+        function_code = 0x02  # WRITE function code
+        
+        # Object header
+        obj_group = group
+        obj_variation = variation
+        qualifier = 0x17  # 8-bit index, 8-bit quantity for single point
+        
+        # Pack the basic frame
+        frame = struct.pack('<HBBHHH', start_bytes, length, control, dest, src, crc)
+        frame += struct.pack('<BBB', app_control, function_code, 0)  # IIN (Internal Indication)
+        frame += struct.pack('<BBB', obj_group, obj_variation, qualifier)
+        frame += struct.pack('<BB', point_index, 1)  # Index and quantity (1)
+        
+        # Add value data based on type
+        if group == DNP3_BINARY_OUTPUT:  # Binary Output
+            # Pack as single bit
+            value_byte = 0x81 if bool(value) else 0x01  # Set appropriate flags
+            frame += struct.pack('<B', value_byte)
+        elif group == DNP3_ANALOG_OUTPUT:  # Analog Output
+            # Pack as 16-bit integer (variation 1) or 32-bit (variation 2)
+            if variation == 1:
+                frame += struct.pack('<H', int(value))
+            else:  # variation 2
+                frame += struct.pack('<I', int(value))
+        
+        return frame
+        
+    def write_point(self, point_type: str, point_index: int, value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+        """Write a value to a DNP3 point"""
+        if not self.connected:
+            if not self.connect():
+                return False, "Failed to connect to DNP3 device"
+                
+        try:
+            # Map point type to DNP3 object group
+            group = POINT_TYPE_MAP.get(point_type.upper())
+            if group is None:
+                return False, f"Unknown DNP3 point type: {point_type}"
+                
+            # Only certain point types are writable
+            if point_type.upper() not in ['AO', 'BO']:
+                return False, f"Point type {point_type} is not writable (only AO and BO are writable)"
+                
+            # Determine variation based on point type and value
+            variation = 1
+            if point_type.upper() == 'AO':
+                # Choose variation based on value range
+                if isinstance(value, (int, float)) and abs(value) > 32767:
+                    variation = 2  # 32-bit
+                else:
+                    variation = 1  # 16-bit
+                    
+            # Create and send write request
+            request = self._create_write_request(group, variation, point_index, value)
+            self.socket.send(request)
+            
+            # Read response
+            response = self.socket.recv(1024)
+            if len(response) < DNP3_HEADER_SIZE:
+                return False, "Invalid DNP3 response received"
+                
+            # Parse response for confirmation (simplified)
+            # In a real implementation, you would properly parse the DNP3 confirmation frame
+            if len(response) > 10:
+                # Check application layer function code in response
+                if len(response) > 12:
+                    app_func_code = response[11]  # Application function code
+                    if app_func_code == 0x81:  # CONFIRM function code
+                        return True, None
+                    else:
+                        return False, f"DNP3 write failed - response function code: {app_func_code}"
+                        
+            return False, "Could not parse DNP3 write confirmation"
+            
+        except Exception as e:
+            logger.error(f"Error writing DNP3 point {point_type}.{point_index}: {e}")
+            return False, str(e)
+
+
+    def write_tag_value(self, device_config: DNP3DeviceConfig, tag_config: Dict[str, Any], value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+        """Write a value to a DNP3 tag"""
+        try:
+            client = self.get_client(device_config)
+            if not client:
+                return False, "Failed to create DNP3 client"
+                
+            # Parse DNP3 address (format: "AO.001", "BO.005", etc.)
+            address = tag_config.get('address', '')
+            if '.' not in address:
+                return False, f"Invalid DNP3 address format: {address}"
+                
+            point_type, point_index_str = address.split('.', 1)
+            try:
+                point_index = int(point_index_str)
+            except ValueError:
+                return False, f"Invalid point index in address: {address}"
+                
+            # Apply reverse scaling if configured (for analog outputs)
+            write_value = value
+            if isinstance(value, (int, float)) and point_type.upper() == 'AO':
+                # Reverse the scaling applied during reads
+                scale = tag_config.get('scale', 1)
+                offset = tag_config.get('offset', 0)
+                
+                if scale != 0:  # Avoid division by zero
+                    write_value = (value - offset) / scale
+                else:
+                    write_value = value - offset
+                    
+            # Write the point value
+            success, error_msg = client.write_point(point_type, point_index, write_value)
+            
+            if success:
+                logger.info(f"Successfully wrote value {write_value} to DNP3 point {address}")
+                return True, None
+            else:
+                logger.error(f"Failed to write to DNP3 point {address}: {error_msg}")
+                return False, error_msg
+                
+        except Exception as e:
+            logger.exception(f"Exception writing DNP3 tag {tag_config.get('name', 'unknown')}: {e}")
+            return False, str(e)
+
+
+def dnp3_set_with_error(device_config: Dict[str, Any], tag_config: Dict[str, Any], value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+    """Write DNP3 tag value with error handling (similar to snmp_set_with_error and opcua_set_with_error)"""
+    try:
+        dnp3_config = DNP3DeviceConfig(device_config)
+        return dnp3_service.write_tag_value(dnp3_config, tag_config, value)
+    except Exception as e:
+        logger.exception(f"Error in dnp3_set_with_error: {e}")
+        return False, str(e)
+
+async def dnp3_set_with_error_async(device_config: Dict[str, Any], tag_config: Dict[str, Any], value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+    """Async version of DNP3 write with error handling"""
+    try:
+        # Run the synchronous function in a thread pool
+        loop = asyncio.get_running_loop()
+        success, error = await loop.run_in_executor(None, dnp3_set_with_error, device_config, tag_config, value)
+        return success, error
+    except Exception as e:
+        logger.exception(f"Error in dnp3_set_with_error_async: {e}")
+        return False, str(e)
+

@@ -1,0 +1,36 @@
+# Step 1: Add import for DNP3 dialog
+After line: import { OpcuaWriteDialog } from "@/components/dialogs/opcua-write-dialog";
+Add: import { Dnp3WriteDialog } from "@/components/dialogs/dnp3-write-dialog";
+
+# Step 2: Add state for DNP3 dialog  
+After line: const [opcuaWriteTag, setOpcuaWriteTag] = useState<IOTag | null>(null);
+Add: const [dnp3WriteOpen, setDnp3WriteOpen] = useState(false);
+Add: const [dnp3WriteTag, setDnp3WriteTag] = useState<IOTag | null>(null);
+
+# Step 3: Add DNP3 write button in table
+After the OPC-UA button section (after the closing }) add:
+                      {deviceToDisplay.deviceType === "DNP3.0" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDnp3WriteTag(tag);
+                            setDnp3WriteOpen(true);
+                          }}
+                          disabled={(tag.readWrite || "Read/Write") === "Read Only" || !tag.address?.match(/^(AO|BO)\./i)}
+                        >
+                          Write
+                        </Button>
+                      )}
+
+# Step 4: Add DNP3 dialog component
+After the OPC-UA dialog section add:
+      {deviceToDisplay.deviceType === "DNP3.0" && dnp3WriteTag && (
+        <Dnp3WriteDialog
+          open={dnp3WriteOpen}
+          onOpenChange={setDnp3WriteOpen}
+          device={deviceToDisplay}
+          tag={dnp3WriteTag}
+        />
+      )}

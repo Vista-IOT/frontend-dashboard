@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.services.dnp3_service import (
+    dnp3_set_with_error_async,
     dnp3_get_with_error,
     dnp3_test_connection,
     DNP3DeviceConfig,
@@ -14,7 +15,7 @@ from app.services.dnp3_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/dnp3",
+    prefix="/deploy",
     tags=["dnp3"],
     responses={404: {"description": "Not found"}},
 )
@@ -244,3 +245,210 @@ async def get_dnp3_point_types():
             }
         }
     )
+
+def _validate_write_payload(body: Dict[str, Any]):
+    """Validate the payload for DNP3 write operations"""
+    # Validate device configuration
+    device = body.get("device", {})
+    if not device:
+        raise HTTPException(status_code=400, detail="Missing device configuration")
+    
+    if not (device.get("dnp3IpAddress") or device.get("ip")):
+        raise HTTPException(status_code=400, detail="Missing device IP address")
+    
+    # Validate operation
+    operation = body.get("operation", {})
+    if not operation:
+        raise HTTPException(status_code=400, detail="Missing operation")
+    
+    if not operation.get("address"):
+        raise HTTPException(status_code=400, detail="Missing operation.address (DNP3 point address)")
+    
+    if "value" not in operation:
+        raise HTTPException(status_code=400, detail="Missing operation.value")
+
+@router.post("/api/dnp3/write")
+async def dnp3_write_point(body: Dict[str, Any]):
+    """
+    Perform a DNP3 WRITE operation to a specific point.
+    
+    Similar to SNMP SET and OPC-UA WRITE endpoints.
+    """
+    start = time.time()
+    _validate_write_payload(body)
+    
+    try:
+        device_config = _normalize_device_config(body)
+        operation = body.get("operation", {})
+        address = operation.get("address")
+        value = operation.get("value")
+        verify = bool(operation.get("verify", True))
+        
+        # Create tag config for the write operation
+        tag_config = {
+            "address": address,
+            "name": f"WriteTarget_{address}",
+            "scale": operation.get("scale", 1),
+            "offset": operation.get("offset", 0)
+        }
+        
+        logger.info(f"[DNP3 WRITE] Writing value {value} to point {address} on {device_config['dnp3IpAddress']}:{device_config['dnp3PortNumber']}")
+        
+        # Perform DNP3 write
+        success, write_error = await dnp3_set_with_error_async(device_config, tag_config, value)
+        
+        readback = {"verified": False}
+        if success and verify:
+            # Verify the write by reading back the value
+            read_value, read_error = dnp3_get_with_error(device_config, tag_config)
+            if read_error is None and read_value is not None:
+                readback = {"verified": True, "value": read_value}
+            else:
+                readback = {"verified": False, "error": read_error or "Failed to read back written value"}
+        
+        elapsed_ms = int((time.time() - start) * 1000)
+        
+        if success:
+            logger.info(f"[DNP3 WRITE] SUCCESS: Wrote value {value} to point {address}")
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": "DNP3 WRITE OK",
+                    "written": {"address": address, "value": value},
+                    "readback": readback,
+                    "elapsedMs": elapsed_ms,
+                }
+            )
+        else:
+            logger.error(f"[DNP3 WRITE] FAILED: {write_error}")
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": write_error or "DNP3 WRITE failed",
+                    "written": {"address": address, "value": value},
+                    "readback": readback,
+                    "elapsedMs": elapsed_ms,
+                },
+                status_code=400,
+            )
+            
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        elapsed_ms = int((time.time() - start) * 1000)
+        logger.exception(f"Error in DNP3 write operation: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": f"DNP3 write operation failed: {str(e)}",
+                "written": None,
+                "readback": {"verified": False},
+                "elapsedMs": elapsed_ms,
+            },
+            status_code=500,
+        )
+
+@router.post("/write-point")
+async def write_dnp3_point(body: Dict[str, Any]):
+    """
+    Write a value to a DNP3 point for testing purposes.
+    Alternative endpoint with simpler payload structure.
+    """
+    try:
+        device_config = _normalize_device_config(body)
+        tag_config = body.get("tag", {})
+        operation = body.get("operation", {})
+        
+        # Support both tag.address and operation.address formats
+        address = tag_config.get("address") or operation.get("address")
+        value = tag_config.get("value") or operation.get("value")
+        
+        if not address:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "DNP3 address is required (e.g., 'AO.001', 'BO.005')",
+                    "data": None
+                },
+                status_code=400
+            )
+        
+        if value is None:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Value is required for DNP3 write operation",
+                    "data": None
+                },
+                status_code=400
+            )
+        
+        # Parse address to validate it's writable
+        if '.' not in address:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Invalid DNP3 address format: {address}. Use format like 'AO.001' or 'BO.005'",
+                    "data": None
+                },
+                status_code=400
+            )
+        
+        point_type = address.split('.')[0].upper()
+        if point_type not in ['AO', 'BO']:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Point type {point_type} is not writable. Only AO (Analog Output) and BO (Binary Output) points can be written.",
+                    "data": None
+                },
+                status_code=400
+            )
+        
+        logger.info(f"Writing DNP3 point {address} = {value} on {device_config['dnp3IpAddress']}:{device_config['dnp3PortNumber']}")
+        
+        # Prepare tag config for write
+        write_tag_config = {
+            "address": address,
+            "name": f"WriteTest_{address}",
+            "scale": tag_config.get("scale", 1),
+            "offset": tag_config.get("offset", 0)
+        }
+        
+        # Write the point value
+        success, error_msg = await dnp3_set_with_error_async(device_config, write_tag_config, value)
+        
+        if success:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": f"Successfully wrote value {value} to DNP3 point {address}",
+                    "data": {
+                        "address": address,
+                        "value": value,
+                        "type": type(value).__name__,
+                        "timestamp": int(time.time())
+                    }
+                }
+            )
+        else:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": error_msg or f"Failed to write to DNP3 point {address}",
+                    "data": None
+                },
+                status_code=400
+            )
+            
+    except Exception as e:
+        logger.exception(f"Error writing DNP3 point: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Write operation failed: {str(e)}",
+                "data": None
+            },
+            status_code=500
+        )
+

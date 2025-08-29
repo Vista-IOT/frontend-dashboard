@@ -41,7 +41,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(deploy.router)
 app.include_router(snmp_set.router)
-app.include_router(dnp3.router, prefix="/api")
+app.include_router(dnp3.router)
 app.include_router(opcua.router)
 
 # Application lifecycle events

@@ -66,6 +66,7 @@ import type { IOPortConfig } from "./io-tag-form";
 import { usePolledTagValues, PolledTagValue } from "@/hooks/usePolledTagValues";
 import { SnmpSetDialog } from "@/components/dialogs/snmp-set-dialog";
 import { OpcuaWriteDialog } from "@/components/dialogs/opcua-write-dialog";
+import { Dnp3WriteDialog } from "@/components/dialogs/dnp3-write-dialog";
 import { useSnmpSet } from "@/hooks/useSnmpSet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -143,6 +144,8 @@ export function IOTagDetailView({
   const [snmpSetOpen, setSnmpSetOpen] = useState(false);
   const [snmpSetTag, setSnmpSetTag] = useState<IOTag | null>(null);
   const [opcuaWriteOpen, setOpcuaWriteOpen] = useState(false);
+  const [dnp3WriteOpen, setDnp3WriteOpen] = useState(false);
+  const [dnp3WriteTag, setDnp3WriteTag] = useState<IOTag | null>(null);
   const [opcuaWriteTag, setOpcuaWriteTag] = useState<IOTag | null>(null);
   const { snmpSet } = useSnmpSet();
 
@@ -557,6 +560,20 @@ export function IOTagDetailView({
                           Write
                         </Button>
                       )}
+                      {deviceToDisplay.deviceType === "DNP3.0" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDnp3WriteTag(tag);
+                            setDnp3WriteOpen(true);
+                          }}
+                          disabled={(tag.readWrite || "Read/Write") === "Read Only" || !tag.address?.match(/^(AO|BO)\./i)}
+                        >
+                          Write
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -622,6 +639,14 @@ export function IOTagDetailView({
           onOpenChange={setOpcuaWriteOpen}
           device={deviceToDisplay}
           tag={opcuaWriteTag}
+        />
+      )}
+      {deviceToDisplay.deviceType === "DNP3.0" && dnp3WriteTag && (
+        <Dnp3WriteDialog
+          open={dnp3WriteOpen}
+          onOpenChange={setDnp3WriteOpen}
+          device={deviceToDisplay}
+          tag={dnp3WriteTag}
         />
       )}
     </div>
