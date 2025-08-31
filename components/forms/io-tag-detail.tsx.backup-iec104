@@ -67,7 +67,6 @@ import { usePolledTagValues, PolledTagValue } from "@/hooks/usePolledTagValues";
 import { SnmpSetDialog } from "@/components/dialogs/snmp-set-dialog";
 import { OpcuaWriteDialog } from "@/components/dialogs/opcua-write-dialog";
 import { Dnp3WriteDialog } from "@/components/dialogs/dnp3-write-dialog";
-import { Iec104WriteDialog } from "@/components/dialogs/iec104-write-dialog";
 import { useSnmpSet } from "@/hooks/useSnmpSet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -147,8 +146,6 @@ export function IOTagDetailView({
   const [opcuaWriteOpen, setOpcuaWriteOpen] = useState(false);
   const [dnp3WriteOpen, setDnp3WriteOpen] = useState(false);
   const [dnp3WriteTag, setDnp3WriteTag] = useState<IOTag | null>(null);
-  const [iec104WriteOpen, setIec104WriteOpen] = useState(false);
-  const [iec104WriteTag, setIec104WriteTag] = useState<IOTag | null>(null);
   const [opcuaWriteTag, setOpcuaWriteTag] = useState<IOTag | null>(null);
   const { snmpSet } = useSnmpSet();
 
@@ -322,18 +319,6 @@ export function IOTagDetailView({
       const match = newTag.address.match(dnp3AddressRegex);
       if (match && parseInt(match[2]) > 65535) {
         toast.error("DNP3 point number must be between 0 and 65535.", { duration: 5000 });
-        return;
-      }
-    } else if (deviceToDisplay.deviceType === "IEC-104") {
-      // IEC-104 address validation following Advantech EdgeLink format
-      const iec104AddressRegex = /^[A-Z0-9_]+\.[0-9]+$/;
-      if (!iec104AddressRegex.test(newTag.address)) {
-        toast.error("Address must be a valid IEC-104 address (e.g., M_SP_NA_1.1234, M_ME_NA_1.5678).", { duration: 5000 });
-        return;
-      }
-      const parts = newTag.address.split(".");
-      if (parts.length === 2 && parseInt(parts[1]) > 16777215) {
-        toast.error("IEC-104 Information Object Address must be between 1 and 16777215.", { duration: 5000 });
         return;
       }
     } else {
@@ -561,28 +546,6 @@ export function IOTagDetailView({
                           Set
                         </Button>
                       )}
-      {deviceToDisplay.deviceType === "IEC-104" && iec104WriteTag && (
-        <Iec104WriteDialog
-          open={iec104WriteOpen}
-          onOpenChange={setIec104WriteOpen}
-          device={deviceToDisplay}
-          tag={iec104WriteTag}
-        />
-      )}
-                      {deviceToDisplay.deviceType === "IEC-104" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIec104WriteTag(tag);
-                            setIec104WriteOpen(true);
-                          }}
-                          disabled={(tag.readWrite || "Read/Write") === "Read Only"}
-                        >
-                          Write
-                        </Button>
-                      )}
                       {deviceToDisplay.deviceType === "OPC-UA" && (
                         <Button
                           variant="outline"
@@ -754,13 +717,6 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
   const [dnp3DeadbandValue, setDnp3DeadbandValue] = useState(existingTag?.dnp3DeadbandValue || 0);
   const [dnp3StaticVariation, setDnp3StaticVariation] = useState(existingTag?.dnp3StaticVariation || "Default");
   const [dnp3EventVariation, setDnp3EventVariation] = useState(existingTag?.dnp3EventVariation || "Default");
-  // IEC-104 specific fields
-  const [iec104PublicAddress, setIec104PublicAddress] = useState(existingTag?.iec104PublicAddress || 1);
-  const [iec104PointNumber, setIec104PointNumber] = useState(existingTag?.iec104PointNumber || 0);
-  const [iec104SOE, setIec104SOE] = useState(existingTag?.iec104SOE || "Enabled");
-  const [iec104KValue, setIec104KValue] = useState(existingTag?.iec104KValue || 0);
-  const [iec104BaseValue, setIec104BaseValue] = useState(existingTag?.iec104BaseValue || 0);
-  const [iec104ChangePercent, setIec104ChangePercent] = useState(existingTag?.iec104ChangePercent || 5);
 
   // When dataType changes, reset registerType and set default if applicable
   useEffect(() => {
@@ -924,13 +880,6 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       dnp3DeadbandValue: device.deviceType === "DNP3.0" ? dnp3DeadbandValue : undefined,
       dnp3StaticVariation: device.deviceType === "DNP3.0" ? dnp3StaticVariation : undefined,
       dnp3EventVariation: device.deviceType === "DNP3.0" ? dnp3EventVariation : undefined,
-      // IEC-104 specific fields
-      iec104PublicAddress: device.deviceType === "IEC-104" ? iec104PublicAddress : undefined,
-      iec104PointNumber: device.deviceType === "IEC-104" ? iec104PointNumber : undefined,
-      iec104SOE: device.deviceType === "IEC-104" ? iec104SOE : undefined,
-      iec104KValue: device.deviceType === "IEC-104" ? iec104KValue : undefined,
-      iec104BaseValue: device.deviceType === "IEC-104" ? iec104BaseValue : undefined,
-      iec104ChangePercent: device.deviceType === "IEC-104" ? iec104ChangePercent : undefined,
     };
 
     onSave(newTag); // make sure onSave is defined in props
@@ -1111,99 +1060,6 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
                       <SelectItem value="ByteString">ByteString</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-              </>
-            )}
-            {device.deviceType === "IEC-104" && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="iec104PublicAddress">Public Address</Label>
-                  <Input
-                    id="iec104PublicAddress"
-                    type="number"
-                    value={iec104PublicAddress}
-                    onChange={(e) => setIec104PublicAddress(Number(e.target.value))}
-                    min={1}
-                    max={65535}
-                    placeholder="1"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Common Address of ASDU
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="iec104PointNumber">Point Number</Label>
-                  <Input
-                    id="iec104PointNumber"
-                    type="number"
-                    value={iec104PointNumber}
-                    onChange={(e) => setIec104PointNumber(Number(e.target.value))}
-                    min={0}
-                    max={16777215}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Information Object Address (IOA)
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="iec104SOE">Sequence of Events</Label>
-                  <Select value={iec104SOE} onValueChange={setIec104SOE}>
-                    <SelectTrigger id="iec104SOE">
-                      <SelectValue placeholder="Select SOE mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Enabled">Enabled</SelectItem>
-                      <SelectItem value="Disabled">Disabled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="iec104KValue">K Value</Label>
-                  <Input
-                    id="iec104KValue"
-                    type="number"
-                    value={iec104KValue}
-                    onChange={(e) => setIec104KValue(Number(e.target.value))}
-                    min={0}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Scaling factor for analog values
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="iec104BaseValue">Base Value</Label>
-                  <Input
-                    id="iec104BaseValue"
-                    type="number"
-                    value={iec104BaseValue}
-                    onChange={(e) => setIec104BaseValue(Number(e.target.value))}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Base offset for analog values
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="iec104ChangePercent">Change Percent</Label>
-                  <Input
-                    id="iec104ChangePercent"
-                    type="number"
-                    value={iec104ChangePercent}
-                    onChange={(e) => setIec104ChangePercent(Number(e.target.value))}
-                    min={0}
-                    max={100}
-                    placeholder="5"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Threshold for event generation (%)
-                  </p>
                 </div>
               </>
             )}

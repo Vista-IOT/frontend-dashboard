@@ -8,6 +8,7 @@ import serial
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
+from app.services.iec104_service import poll_iec104_device_sync, iec104_get_with_error
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +402,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                             address=current_addr, 
                             count=read_count, 
                             device_id=unit
-                        )
+        )
                     except Exception as exc:
                         now = int(time.time())
                         error_msg = f"RTU read exception: {str(exc)}"
@@ -734,6 +735,17 @@ def start_polling_from_config(config):
                     poll_dnp3_device_sync,
                     (device, tags, scan_time)
                 )
+
+            elif device_type == 'iec-104' or device_type == 'iec104':
+                tags = device.get('tags', [])
+                scan_time = port.get('scanTime', 1000)  # Default to 1 second for IEC-104
+                thread_name = f"iec104-{device_name}"
+                logger.info(f"Starting managed IEC-104 polling thread for device {device_name} at {device.get('iec104IpAddress', 'unknown')}:{device.get('iec104PortNumber', 2404)}")
+                gateway_manager.start_polling_thread(
+                    thread_name,
+                    poll_iec104_device_sync,
+                    (device, tags, scan_time)
+                )
             else:
                 logger.warning(f"Unknown device type: {device_type} for device {device_name}")
 
@@ -746,3 +758,4 @@ def get_polling_threads_status():
     """Get status of all polling threads"""
     from gateway_manager import gateway_manager
     return gateway_manager.get_active_threads_status()
+

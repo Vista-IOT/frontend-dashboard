@@ -104,6 +104,21 @@ export const deviceConfigSchema = z.object({
   dnp3RemoteAddress: z.coerce.number().int().min(0).max(65535).optional(),
   dnp3TimeoutMs: z.coerce.number().int().min(1000).max(30000).optional(),
   dnp3Retries: z.coerce.number().int().min(0).max(5).optional(),
+  // IEC-104 extensions
+  iec104IpAddress: z.string().optional(),
+  iec104PortNumber: z.coerce.number().int().min(1).max(65535).optional(),
+  iec104AsduAddress: z.coerce.number().int().min(1).max(65535).optional(),
+  iec104T0: z.coerce.number().int().min(1).max(255).optional(),
+  iec104T1: z.coerce.number().int().min(1).max(255).optional(),
+  iec104T2: z.coerce.number().int().min(1).max(255).optional(),
+  iec104T3: z.coerce.number().int().min(1).max(255).optional(),
+  iec104K: z.coerce.number().int().min(1).max(32767).optional(),
+  iec104W: z.coerce.number().int().min(1).max(32767).optional(),
+  iec104CommonAddressLength: z.coerce.number().int().min(1).max(2).optional(),
+  iec104InfoAddressLength: z.coerce.number().int().min(1).max(3).optional(),
+  iec104TransmitCauseLength: z.coerce.number().int().min(1).max(2).optional(),
+  iec104AsduDataLength: z.coerce.number().int().min(1).max(253).optional(),
+  iec104TimeTag: z.enum(["cp56", "cp24", "cp32"]).optional(),
 });
 
 export interface DeviceConfig {
@@ -166,6 +181,21 @@ export interface DeviceConfig {
   dnp3RemoteAddress?: number;
   dnp3TimeoutMs?: number;
   dnp3Retries?: number;
+  // IEC-104 specific fields
+  iec104IpAddress?: string;
+  iec104PortNumber?: number;
+  iec104AsduAddress?: number;
+  iec104T0?: number;
+  iec104T1?: number;
+  iec104T2?: number;
+  iec104T3?: number;
+  iec104K?: number;
+  iec104W?: number;
+  iec104CommonAddressLength?: number;
+  iec104InfoAddressLength?: number;
+  iec104TransmitCauseLength?: number;
+  iec104AsduDataLength?: number;
+  iec104TimeTag?: string;
 }
 
 interface DeviceFormProps {
@@ -330,6 +360,50 @@ export function DeviceForm({
     existingConfig?.dnp3Retries || 3
   );
 
+  // IEC-104 state fields
+  const [iec104IpAddress, setIec104IpAddress] = useState(
+    existingConfig?.iec104IpAddress || "192.168.1.100"
+  );
+  const [iec104PortNumber, setIec104PortNumber] = useState(
+    existingConfig?.iec104PortNumber || 2404
+  );
+  const [iec104AsduAddress, setIec104AsduAddress] = useState(
+    existingConfig?.iec104AsduAddress || 1
+  );
+  const [iec104T0, setIec104T0] = useState(
+    existingConfig?.iec104T0 || 30
+  );
+  const [iec104T1, setIec104T1] = useState(
+    existingConfig?.iec104T1 || 15
+  );
+  const [iec104T2, setIec104T2] = useState(
+    existingConfig?.iec104T2 || 10
+  );
+  const [iec104T3, setIec104T3] = useState(
+    existingConfig?.iec104T3 || 30
+  );
+  const [iec104K, setIec104K] = useState(
+    existingConfig?.iec104K || 12
+  );
+  const [iec104W, setIec104W] = useState(
+    existingConfig?.iec104W || 8
+  );
+  const [iec104CommonAddressLength, setIec104CommonAddressLength] = useState(
+    existingConfig?.iec104CommonAddressLength || 2
+  );
+  const [iec104InfoAddressLength, setIec104InfoAddressLength] = useState(
+    existingConfig?.iec104InfoAddressLength || 3
+  );
+  const [iec104TransmitCauseLength, setIec104TransmitCauseLength] = useState(
+    existingConfig?.iec104TransmitCauseLength || 2
+  );
+  const [iec104AsduDataLength, setIec104AsduDataLength] = useState(
+    existingConfig?.iec104AsduDataLength || 253
+  );
+  const [iec104TimeTag, setIec104TimeTag] = useState(
+    existingConfig?.iec104TimeTag || "cp56"
+  );
+
   // 3. Autofill defaults when switching device types
   useEffect(() => {
     if (
@@ -361,7 +435,7 @@ export function DeviceForm({
       setSnmpBulkMaxRepetitions(10);
     } else if (
       deviceType === "OPC-UA" &&
-      (!existingConfig || existingConfig.deviceType !== "OPC-UA" && deviceType !== "DNP3.0")
+      (!existingConfig || existingConfig.deviceType !== "OPC-UA" && deviceType !== "DNP3.0" && deviceType !== "IEC-104")
     ) {
       setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
     } else if (
@@ -372,6 +446,24 @@ export function DeviceForm({
       setDnp3PortNumber(20000);
       setDnp3LocalAddress(1);
       setDnp3RemoteAddress(4);
+    } else if (
+      deviceType === "IEC-104" &&
+      (!existingConfig || existingConfig.deviceType !== "IEC-104")
+    ) {
+      setIec104IpAddress("192.168.1.100");
+      setIec104PortNumber(2404);
+      setIec104AsduAddress(1);
+      setIec104T0(30);
+      setIec104T1(15);
+      setIec104T2(10);
+      setIec104T3(30);
+      setIec104K(12);
+      setIec104W(8);
+      setIec104CommonAddressLength(2);
+      setIec104InfoAddressLength(3);
+      setIec104TransmitCauseLength(2);
+      setIec104AsduDataLength(253);
+      setIec104TimeTag("cp56");
       setDnp3TimeoutMs(5000);
       setDnp3Retries(3);
     }
@@ -562,6 +654,23 @@ export function DeviceForm({
         toast.error("DNP3 retries must be between 0 and 5.");
         return;
       }
+      
+
+    // --- IEC-104 validations ---
+    if (deviceType === "IEC-104") {
+      if (!iec104IpAddress || !/^(\d{1,3}\.){3}\d{1,3}$/.test(iec104IpAddress)) {
+        toast.error("Please provide a valid IP address for IEC-104.");
+        return;
+      }
+      if (!Number.isInteger(iec104PortNumber) || iec104PortNumber < 1 || iec104PortNumber > 65535) {
+        toast.error("IEC-104 port must be between 1 and 65535.");
+        return;
+      }
+      if (!Number.isInteger(iec104AsduAddress) || iec104AsduAddress < 1 || iec104AsduAddress > 65535) {
+        toast.error("IEC-104 ASDU address must be between 1 and 65535.");
+        return;
+      }
+    }
     }
 
     // --- Digital Block Size validation ---
@@ -698,6 +807,23 @@ export function DeviceForm({
             dnp3TimeoutMs,
             dnp3Retries,
           }
+        : deviceType === "IEC-104"
+        ? {
+            iec104IpAddress,
+            iec104PortNumber,
+            iec104AsduAddress,
+            iec104T0,
+            iec104T1,
+            iec104T2,
+            iec104T3,
+            iec104K,
+            iec104W,
+            iec104CommonAddressLength,
+            iec104InfoAddressLength,
+            iec104TransmitCauseLength,
+            iec104AsduDataLength,
+            iec104TimeTag,
+          }
         : {}),
     };
 
@@ -750,6 +876,7 @@ export function DeviceForm({
     "SNMP",
     "OPC-UA",
     "DNP3.0",
+    "IEC-104",
     "Advantech ADAM 2000 Series (Modbus RTU)",
     "Advantech ADAM 4000 Series (ADAM ASCII/Modbus RTU)",
     "Advantech WebCon 2000 Series",
@@ -829,10 +956,10 @@ export function DeviceForm({
                 </Select>
               </div>
               {/* Modbus TCP, SNMP, and OPC UA fields */}
-              {(deviceType === "Modbus TCP" || deviceType === "SNMP" || deviceType === "OPC-UA" || deviceType === "DNP3.0") && (
+              {(deviceType === "Modbus TCP" || deviceType === "SNMP" || deviceType === "OPC-UA" || deviceType === "DNP3.0" || deviceType === "IEC-104") && (
                 <div className="space-y-4 mb-4">
                   <div className={`grid ${deviceType === "SNMP" ? "grid-cols-3" : deviceType === "OPC-UA" ? "grid-cols-1" : "grid-cols-2"} gap-4`}>
-                    {deviceType !== "OPC-UA" && deviceType !== "DNP3.0" && (
+                    {deviceType !== "OPC-UA" && deviceType !== "DNP3.0" && deviceType !== "IEC-104" && (
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="ipAddress">IP Address</Label>
@@ -934,7 +1061,7 @@ export function DeviceForm({
                           {/* Security & Authentication (stacked) */}
                           
                               
-                            
+                              
                           <div className="p-3 border rounded">
                             
                             <div className="mt-3 space-y-3">
@@ -1456,6 +1583,223 @@ export function DeviceForm({
                             setDnp3RemoteAddress(4);
                             setDnp3TimeoutMs(5000);
                             setDnp3Retries(3);
+                          }}
+                        >
+                          Reset to Defaults
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {deviceType === "IEC-104" && (
+                    <div className="space-y-4 border rounded-md p-4">
+                      <h4 className="text-sm font-medium">IEC-104 Configuration</h4>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="iec104IpAddress">IP Address</Label>
+                          <Input
+                            id="iec104IpAddress"
+                            value={iec104IpAddress}
+                            onChange={(e) => setIec104IpAddress(e.target.value)}
+                            placeholder="192.168.1.100"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="iec104PortNumber">Port Number</Label>
+                          <Input
+                            id="iec104PortNumber"
+                            type="number"
+                            value={iec104PortNumber}
+                            onChange={(e) => setIec104PortNumber(Number(e.target.value))}
+                            min={1}
+                            max={65535}
+                          />
+                          <p className="text-xs text-muted-foreground">Default: 2404</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="iec104AsduAddress">ASDU Address</Label>
+                          <Input
+                            id="iec104AsduAddress"
+                            type="number"
+                            value={iec104AsduAddress}
+                            onChange={(e) => setIec104AsduAddress(Number(e.target.value))}
+                            min={1}
+                            max={65535}
+                          />
+                          <p className="text-xs text-muted-foreground">Common Address of ASDU</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="iec104TimeTag">Time Tag</Label>
+                          <Select value={iec104TimeTag} onValueChange={setIec104TimeTag}>
+                            <SelectTrigger id="iec104TimeTag">
+                              <SelectValue placeholder="Select time tag" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cp56">CP56 Time2a</SelectItem>
+                              <SelectItem value="cp24">CP24 Time</SelectItem>
+                              <SelectItem value="cp32">CP32 Time</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <h5 className="text-sm font-medium">Time Parameters</h5>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104T0">t0 (s)</Label>
+                            <Input
+                              id="iec104T0"
+                              type="number"
+                              value={iec104T0}
+                              onChange={(e) => setIec104T0(Number(e.target.value))}
+                              min={1}
+                              max={255}
+                            />
+                            <p className="text-xs text-muted-foreground">Connection timeout</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104T1">t1 (s)</Label>
+                            <Input
+                              id="iec104T1"
+                              type="number"
+                              value={iec104T1}
+                              onChange={(e) => setIec104T1(Number(e.target.value))}
+                              min={1}
+                              max={255}
+                            />
+                            <p className="text-xs text-muted-foreground">Send or test timeout</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104T2">t2 (s)</Label>
+                            <Input
+                              id="iec104T2"
+                              type="number"
+                              value={iec104T2}
+                              onChange={(e) => setIec104T2(Number(e.target.value))}
+                              min={1}
+                              max={255}
+                            />
+                            <p className="text-xs text-muted-foreground">Receive timeout</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104T3">t3 (s)</Label>
+                            <Input
+                              id="iec104T3"
+                              type="number"
+                              value={iec104T3}
+                              onChange={(e) => setIec104T3(Number(e.target.value))}
+                              min={1}
+                              max={255}
+                            />
+                            <p className="text-xs text-muted-foreground">Test frame timeout</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104K">k (APDUs)</Label>
+                            <Input
+                              id="iec104K"
+                              type="number"
+                              value={iec104K}
+                              onChange={(e) => setIec104K(Number(e.target.value))}
+                              min={1}
+                              max={32767}
+                            />
+                            <p className="text-xs text-muted-foreground">Max APDUs before ack</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104W">w (APDUs)</Label>
+                            <Input
+                              id="iec104W"
+                              type="number"
+                              value={iec104W}
+                              onChange={(e) => setIec104W(Number(e.target.value))}
+                              min={1}
+                              max={32767}
+                            />
+                            <p className="text-xs text-muted-foreground">Latest ack after w APDUs</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <h5 className="text-sm font-medium">ASDU Parameters</h5>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104CommonAddressLength">Common Address Length</Label>
+                            <Input
+                              id="iec104CommonAddressLength"
+                              type="number"
+                              value={iec104CommonAddressLength}
+                              onChange={(e) => setIec104CommonAddressLength(Number(e.target.value))}
+                              min={1}
+                              max={2}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104InfoAddressLength">Info Address Length</Label>
+                            <Input
+                              id="iec104InfoAddressLength"
+                              type="number"
+                              value={iec104InfoAddressLength}
+                              onChange={(e) => setIec104InfoAddressLength(Number(e.target.value))}
+                              min={1}
+                              max={3}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104TransmitCauseLength">Transmit Cause Length</Label>
+                            <Input
+                              id="iec104TransmitCauseLength"
+                              type="number"
+                              value={iec104TransmitCauseLength}
+                              onChange={(e) => setIec104TransmitCauseLength(Number(e.target.value))}
+                              min={1}
+                              max={2}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iec104AsduDataLength">ASDU Data Length</Label>
+                            <Input
+                              id="iec104AsduDataLength"
+                              type="number"
+                              value={iec104AsduDataLength}
+                              onChange={(e) => setIec104AsduDataLength(Number(e.target.value))}
+                              min={1}
+                              max={253}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            toast.success("IEC-104 Test Connection - Not implemented yet");
+                          }}
+                        >
+                          Test Connection
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setIec104IpAddress("192.168.1.100");
+                            setIec104PortNumber(2404);
+                            setIec104AsduAddress(1);
+                            setIec104T0(30);
+                            setIec104T1(15);
+                            setIec104T2(10);
+                            setIec104T3(30);
+                            setIec104K(12);
+                            setIec104W(8);
+                            setIec104CommonAddressLength(2);
+                            setIec104InfoAddressLength(3);
+                            setIec104TransmitCauseLength(2);
+                            setIec104AsduDataLength(253);
+                            setIec104TimeTag("cp56");
                           }}
                         >
                           Reset to Defaults

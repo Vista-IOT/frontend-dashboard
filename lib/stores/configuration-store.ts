@@ -56,6 +56,14 @@ export interface IOTag {
   dnp3DeadbandValue?: number;
   dnp3StaticVariation?: string;
   dnp3EventVariation?: string;
+
+  // IEC-104 specific fields
+  iec104PublicAddress?: number;
+  iec104PointNumber?: number;
+  iec104SOE?: string;
+  iec104KValue?: number;
+  iec104BaseValue?: number;
+  iec104ChangePercent?: number;
 }
 
 export interface CalculationTag extends IOTag {
