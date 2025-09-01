@@ -34,8 +34,8 @@ export function Dnp3WriteDialog({ open, onOpenChange, device, tag }: Dnp3WriteDi
       setAddress(tag?.address || "");
       
       // Extract point type from address if possible (e.g., "AO.001" -> "AO")
-      if (tag?.address && tag.address.includes('.')) {
-        const extractedType = tag.address.split('.')[0].toUpperCase();
+      if (tag?.address && tag.address.match(/[.,]/)) {
+        const extractedType = tag.address.split(/[.,]/)[0].toUpperCase();
         if (['AO', 'BO'].includes(extractedType)) {
           setPointType(extractedType);
         }
@@ -56,12 +56,12 @@ export function Dnp3WriteDialog({ open, onOpenChange, device, tag }: Dnp3WriteDi
     }
 
     // Validate address format
-    if (!address.includes('.')) {
-      toast.error("DNP3 address must be in format 'TYPE.INDEX' (e.g., 'AO.001', 'BO.005')");
+    if (!address.match(/[.,]/)) {
+      toast.error("DNP3 address must be in format 'TYPE.INDEX or TYPE,INDEX' (e.g., 'AO.001', 'AI,001', 'BO.005')");
       return;
     }
 
-    const [addrPointType, indexStr] = address.split('.');
+    const [addrPointType, indexStr] = address.split(/[.,]/);
     
     // Validate point type is writable
     if (!['AO', 'BO'].includes(addrPointType.toUpperCase())) {
@@ -124,7 +124,7 @@ export function Dnp3WriteDialog({ open, onOpenChange, device, tag }: Dnp3WriteDi
 
   const getValueInputType = () => {
     if (!address) return "text";
-    const addrPointType = address.split('.')[0]?.toUpperCase();
+    const addrPointType = address.split(/[.,]/)[0]?.toUpperCase();
     if (addrPointType === 'BO') return "text"; // For boolean inputs (true/false)
     if (addrPointType === 'AO') return "number"; // For analog outputs
     return "text";

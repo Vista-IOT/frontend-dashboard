@@ -1,0 +1,16 @@
+Collecting pydnp3
+  Using cached pydnp3-0.1.0.tar.gz (1.9 MB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting pybind11>=2.2 (from pydnp3)
+  Using cached pybind11-3.0.1-py3-none-any.whl.metadata (10.0 kB)
+Using cached pybind11-3.0.1-py3-none-any.whl (293 kB)
+Building wheels for collected packages: pydnp3
+  Building wheel for pydnp3 (pyproject.toml): started
+  Building wheel for pydnp3 (pyproject.toml): still running...
+  Building wheel for pydnp3 (pyproject.toml): finished with status 'error'
+Failed to build pydnp3

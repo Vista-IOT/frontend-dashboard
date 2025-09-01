@@ -28,28 +28,79 @@ class IEC104Response(BaseModel):
     data: Optional[Any] = None
     error: Optional[str] = None
 
+def _normalize_device_config(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize device configuration from request body"""
+    device = body.get("device", {})
+    
+    return {
+        'iec104IpAddress': device.get('iec104IpAddress'),
+        'iec104PortNumber': device.get('iec104PortNumber', 2404),
+        'iec104AsduAddress': device.get('iec104AsduAddress', 1)
+    }
+
 @router.post("/write")
-async def write_iec104_point(request: IEC104WriteRequest):
+async def write_iec104_point(body: Dict[str, Any]):
     """Write a value to an IEC-104 point"""
     try:
-        logger.info(f"IEC-104 write request: device={request.deviceId}, tag={request.tagId}, address={request.address}, value={request.value}")
+        logger.info(f"IEC-104 write request: {body}")
         
-        # Create device config from request (you might need to get full config from store)
-        device_config = {
-            'iec104IpAddress': '192.168.1.100',  # Default or get from config
-            'iec104PortNumber': 2404,
-            'iec104AsduAddress': request.publicAddress or 1
-        }
+        # Extract request data
+        device_id = body.get('deviceId')
+        tag_id = body.get('tagId')
+        value = body.get('value')
+        address = body.get('address')
+        public_address = body.get('publicAddress')
+        point_number = body.get('pointNumber')
         
-        success, error = iec104_set_with_error(device_config, request.address, request.value)
+        if not all([device_id, tag_id, value is not None, address]):
+            return IEC104Response(
+                success=False,
+                error="Missing required fields: deviceId, tagId, value, address"
+            )
+        
+        logger.info(f"IEC-104 write: device={device_id}, tag={tag_id}, address={address}, IOA={point_number}, ASDU={public_address}, value={value}")
+        
+        # Get device configuration from request body
+        device_config = body.get('device', {})
+        
+        # If device config is not in request body, use default config
+        if not device_config:
+            # Use configuration from your YAML
+            iec104_config = {
+                'iec104IpAddress': '10.0.0.1',  # From your config
+                'iec104PortNumber': 2404,
+                'iec104AsduAddress': 1
+            }
+        else:
+            iec104_config = _normalize_device_config(body)
+        
+        # Validate required configuration
+        if not iec104_config['iec104IpAddress']:
+            return IEC104Response(
+                success=False,
+                error="IEC-104 IP address not configured for device"
+            )
+        
+        logger.info(f"Using IEC-104 config: {iec104_config['iec104IpAddress']}:{iec104_config['iec104PortNumber']}")
+        
+        # Call the service with IEC-104 specific parameters
+        success, error = iec104_set_with_error(
+            iec104_config, 
+            address, 
+            value, 
+            public_address, 
+            point_number
+        )
         
         if success:
-            logger.info(f"IEC-104 write successful: {request.address} = {request.value}")
+            logger.info(f"IEC-104 write successful: {address} IOA={point_number} ASDU={public_address} = {value}")
             return IEC104Response(
                 success=True,
                 data={
-                    "address": request.address,
-                    "value": request.value,
+                    "address": address,
+                    "ioa": point_number,
+                    "asdu": public_address,
+                    "value": value,
                     "written": True
                 }
             )

@@ -314,9 +314,9 @@ export function IOTagDetailView({
       }
     } else if (deviceToDisplay.deviceType === "DNP3.0") {
       // DNP3 point address validation following Advantech EdgeLink format
-      const dnp3AddressRegex = /^(AI|AO|BI|BO|CTR|DBI)\.(\d{1,5})$/;
+      const dnp3AddressRegex = /^(AI|AO|BI|BO|CTR|DBI)[.,](\d{1,5})$/;
       if (!dnp3AddressRegex.test(newTag.address)) {
-        toast.error("Address must be a valid DNP3 point address (e.g., AI.001, BO.005, BI.010).", { duration: 5000 });
+        toast.error("Address must be a valid DNP3 point address (e.g., AI.001, AI,001, BO.005, BI.010).", { duration: 5000 });
         return;
       }
       const match = newTag.address.match(dnp3AddressRegex);
@@ -325,15 +325,10 @@ export function IOTagDetailView({
         return;
       }
     } else if (deviceToDisplay.deviceType === "IEC-104") {
-      // IEC-104 address validation following Advantech EdgeLink format
-      const iec104AddressRegex = /^[A-Z0-9_]+\.[0-9]+$/;
-      if (!iec104AddressRegex.test(newTag.address)) {
-        toast.error("Address must be a valid IEC-104 address (e.g., M_SP_NA_1.1234, M_ME_NA_1.5678).", { duration: 5000 });
-        return;
-      }
-      const parts = newTag.address.split(".");
-      if (parts.length === 2 && parseInt(parts[1]) > 16777215) {
-        toast.error("IEC-104 Information Object Address must be between 1 and 16777215.", { duration: 5000 });
+      // IEC-104 validation: check that iec104PointType is valid
+      const validPointTypes = ["M_SP_NA_1", "M_DP_NA_1", "M_ME_NA_1", "M_ME_NC_1", "M_IT_NA_1", "C_SC_NA_1", "C_SE_NA_1", "C_SE_NC_1"];
+      if (!newTag.iec104PointType || !validPointTypes.includes(newTag.iec104PointType)) {
+        toast.error("Valid IEC-104 Point Type is required.", { duration: 5000 });
         return;
       }
     } else {
@@ -519,7 +514,7 @@ export function IOTagDetailView({
                             </span>
                           );
                         }
-                        if (tagVal.status === "ok") {
+                        if (tagVal.status === "ok" || tagVal.status === "good") {
                           return (
                             <span className="font-mono text-green-600">{tagVal.value}</span>
                           );
@@ -761,6 +756,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
   const [iec104KValue, setIec104KValue] = useState(existingTag?.iec104KValue || 0);
   const [iec104BaseValue, setIec104BaseValue] = useState(existingTag?.iec104BaseValue || 0);
   const [iec104ChangePercent, setIec104ChangePercent] = useState(existingTag?.iec104ChangePercent || 5);
+  const [iec104PointType, setIec104PointType] = useState(existingTag?.iec104PointType || "M_SP_NA_1");
 
   // When dataType changes, reset registerType and set default if applicable
   useEffect(() => {
@@ -872,7 +868,8 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       return;
     }
 
-    if (!address.trim()) {
+    // Address validation - skip for IEC-104 as it is auto-generated
+    if (device.deviceType !== "IEC-104" && !address.trim()) {
       alert("Address is required.");
       return;
     }
@@ -883,7 +880,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       dataType,
       registerType,
       conversionType: conversion,
-      address,
+      address: device.deviceType === "IEC-104" ? `${iec104PointType}:${iec104PointNumber}` : (device.deviceType === "DNP3.0" ? address.replace(",", ".") : address),
       startBit,
       lengthBit: dataType === "Discrete" ? 1 : lengthBit,
       spanLow,
@@ -926,6 +923,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
       dnp3EventVariation: device.deviceType === "DNP3.0" ? dnp3EventVariation : undefined,
       // IEC-104 specific fields
       iec104PublicAddress: device.deviceType === "IEC-104" ? iec104PublicAddress : undefined,
+      iec104PointType: device.deviceType === "IEC-104" ? iec104PointType : undefined,
       iec104PointNumber: device.deviceType === "IEC-104" ? iec104PointNumber : undefined,
       iec104SOE: device.deviceType === "IEC-104" ? iec104SOE : undefined,
       iec104KValue: device.deviceType === "IEC-104" ? iec104KValue : undefined,
@@ -1116,6 +1114,27 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
             )}
             {device.deviceType === "IEC-104" && (
               <>
+              <div className="space-y-2">
+                  <Label htmlFor="iec104PointType">IEC-104 Point Type</Label>
+                  <Select value={iec104PointType} onValueChange={setIec104PointType}>
+                    <SelectTrigger id="iec104PointType">
+                      <SelectValue placeholder="Select IEC-104 point type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="M_SP_NA_1">BI - Binary Input (Single Point)</SelectItem>
+                      <SelectItem value="M_DP_NA_1">BI - Binary Input (Double Point)</SelectItem>
+                      <SelectItem value="M_ME_NA_1">AI - Analog Input (Normalized)</SelectItem>
+                      <SelectItem value="M_ME_NC_1">AI - Analog Input (Float)</SelectItem>
+                      <SelectItem value="M_IT_NA_1">Counter - Integrated Totals</SelectItem>
+                      <SelectItem value="C_SC_NA_1">BO - Binary Output (Single Command)</SelectItem>
+                      <SelectItem value="C_SE_NA_1">AO - Analog Output (Normalized)</SelectItem>
+                      <SelectItem value="C_SE_NC_1">AO - Analog Output (Float)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Select the IEC-104 information type for this point
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="iec104PublicAddress">Public Address</Label>
                   <Input
@@ -1208,6 +1227,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
               </>
             )}
 
+            {device.deviceType !== "IEC-104" ? (
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
               <Input
@@ -1218,6 +1238,21 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
                 required
               />
             </div>
+            ) : (
+            <div className="space-y-2">
+              <Label htmlFor="iec104Address">Computed Address</Label>
+              <Input
+                id="iec104Address"
+                value={`${iec104PointType}:${iec104PointNumber}`}
+                readOnly
+                placeholder="Auto-generated from Point Type and Point Number"
+                className="bg-gray-50"
+              />
+              <p className="text-xs text-muted-foreground">
+                Address is automatically generated from Point Type and Point Number
+              </p>
+            </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="startBit">Start Bit</Label>

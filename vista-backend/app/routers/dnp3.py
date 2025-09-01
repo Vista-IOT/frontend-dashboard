@@ -394,7 +394,11 @@ async def write_dnp3_point(body: Dict[str, Any]):
                 status_code=400
             )
         
-        point_type = address.split('.')[0].upper()
+        # Handle both dot and comma separators
+        if '.' in address:
+            point_type = address.split('.')[0].upper()
+        else:
+            point_type = address.split(',')[0].upper()
         if point_type not in ['AO', 'BO']:
             return JSONResponse(
                 content={

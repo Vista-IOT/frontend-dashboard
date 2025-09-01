@@ -58,6 +58,7 @@ export interface IOTag {
   dnp3EventVariation?: string;
 
   // IEC-104 specific fields
+  iec104PointType?: string;
   iec104PublicAddress?: number;
   iec104PointNumber?: number;
   iec104SOE?: string;

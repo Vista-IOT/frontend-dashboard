@@ -53,5 +53,6 @@ asyncua==1.1.6
 # Note: On macOS: brew install net-snmp
 
 # DNP3 Protocol Support (optional)
-# pydnp3>=0.2.3b2  # Uncomment to enable full DNP3 library support
+# DNP3 Protocol Support - Using custom implementation (no external library needed)
 # opendnp3>=1.1.0  # Alternative DNP3 library
+c104==2.2.1

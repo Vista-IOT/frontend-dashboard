@@ -52,6 +52,14 @@ export function Iec104WriteDialog({
           address: tag.address,
           publicAddress: tag.iec104PublicAddress,
           pointNumber: tag.iec104PointNumber,
+          // Send the complete device configuration
+          device: {
+            id: device.id,
+            name: device.name,
+            iec104IpAddress: device.iec104IpAddress,
+            iec104PortNumber: device.iec104PortNumber,
+            iec104AsduAddress: device.iec104AsduAddress,
+          }
         }),
       });
 
