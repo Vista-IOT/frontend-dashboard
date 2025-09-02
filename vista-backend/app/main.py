@@ -5,6 +5,8 @@ Provides hardware detection and dashboard API endpoints
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from logging.handlers import RotatingFileHandler
 
 from app.routers import dashboard, deploy, hardware, config
 from app.routers import dnp3
@@ -12,11 +14,66 @@ from app.routers import snmp_set, opcua
 from app.routers import iec104
 from app.services.config_monitor import config_monitor
 
-# Configure logging
+# Configure general logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 )
+
+# Set up DNP3-specific logging to separate file
+def setup_dnp3_logging():
+    """Setup separate logging for DNP3 service with detailed output"""
+    # Create logs directory if it doesn't exist
+    logs_dir = "/home/ach1lles/Projects/IOT-GATEWAY/frontend-dashboard/vista-backend/logs"
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Configure DNP3 logger
+    dnp3_logger = logging.getLogger('app.services.dnp3_service')
+    dnp3_logger.setLevel(logging.DEBUG)  # Capture all DNP3 debug messages
+    
+    # Remove existing handlers to avoid duplicates
+    for handler in dnp3_logger.handlers[:]:
+        dnp3_logger.removeHandler(handler)
+    
+    # File handler for DNP3 logs with rotation
+    dnp3_file_handler = RotatingFileHandler(
+        filename=os.path.join(logs_dir, 'dnp3_detailed.log'),
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    dnp3_file_handler.setLevel(logging.DEBUG)
+    
+    # Console handler for DNP3 logs (to also see in console)
+    dnp3_console_handler = logging.StreamHandler()
+    dnp3_console_handler.setLevel(logging.INFO)
+    
+    # Detailed formatter for file
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
+    )
+    
+    # Simple formatter for console
+    simple_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    dnp3_file_handler.setFormatter(detailed_formatter)
+    dnp3_console_handler.setFormatter(simple_formatter)
+    
+    dnp3_logger.addHandler(dnp3_file_handler)
+    dnp3_logger.addHandler(dnp3_console_handler)
+    
+    # Prevent propagation to root logger to avoid duplicate console messages
+    dnp3_logger.propagate = False
+    
+    print(f"✅ DNP3 detailed logging configured:")
+    print(f"   📁 Log file: {os.path.join(logs_dir, 'dnp3_detailed.log')}")
+    print(f"   📊 File level: DEBUG (all details)")
+    print(f"   🖥️  Console level: INFO (summary messages)")
+
+# Setup DNP3 logging
+setup_dnp3_logging()
 
 logger = logging.getLogger(__name__)
 

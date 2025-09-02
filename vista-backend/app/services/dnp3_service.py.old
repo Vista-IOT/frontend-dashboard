@@ -1,0 +1,784 @@
+import logging
+import time
+import threading
+import socket
+import struct
+from typing import Dict, Any, Optional, Union, List, Tuple
+from datetime import datetime
+import asyncio
+
+logger = logging.getLogger(__name__)
+
+# =====================
+# DNP3 Constants & Maps
+# =====================
+DNP3_DEFAULT_PORT = 20000
+DNP3_START_BYTES = 0x0564  # 0x05 0x64
+DNP3_MIN_FRAME_SIZE = 10
+
+# Groups
+DNP3_BINARY_INPUT = 1
+DNP3_BINARY_OUTPUT = 10
+DNP3_ANALOG_INPUT = 30
+DNP3_ANALOG_OUTPUT = 40
+DNP3_COUNTER = 20
+DNP3_DOUBLE_BIT = 3
+
+# Classes
+DNP3_CLASS_0 = 60
+DNP3_CLASS_1 = 61
+DNP3_CLASS_2 = 62
+DNP3_CLASS_3 = 63
+
+# Functions
+DNP3_FUNC_CONFIRM = 0x00
+DNP3_FUNC_READ = 0x01
+DNP3_FUNC_WRITE = 0x02
+DNP3_FUNC_SELECT = 0x03
+DNP3_FUNC_OPERATE = 0x04
+DNP3_FUNC_RESPONSE = 0x81
+DNP3_FUNC_UNSOLICITED = 0x82
+
+# Point map
+POINT_TYPE_MAP = {
+    'BI': DNP3_BINARY_INPUT,
+    'BO': DNP3_BINARY_OUTPUT,
+    'AI': DNP3_ANALOG_INPUT,
+    'AO': DNP3_ANALOG_OUTPUT,
+    'CTR': DNP3_COUNTER,
+    'DBI': DNP3_DOUBLE_BIT,
+}
+
+CLASS_MAP = {
+    'Class 0': DNP3_CLASS_0,
+    'Class 1': DNP3_CLASS_1,
+    'Class 2': DNP3_CLASS_2,
+    'Class 3': DNP3_CLASS_3,
+}
+
+# Block sizing for DNP3 CRC
+_DNP3_BLOCK_SIZE = 16
+
+# =====================
+# Helpers
+# =====================
+
+def calculate_crc(data: bytes) -> int:
+    """DNP3 CRC-16 (poly 0xA6BC, reflected, init 0xFFFF)."""
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0xA6BC
+            else:
+                crc >>= 1
+    return crc & 0xFFFF
+
+
+def _add_block_crc(payload: bytes) -> bytes:
+    """Append CRC every 16 bytes of payload."""
+    out = bytearray()
+    for i in range(0, len(payload), _DNP3_BLOCK_SIZE):
+        block = payload[i:i + _DNP3_BLOCK_SIZE]
+        out.extend(block)
+        out.extend(struct.pack('<H', calculate_crc(block)))
+    return bytes(out)
+
+
+def _strip_block_crc(payload_with_crc: bytes) -> bytes:
+    """Remove CRC every 16 bytes starting right away. Assumes well-formed blocks."""
+    out = bytearray()
+    i = 0
+    while i < len(payload_with_crc):
+        block = payload_with_crc[i:i + _DNP3_BLOCK_SIZE]
+        i += _DNP3_BLOCK_SIZE
+        # skip CRC (2 bytes)
+        i += 2
+        out.extend(block)
+    return bytes(out)
+
+def _log_hex_dump(data: bytes, prefix: str = "", max_bytes: int = 256) -> None:
+    """Log binary data as a hex dump for debugging."""
+    if not data:
+        logger.debug(f"{prefix}[EMPTY]")
+        return
+    
+    # Limit the amount of data logged
+    truncated = data[:max_bytes]
+    hex_str = ' '.join(f'{b:02x}' for b in truncated)
+    ascii_str = ''.join(chr(b) if 32 <= b <= 126 else '.' for b in truncated)
+    
+    logger.info(f"{prefix}Raw bytes ({len(data)} total): {hex_str}")
+    logger.info(f"{prefix}ASCII: {ascii_str}")
+    
+    if len(data) > max_bytes:
+        logger.info(f"{prefix}... (truncated, showing first {max_bytes} of {len(data)} bytes)")
+
+# =====================
+# Config
+# =====================
+
+class DNP3DeviceConfig:
+    """DNP3 device configuration wrapper that reads from YAML config"""
+    def __init__(self, device_config: Dict[str, Any]):
+        self.device_config = device_config
+        self.name = device_config.get('name', 'UnknownDevice')
+        self.ip_address = device_config.get('dnp3IpAddress')
+        self.port = device_config.get('dnp3PortNumber', DNP3_DEFAULT_PORT)
+        self.local_address = device_config.get('dnp3LocalAddress', 1)
+        self.remote_address = device_config.get('dnp3RemoteAddress', 4)
+        self.timeout_ms = device_config.get('dnp3TimeoutMs', 5000)
+        self.retries = device_config.get('dnp3Retries', 3)
+
+        if not self.ip_address:
+            raise ValueError(f"DNP3 device '{self.name}' missing required 'dnp3IpAddress' configuration")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'name': self.name,
+            'ip_address': self.ip_address,
+            'port': self.port,
+            'local_address': self.local_address,
+            'remote_address': self.remote_address,
+            'timeout_ms': self.timeout_ms,
+            'retries': self.retries,
+        }
+
+# =====================
+# Client
+# =====================
+
+class DNP3Client:
+    """A more complete DNP3 master-side client (single-fragment)."""
+    def __init__(self, config: DNP3DeviceConfig):
+        self.config = config
+        self.socket: Optional[socket.socket] = None
+        self.connected = False
+        self.sequence = 0  # application seq (0-15)
+        self.transport_seq = 0  # transport seq (0-63 but we keep 0-15)
+        logger.info(f"Initialized DNP3 client for {config.name} at {config.ip_address}:{config.port}")
+
+    # ---- Connection mgmt ----
+    def _connect(self) -> bool:
+        try:
+            if self.socket:
+                try:
+                    self.socket.close()
+                except Exception:
+                    pass
+                self.socket = None
+                self.connected = False
+
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.socket.settimeout(self.config.timeout_ms / 1000.0)
+            logger.debug(f"Connecting to {self.config.name} at {self.config.ip_address}:{self.config.port}")
+            self.socket.connect((self.config.ip_address, self.config.port))
+            self.connected = True
+            logger.info(f"✅ Connected to DNP3 device {self.config.name}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to DNP3 device {self.config.name}: {e}")
+            self.connected = False
+            if self.socket:
+                try:
+                    self.socket.close()
+                except Exception:
+                    pass
+                self.socket = None
+            return False
+
+    def disconnect(self):
+        if self.socket:
+            try:
+                self.socket.close()
+                logger.debug(f"Disconnected from DNP3 device {self.config.name}")
+            except Exception as e:
+                logger.debug(f"Error closing DNP3 socket for {self.config.name}: {e}")
+            finally:
+                self.socket = None
+                self.connected = False
+
+    # ---- Framing helpers ----
+    def _link_header(self, payload_len: int, control: int = 0xC4) -> bytes:
+        # 05 64 LEN CTRL DEST(src-low-first) SRC CRC
+        start = b"\x05\x64"
+        length = struct.pack('B', payload_len + 5)  # transport+APDU bytes + 5
+        ctrl = struct.pack('B', control)
+        dest = struct.pack('<H', self.config.remote_address)
+        src = struct.pack('<H', self.config.local_address)
+        hdr_wo_crc = start + length + ctrl + dest + src
+        hdr_crc = struct.pack('<H', calculate_crc(hdr_wo_crc[2:8]))
+        return hdr_wo_crc + hdr_crc
+
+    def _transport_header(self) -> bytes:
+        # Single-fragment: FIR=1 FIN=1 ==> 0xC0 | (seq & 0x3F)
+        self.transport_seq = (self.transport_seq + 1) & 0x3F
+        return bytes([0xC0 | (self.transport_seq & 0x3F)])
+
+    def _apdu(self, func: int, obj_bytes: bytes = b'') -> bytes:
+        # App control: FIR=1 FIN=1 CON=0 UNS=0 | seq(0-15)
+        self.sequence = (self.sequence + 1) & 0x0F
+        app_ctl = 0xC0 | self.sequence
+        return struct.pack('BB', app_ctl, func) + obj_bytes
+
+    def _wrap_frame(self, apdu: bytes) -> bytes:
+        tp = self._transport_header()
+        payload = tp + apdu
+        header = self._link_header(len(payload))
+        return header + _add_block_crc(payload)
+
+    def _send_and_recv(self, frame: bytes) -> Optional[bytes]:
+        try:
+            assert self.socket is not None
+            
+            # Log the outgoing frame
+            logger.debug(f"🔼 Sending DNP3 frame to {self.config.name}:")
+            _log_hex_dump(frame, f"🔼 {self.config.name} TX: ")
+            
+            self.socket.sendall(frame)
+            data = self.socket.recv(4096)
+            
+            # Log the incoming response - ALWAYS log this, even if empty/invalid
+            if data:
+                logger.info(f"🔽 Received DNP3 response from {self.config.name}:")
+                _log_hex_dump(data, f"🔽 {self.config.name} RX: ")
+            else:
+                logger.warning(f"🔽 No data received from {self.config.name} (empty response)")
+            
+            return data if data else None
+            
+        except socket.timeout:
+            logger.warning(f"⏱️ Timeout waiting for DNP3 response from {self.config.name}")
+            return None
+        except Exception as e:
+            logger.error(f"Socket error communicating with {self.config.name}: {e}")
+            return None
+
+    # ---- Application primitives ----
+    def _integrity_scan(self) -> bool:
+        # Class 0, Variation 2, qualifier 0x06 (all objects)
+        obj = struct.pack('<BBB', DNP3_CLASS_0, 2, 0x06)
+        frame = self._wrap_frame(self._apdu(DNP3_FUNC_READ, obj))
+        resp = self._send_and_recv(frame)
+        return resp is not None
+
+    def _read_gv_index(self, group: int, variation: int, index: int) -> Optional[bytes]:
+        # Qualifier 0x17: start-stop (16-bit), start=index, stop=index
+        obj = struct.pack('<BBBHH', group, variation, 0x17, index, index)
+        frame = self._wrap_frame(self._apdu(DNP3_FUNC_READ, obj))
+        return self._send_and_recv(frame)
+
+    def _select_operate_ao(self, variation: int, index: int, value_16bit: int) -> bool:
+        # AO object with value in the object header (simple var 2 style)
+        obj = struct.pack('<BBBHHH', DNP3_ANALOG_OUTPUT, variation, 0x17, index, index, value_16bit & 0xFFFF)
+        # SELECT
+        sel = self._wrap_frame(self._apdu(DNP3_FUNC_SELECT, obj))
+        if not self._send_and_recv(sel):
+            return False
+        # OPERATE
+        op = self._wrap_frame(self._apdu(DNP3_FUNC_OPERATE, obj))
+        return self._send_and_recv(op) is not None
+
+    # ---- Response parsing ----
+    def _extract_apdu(self, response: bytes) -> Optional[bytes]:
+        # Log raw response details
+        logger.info(f"📋 Extracting APDU from response (length: {len(response)})")
+        
+        # Validate start bytes
+        if len(response) < 10:
+            logger.warning(f"Response too short: {len(response)} bytes (minimum 10 required)")
+            return None
+            
+        if not (response[0] == 0x05 and response[1] == 0x64):
+            logger.warning(f"Invalid DNP3 start bytes: 0x{response[0]:02x} 0x{response[1]:02x} (expected 0x05 0x64)")
+            return None
+            
+        # Log link layer header details
+        length = response[2]
+        control = response[3]
+        dest = struct.unpack('<H', response[4:6])[0]
+        src = struct.unpack('<H', response[6:8])[0]
+        header_crc = struct.unpack('<H', response[8:10])[0]
+        
+        logger.info(f"📋 Link layer - Length: {length}, Control: 0x{control:02x}, Dest: {dest}, Src: {src}, CRC: 0x{header_crc:04x}")
+        
+        # Strip header (10 bytes: 2 + 1 + 1 + 2 + 2 + 2 CRC)
+        payload_with_crc = response[10:]
+        logger.info(f"📋 Payload with CRC ({len(payload_with_crc)} bytes):")
+        _log_hex_dump(payload_with_crc, "📋 Payload+CRC: ")
+        
+        payload = _strip_block_crc(payload_with_crc)
+        if not payload:
+            logger.warning("No payload after CRC stripping")
+            return None
+            
+        logger.info(f"📋 Payload after CRC removal ({len(payload)} bytes):")
+        _log_hex_dump(payload, "📋 Payload: ")
+        
+        # First byte is transport header; rest is APDU
+        if len(payload) < 2:
+            logger.warning(f"Payload too short after CRC removal: {len(payload)} bytes")
+            return None
+            
+        tp = payload[0]
+        logger.info(f"📋 Transport header: 0x{tp:02x}")
+        
+        apdu = payload[1:]
+        logger.info(f"📋 Extracted APDU ({len(apdu)} bytes):")
+        _log_hex_dump(apdu, "📋 APDU: ")
+        
+        return apdu
+
+    def _parse_single_value(self, apdu: bytes, wanted_group: int, index: int) -> Tuple[bool, Optional[Union[int, float, bool]], Optional[str]]:
+        # apdu: [app_ctl, func, ...objects]
+        logger.info(f"🔍 Parsing APDU for group {wanted_group}, index {index}")
+        _log_hex_dump(apdu, "🔍 APDU to parse: ")
+        
+        if len(apdu) < 2:
+            error = "APDU too short"
+            logger.warning(f"🔍 {error}")
+            return False, None, error
+            
+        app_ctl = apdu[0]
+        func = apdu[1]
+        logger.info(f"🔍 App control: 0x{app_ctl:02x}, Function: 0x{func:02x}")
+        
+        if func not in [DNP3_FUNC_RESPONSE, DNP3_FUNC_UNSOLICITED]:
+            error = f"Unexpected function: 0x{func:02X} (expected 0x{DNP3_FUNC_RESPONSE:02X})"
+            logger.warning(f"🔍 {error}")
+            return False, None, error
+            
+        pos = 2
+        # Walk objects in a naive way (single object expected)
+        try:
+            object_count = 0
+            while pos + 3 <= len(apdu):
+                object_count += 1
+                group = apdu[pos]
+                variation = apdu[pos + 1]
+                qualifier = apdu[pos + 2]
+                logger.info(f"🔍 Object #{object_count}: Group {group}, Variation {variation}, Qualifier 0x{qualifier:02x}")
+                pos += 3
+
+                if qualifier == 0x17:  # start-stop (16-bit)
+                    if pos + 4 > len(apdu):
+                        error = "Bad start/stop (insufficient bytes)"
+                        logger.warning(f"🔍 {error}")
+                        return False, None, error
+                        
+                    start_idx, stop_idx = struct.unpack_from('<HH', apdu, pos)
+                    logger.info(f"🔍 Start index: {start_idx}, Stop index: {stop_idx}")
+                    pos += 4
+                    
+                    # Calculate how many points are in this object
+                    point_count = stop_idx - start_idx + 1
+                    logger.info(f"🔍 Point count: {point_count}")
+                    
+                    # For READ responses, the data typically follows, but formats vary per variation
+                    # We handle a common case for analogs/binaries: 16-bit value after header
+                    if wanted_group == group and start_idx <= index <= stop_idx:
+                        logger.info(f"🔍 Found matching object! Looking for value at relative index {index - start_idx}")
+                        
+                        # Calculate position of our value (assume 16-bit values)
+                        value_offset = (index - start_idx) * 2
+                        value_pos = pos + value_offset
+                        
+                        if value_pos + 2 <= len(apdu):
+                            raw = struct.unpack_from('<H', apdu, value_pos)[0]
+                            logger.info(f"🔍 ✅ Found value: {raw} (0x{raw:04x}) at position {value_pos}")
+                            return True, float(raw), None
+                        else:
+                            error = f"No value bytes at expected position {value_pos} (APDU length: {len(apdu)})"
+                            logger.warning(f"🔍 {error}")
+                            return False, None, error
+                    else:
+                        logger.info(f"🔍 Skipping object (group {group} != {wanted_group} or index {index} not in range {start_idx}-{stop_idx})")
+                        
+                    # Skip data for this object (assume 16-bit values)
+                    data_size = point_count * 2
+                    pos += data_size
+                    logger.info(f"🔍 Skipped {data_size} bytes of data")
+                    
+                elif qualifier == 0x06:
+                    # All objects qualifier; without start/stop, often static data list
+                    logger.info("🔍 All objects qualifier (0x06) - attempting heuristic search")
+                    
+                    # Best effort: search forward for group byte again
+                    search_from = pos
+                    remaining_data = apdu[search_from:]
+                    logger.info(f"🔍 Searching in remaining {len(remaining_data)} bytes for group {wanted_group}")
+                    _log_hex_dump(remaining_data, "🔍 Search data: ")
+                    
+                    found = apdu.find(bytes([wanted_group]), search_from)
+                    if found != -1 and found + 6 <= len(apdu):
+                        try:
+                            raw = struct.unpack_from('<H', apdu, found + 4)[0]
+                            logger.info(f"🔍 ✅ Heuristic found value: {raw} at position {found + 4}")
+                            return True, float(raw), None
+                        except Exception as e:
+                            logger.warning(f"🔍 Heuristic parse failed: {e}")
+                    else:
+                        logger.info(f"🔍 Group {wanted_group} not found in heuristic search")
+                    break
+                else:
+                    # Other qualifiers not handled in this simplified parser
+                    logger.info(f"🔍 Unhandled qualifier: 0x{qualifier:02x}")
+                    break
+                    
+            if object_count == 0:
+                logger.warning("🔍 No objects found in APDU")
+                
+        except Exception as e:
+            error = f"Parse error: {e}"
+            logger.error(f"🔍 {error}")
+            return False, None, error
+            
+        error = "Value not found in response"
+        logger.warning(f"🔍 {error}")
+        return False, None, error
+
+    # ---- Public API matching previous signatures ----
+    def read_point(self, point_type: str, point_index: int) -> Tuple[Optional[Union[int, float, bool]], Optional[str]]:
+        # Connect with retries
+        retry_count = 0
+        while retry_count < self.config.retries:
+            if self._connect():
+                break
+            retry_count += 1
+            if retry_count < self.config.retries:
+                time.sleep(0.5)
+        if not self.connected:
+            return None, f"Failed to connect to DNP3 device {self.config.name} after {self.config.retries} attempts"
+
+        try:
+            # Integrity scan after connect (best-effort)
+            logger.info(f"🔍 Performing integrity scan for {self.config.name}")
+            self._integrity_scan()
+
+            # Map point type to Group/Variation
+            gv_map = {
+                "AI": (30, 1),  # Analog Input
+                "BI": (1, 2),   # Binary Input
+                "AO": (40, 1),  # Analog Output Status
+                "BO": (10, 2),  # Binary Output Status
+            }
+
+            gv = gv_map.get(point_type.upper())
+            if gv is None:
+                return None, f"Unknown DNP3 point type: {point_type}"
+
+            group, variation = gv
+            logger.info(f"🔍 Reading {point_type}.{point_index:03d} (Group {group}, Variation {variation}) from {self.config.name}")
+
+            # Send READ
+            for attempt in range(self.config.retries):
+                logger.info(f"🔍 Read attempt {attempt + 1}/{self.config.retries}")
+                
+                resp = self._read_gv_index(group, variation, point_index)
+                if not resp:
+                    logger.warning(f"🔍 No response received on attempt {attempt + 1}")
+                    continue
+                    
+                logger.info(f"🔍 Received response ({len(resp)} bytes) on attempt {attempt + 1}")
+                
+                apdu = self._extract_apdu(resp)
+                if not apdu:
+                    logger.warning(f"🔍 Failed to extract APDU on attempt {attempt + 1}")
+                    continue
+                    
+                ok, value, err = self._parse_single_value(apdu, group, point_index)
+                if ok:
+                    logger.info(f"✅ Read {point_type}.{point_index:03d} from {self.config.name}: {value}")
+                    return value, None
+                else:
+                    logger.warning(f"🔍 Parse failed on attempt {attempt + 1}: {err}")
+                    
+            return None, f"No valid response for {point_type}.{point_index:03d}"
+        except socket.timeout:
+            error_msg = f"Timeout reading {point_type}.{point_index:03d} from {self.config.name}"
+            logger.warning(f"⏱️ {error_msg}")
+            return None, error_msg
+        except Exception as e:
+            error_msg = f"Error reading DNP3 point {point_type}.{point_index:03d} from {self.config.name}: {e}"
+            logger.error(error_msg)
+            return None, error_msg
+        finally:
+            self.disconnect()
+
+    def test_connection(self) -> Tuple[bool, Optional[str]]:
+        try:
+            if self._connect():
+                # Quick integrity scan to ensure app path is alive
+                ok = self._integrity_scan()
+                self.disconnect()
+                if ok:
+                    logger.info(f"✅ DNP3 connection test successful for {self.config.name}")
+                    return True, None
+                return False, "Link up, but no response to integrity scan"
+            else:
+                error_msg = f"Failed to establish TCP connection to {self.config.name} at {self.config.ip_address}:{self.config.port}"
+                logger.error(f"❌ {error_msg}")
+                return False, error_msg
+        except Exception as e:
+            error_msg = f"Error testing DNP3 connection to {self.config.name}: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+
+    # Extra: AO write primitive used by service
+    def write_ao_value(self, index: int, value: Union[int, float]) -> Tuple[bool, Optional[str]]:
+        # Connect with retries
+        retry_count = 0
+        while retry_count < self.config.retries:
+            if self._connect():
+                break
+            retry_count += 1
+            if retry_count < self.config.retries:
+                time.sleep(0.5)
+        if not self.connected:
+            return False, f"Failed to connect to DNP3 device {self.config.name} after {self.config.retries} attempts"
+        try:
+            self._integrity_scan()
+            value16 = int(round(float(value))) & 0xFFFF
+            ok = self._select_operate_ao(variation=2, index=index, value_16bit=value16)
+            if ok:
+                return True, None
+            return False, "Select/Operate failed"
+        except Exception as e:
+            return False, f"Error writing AO.{index:03d}: {e}"
+        finally:
+            self.disconnect()
+
+# =====================
+# Service Layer
+# =====================
+
+class DNP3Service:
+    """DNP3 service that reads configuration from YAML"""
+    def __init__(self):
+        self.clients: Dict[str, DNP3Client] = {}
+
+    def get_client(self, device_config: DNP3DeviceConfig) -> Optional[DNP3Client]:
+        key = f"{device_config.ip_address}:{device_config.port}:{device_config.local_address}:{device_config.remote_address}"
+        try:
+            client = DNP3Client(device_config)
+            self.clients[key] = client
+            return client
+        except Exception as e:
+            logger.error(f"Failed to create DNP3 client for {device_config.name}: {e}")
+            return None
+
+    def read_tag_value(self, device_config: DNP3DeviceConfig, tag_config: Dict[str, Any]) -> Tuple[Optional[Union[int, float, bool]], Optional[str]]:
+        try:
+            client = self.get_client(device_config)
+            if not client:
+                return None, f"Failed to create DNP3 client for {device_config.name}"
+
+            address = tag_config.get('address', '')
+            if not address:
+                return None, "No address specified in tag configuration"
+
+            normalized_address = address.replace(',', '.')
+            if '.' not in normalized_address:
+                return None, f"Invalid DNP3 address format: {address} (expected format: AI.001)"
+
+            try:
+                point_type, point_index_str = normalized_address.split('.', 1)
+                point_index = int(point_index_str)
+            except ValueError:
+                return None, f"Invalid point index in address: {address}"
+
+            logger.info(f"🔍 Reading DNP3 point {address} from {device_config.name} (type: {point_type}, index: {point_index})")
+            value, error = client.read_point(point_type, point_index)
+            if value is None:
+                logger.error(f"❌ Failed to read {address} from {device_config.name}: {error}")
+                return None, error
+
+            # Scaling, offsets, clamps
+            scale = tag_config.get('scale', 1)
+            offset = tag_config.get('offset', 0)
+            if isinstance(value, (int, float)):
+                scaled_value = (float(value) * scale) + offset
+                if tag_config.get('clampToLow', False):
+                    span_low = tag_config.get('spanLow', 0)
+                    scaled_value = max(scaled_value, span_low)
+                if tag_config.get('clampToHigh', False):
+                    span_high = tag_config.get('spanHigh', 1000)
+                    scaled_value = min(scaled_value, span_high)
+                if tag_config.get('clampToZero', False) and scaled_value < 0:
+                    scaled_value = 0
+                logger.info(f"✅ Successfully read {address} from {device_config.name}: raw={value}, scaled={scaled_value}")
+                return scaled_value, None
+            else:
+                logger.info(f"✅ Successfully read {address} from {device_config.name}: {value}")
+                return value, None
+        except Exception as e:
+            error_msg = f"Exception reading DNP3 tag {tag_config.get('name', 'unknown')} from {device_config.name}: {e}"
+            logger.exception(error_msg)
+            return None, error_msg
+
+    def test_connection(self, device_config: DNP3DeviceConfig) -> Tuple[bool, Optional[str]]:
+        try:
+            client = self.get_client(device_config)
+            if not client:
+                return False, f"Failed to create DNP3 client for {device_config.name}"
+            return client.test_connection()
+        except Exception as e:
+            error_msg = f"Error testing DNP3 connection to {device_config.name}: {e}"
+            logger.exception(error_msg)
+            return False, error_msg
+
+    def write_tag_value(self, device_config: DNP3DeviceConfig, tag_config: Dict[str, Any], value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+        """Implement AO writes using Select/Operate when address is AO.x"""
+        try:
+            client = self.get_client(device_config)
+            if not client:
+                return False, f"Failed to create DNP3 client for {device_config.name}"
+
+            address = tag_config.get('address', '')
+            if not address:
+                return False, "No address specified in tag configuration"
+
+            normalized_address = address.replace(',', '.')
+            if '.' not in normalized_address:
+                return False, f"Invalid DNP3 address format: {address} (expected format: AO.001)"
+            ptype, pidx_str = normalized_address.split('.', 1)
+            try:
+                pidx = int(pidx_str)
+            except ValueError:
+                return False, f"Invalid point index in address: {address}"
+
+            if ptype.upper() != 'AO':
+                return False, f"Writes supported only for AO at the moment (got {ptype})"
+
+            ok, err = client.write_ao_value(pidx, value)
+            if ok:
+                logger.info(f"✅ Wrote AO.{pidx:03d} = {value} on {device_config.name}")
+                return True, None
+            return False, err
+        except Exception as e:
+            return False, f"Exception in write_tag_value: {e}"
+
+    def cleanup_clients(self):
+        for client in self.clients.values():
+            client.disconnect()
+        self.clients.clear()
+
+# Global service instance
+dnp3_service = DNP3Service()
+
+# =====================
+# Module-level helpers (keep names)
+# =====================
+
+def dnp3_get_with_error(device_config: Dict[str, Any], tag_config: Dict[str, Any]) -> Tuple[Optional[Union[int, float, bool]], Optional[str]]:
+    try:
+        dnp3_config = DNP3DeviceConfig(device_config)
+        return dnp3_service.read_tag_value(dnp3_config, tag_config)
+    except Exception as e:
+        logger.exception(f"Error in dnp3_get_with_error: {e}")
+        return None, str(e)
+
+
+def dnp3_test_connection(device_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    try:
+        dnp3_config = DNP3DeviceConfig(device_config)
+        return dnp3_service.test_connection(dnp3_config)
+    except Exception as e:
+        logger.exception(f"Error testing DNP3 connection: {e}")
+        return False, str(e)
+
+
+def poll_dnp3_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, Any]], scan_time_ms=2000):
+    """
+    Synchronous DNP3 polling function that reads from real configuration.
+    This function is called by the polling service to continuously poll DNP3 devices.
+    """
+    if not tags:
+        logger.warning("No DNP3 tags configured for polling")
+        return
+
+    # Import global storage from polling service
+    from app.services.polling_service import _latest_polled_values, _latest_polled_values_lock
+
+    try:
+        dnp3_config = DNP3DeviceConfig(device_config)
+        device_name = dnp3_config.name
+
+        logger.info(f"Starting DNP3 polling for {device_name} at {dnp3_config.ip_address}:{dnp3_config.port}")
+
+        # Initialize device in global storage
+        with _latest_polled_values_lock:
+            if device_name not in _latest_polled_values:
+                _latest_polled_values[device_name] = {}
+            for tag in tags:
+                tag_id = tag.get('id', 'UnknownTagID')
+                _latest_polled_values[device_name][tag_id] = {
+                    "value": None,
+                    "status": "initializing",
+                    "error": None,
+                    "timestamp": int(time.time()),
+                }
+
+        # Continuous polling loop
+        while True:
+            current_thread = threading.current_thread()
+            if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
+                logger.info(f"DNP3 polling for {device_name} stopped by request")
+                break
+
+            for tag in tags:
+                try:
+                    tag_id = tag.get('id', 'UnknownTagID')
+                    tag_name = tag.get('name', 'UnknownTag')
+
+                    value, error = dnp3_service.read_tag_value(dnp3_config, tag)
+
+                    with _latest_polled_values_lock:
+                        if device_name not in _latest_polled_values:
+                            _latest_polled_values[device_name] = {}
+                        _latest_polled_values[device_name][tag_id] = {
+                            "value": value,
+                            "status": "success" if value is not None else "error",
+                            "error": error,
+                            "timestamp": int(time.time()),
+                        }
+
+                    if value is not None:
+                        logger.debug(f"✅ DNP3 {device_name}.{tag_name}: {value}")
+                    else:
+                        logger.warning(f"❌ DNP3 {device_name}.{tag_name}: {error}")
+
+                except Exception as e:
+                    logger.exception(f"Error polling DNP3 tag {tag.get('name', 'unknown')} from {device_name}: {e}")
+                    with _latest_polled_values_lock:
+                        if device_name not in _latest_polled_values:
+                            _latest_polled_values[device_name] = {}
+                        tag_id = tag.get('id', 'UnknownTagID')
+                        _latest_polled_values[device_name][tag_id] = {
+                            "value": None,
+                            "status": "error",
+                            "error": str(e),
+                            "timestamp": int(time.time()),
+                        }
+
+            time.sleep(scan_time_ms / 1000.0)
+
+    except Exception as e:
+        logger.exception(f"Fatal error in DNP3 polling: {e}")
+    finally:
+        dnp3_service.cleanup_clients()
+        logger.info(f"DNP3 polling cleanup completed for {device_config.get('name', 'unknown')}")
+
+
+async def dnp3_set_with_error_async(device_config: Dict[str, Any], tag_config: Dict[str, Any], value: Union[int, float, bool]) -> Tuple[bool, Optional[str]]:
+    """Async wrapper for DNP3 write operation (AO only via Select/Operate)."""
+    try:
+        dnp3_config = DNP3DeviceConfig(device_config)
+        ok, err = dnp3_service.write_tag_value(dnp3_config, tag_config, value)
+        return ok, err
+    except Exception as e:
+        logger.exception(f"Error in dnp3_set_with_error_async: {e}")
+        return False, str(e)

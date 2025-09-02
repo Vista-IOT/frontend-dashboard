@@ -514,7 +514,7 @@ export function IOTagDetailView({
                             </span>
                           );
                         }
-                        if (tagVal.status === "ok" || tagVal.status === "good") {
+                        if (tagVal.status === "ok" || tagVal.status === "good" || tagVal.status === "success") {
                           return (
                             <span className="font-mono text-green-600">{tagVal.value}</span>
                           );
