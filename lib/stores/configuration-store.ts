@@ -174,6 +174,10 @@ export interface DeviceConfig {
   opcuaDeadbandValue?: number;
   opcuaReconnectRetries?: number;
   opcuaAcceptServerCert?: string;
+  // IEC-104 specific fields
+  iec104IpAddress?: string;
+  iec104PortNumber?: number;
+  iec104AsduAddress?: number;
 }
 
 // Canonical SerialPortSettings definition (originally from io-tag-form.tsx)

@@ -435,7 +435,7 @@ export function DeviceForm({
       setSnmpBulkMaxRepetitions(10);
     } else if (
       deviceType === "OPC-UA" &&
-      (!existingConfig || existingConfig.deviceType !== "OPC-UA" && deviceType !== "DNP3.0" && deviceType !== "IEC-104")
+      (!existingConfig || existingConfig.deviceType !== "OPC-UA" && existingConfig.deviceType !== "DNP3.0" && existingConfig.deviceType !== "IEC-104")
     ) {
       setOpcuaServerUrl("opc.tcp://192.168.1.100:4840");
     } else if (

@@ -1,12 +1,37 @@
-let userConfig = undefined
-try {
-  userConfig = await import('./v0-user-next.config')
-} catch (e) {
-  // ignore error
-}
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  webpack: (config, { isServer }) => {
+    // Monaco Editor webpack config
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        "monaco-editor": false,
+      };
+    }
+    return config;
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/dashboard/:path*",
+        destination: "http://127.0.0.1:8000/api/dashboard/:path*",
+      },
+      {
+        source: "/api/hardware/:path*",
+        destination: "http://127.0.0.1:8000/api/hardware/:path*",
+      },
+      {
+        source: "/api/io/polled-values",
+        destination: "http://127.0.0.1:8000/deploy/api/io/polled-values",
+      },
+      {
+        source: "/deploy/api/:path*",
+        destination: "http://127.0.0.1:8000/deploy/api/:path*",
+      },
+    ];
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -21,28 +46,6 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
-}
+};
 
-mergeConfig(nextConfig, userConfig)
-
-function mergeConfig(nextConfig, userConfig) {
-  if (!userConfig) {
-    return
-  }
-
-  for (const key in userConfig) {
-    if (
-      typeof nextConfig[key] === 'object' &&
-      !Array.isArray(nextConfig[key])
-    ) {
-      nextConfig[key] = {
-        ...nextConfig[key],
-        ...userConfig[key],
-      }
-    } else {
-      nextConfig[key] = userConfig[key]
-    }
-  }
-}
-
-export default nextConfig
+export default nextConfig;
