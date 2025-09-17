@@ -31,7 +31,7 @@ export const deviceConfigSchema = z.object({
     .number()
     .int("Must be an integer")
     .min(1, "Unit number must be at least 1")
-    .max(255, "Unit number must be at most 255"), // or 247 for Modbus strict
+    .max(255, "Unit number must be at most 255").optional(), // Optional since not all protocols need it
   tagWriteType: z.string().min(1, "Tag write type is required"),
   description: z.string().optional().default(""),
   addDeviceNameAsPrefix: z.boolean(),
@@ -126,7 +126,7 @@ export interface DeviceConfig {
   enabled: boolean;
   name: string;
   deviceType: string;
-  unitNumber: number;
+  unitNumber?: number;
   tagWriteType: string;
   description: string;
   addDeviceNameAsPrefix: boolean;
@@ -281,7 +281,7 @@ export function DeviceForm({
   const [deviceType, setDeviceType] = useState(
     existingConfig?.deviceType || "Modbus RTU"
   );
-  const [unitNumber, setUnitNumber] = useState(existingConfig?.unitNumber || 1);
+  const [unitNumber, setUnitNumber] = useState(existingConfig?.unitNumber);
   const [tagWriteType, setTagWriteType] = useState(
     existingConfig?.tagWriteType || "Single Write"
   );
@@ -407,11 +407,23 @@ export function DeviceForm({
   // 3. Autofill defaults when switching device types
   useEffect(() => {
     if (
+      deviceType === "Modbus RTU" &&
+      (!existingConfig || existingConfig.deviceType !== "Modbus RTU")
+    ) {
+      // For new Modbus RTU devices, unitNumber is required (default to 1)
+      if (!existingConfig) {
+        setUnitNumber(1);
+      }
+    } else if (
       deviceType === "Modbus TCP" &&
       (!existingConfig || existingConfig.deviceType !== "Modbus TCP")
     ) {
       setIpAddress("11.0.0.1");
       setPortNumber(502);
+      // For new Modbus TCP devices, unitNumber is optional (start as undefined)
+      if (!existingConfig) {
+        setUnitNumber(undefined);
+      }
     } else if (
       deviceType === "SNMP" &&
       (!existingConfig || existingConfig.deviceType !== "SNMP")
@@ -546,14 +558,24 @@ export function DeviceForm({
       return;
     }
 
-    // --- Unit Number validation (skip for SNMP) ---
-    if (deviceType !== "SNMP" && (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247)) {
-      toast.error("Unit number must be an integer between 1 and 247.", {
-        duration: 5000,
-      });
-      return;
+    // --- Unit Number validation - Required for Modbus RTU, optional for Modbus TCP ---
+    if (deviceType === "Modbus RTU" || deviceType.includes("Modbus RTU")) {
+      // Required for Modbus RTU
+      if (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247) {
+        toast.error("Unit number must be an integer between 1 and 247 for Modbus RTU.", {
+          duration: 5000,
+        });
+        return;
+      }
+    } else if (deviceType === "Modbus TCP") {
+      // Optional for Modbus TCP, but if provided must be valid
+      if (unitNumber !== undefined && unitNumber !== null && unitNumber !== "" && (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > 247)) {
+        toast.error("Unit number, if provided, must be an integer between 1 and 247 for Modbus TCP.", {
+          duration: 5000,
+        });
+        return;
+      }
     }
-
     // --- Description validation ---
     if (description && description.length > 100) {
       toast.error("Description should not exceed 100 characters.", {
@@ -654,7 +676,7 @@ export function DeviceForm({
         toast.error("DNP3 retries must be between 0 and 5.");
         return;
       }
-      
+    }
 
     // --- IEC-104 validations ---
     if (deviceType === "IEC-104") {
@@ -670,7 +692,6 @@ export function DeviceForm({
         toast.error("IEC-104 ASDU address must be between 1 and 65535.");
         return;
       }
-    }
     }
 
     // --- Digital Block Size validation ---
@@ -701,7 +722,9 @@ export function DeviceForm({
     }
 
     // --- Unit number conflict check (skip for SNMP) ---
-    if (deviceType !== "SNMP") {
+    // Only check conflicts if unitNumber is provided and protocol uses unit numbers
+    if (((deviceType === "Modbus RTU" || deviceType.includes("Modbus RTU")) || 
+        (deviceType === "Modbus TCP" && unitNumber !== undefined && unitNumber !== null && unitNumber !== ""))) {
       const unitConflict = thisPort.devices.some(
         (d) => d.unitNumber === unitNumber && d.id !== existingConfig?.id
       );
@@ -742,7 +765,12 @@ export function DeviceForm({
       enabled,
       name,
       deviceType,
-      unitNumber,
+      // Include unitNumber based on protocol requirements
+      ...((deviceType === "Modbus RTU" || deviceType.includes("Modbus RTU")) 
+          ? { unitNumber } 
+          : (deviceType === "Modbus TCP" && unitNumber !== undefined && unitNumber !== null && unitNumber !== "") 
+            ? { unitNumber } 
+            : {}),
       tagWriteType,
       description,
       addDeviceNameAsPrefix,
@@ -843,6 +871,10 @@ export function DeviceForm({
         setAnalogBlockSize(64);
         setIpAddress("11.0.0.1");
         setPortNumber(502);
+        // For new Modbus TCP devices, unitNumber is optional (start as undefined)
+        if (!existingConfig) {
+          setUnitNumber(undefined);
+        }
         setCommunity("public");
         setSnmpVersion("v2c");
         setSnmpTimeoutMs(2000);
@@ -1828,21 +1860,39 @@ export function DeviceForm({
                 </Button>
               </div>
 
-              {/* Unit Number - show only for Modbus devices */}
+              {/* Unit Number - show for Modbus devices with different requirements */}
               {(deviceType === "Modbus RTU" || deviceType === "Modbus TCP") && (
                 <div className="space-y-2 mb-4">
-                  <Label htmlFor="unitNumber">Unit Number</Label>
+                  <Label htmlFor="unitNumber">
+                    Unit Number
+                    {deviceType === "Modbus RTU" && (
+                      <span className="text-red-500 ml-1">*</span>
+                    )}
+                    {deviceType === "Modbus TCP" && (
+                      <span className="text-gray-500 ml-1">(optional)</span>
+                    )}
+                  </Label>
                   <Input
                     id="unitNumber"
                     type="number"
-                    value={unitNumber}
-                    onChange={(e) => setUnitNumber(Number(e.target.value))}
+                    value={unitNumber || ""}
+                    onChange={(e) => setUnitNumber(e.target.value === "" ? undefined : Number(e.target.value))}
                     min={1}
                     max={247}
+                    placeholder={
+                      deviceType === "Modbus TCP" 
+                        ? "Leave empty if not needed" 
+                        : ""
+                    }
                   />
+                  <p className="text-xs text-gray-500">
+                    {deviceType === "Modbus RTU" 
+                      ? "Required for Modbus RTU communication"
+                      : "Optional for Modbus TCP - can be left empty"
+                    }
+                  </p>
                 </div>
               )}
-
               {/* Tag Write Type dropdown */}
               <div className="space-y-2 mb-4">
                 <Label htmlFor="tagWriteType">Tag Write Type</Label>
