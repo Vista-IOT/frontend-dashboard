@@ -56,7 +56,7 @@ export function SystemConfigTabs() {
             System Tags
           </TabsTrigger>
           <TabsTrigger value="hardware-mappings" className="text-sm font-medium">
-            Hardware Mappings
+            Port Settings
           </TabsTrigger>
         </TabsList>
         

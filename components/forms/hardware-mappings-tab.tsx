@@ -23,6 +23,7 @@ export function HardwareMappingsTab() {
   const hardwareMappings = useConfigStore(state => state.config.hardware_mappings || []);
   const updateConfig = useConfigStore(state => state.updateConfig);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingData, setEditingData] = useState<HardwareMappingTag | null>(null);
   const [newTag, setNewTag] = useState<HardwareMappingTag>({
     id: Date.now().toString(),
     name: "",
@@ -36,22 +37,55 @@ export function HardwareMappingsTab() {
   const [customPathInput, setCustomPathInput] = useState<{ [id: string]: string }>({});
   const [newTagCustomPath, setNewTagCustomPath] = useState<string>("");
 
-  const handleEdit = (id: string) => setEditingId(id);
-  const handleCancel = () => setEditingId(null);
-  const handleSave = (id: string, updated: HardwareMappingTag) => {
-    const updatedMappings = hardwareMappings.map(tag => tag.id === id ? updated : tag);
+  const handleEdit = (id: string) => {
+    const tagToEdit = hardwareMappings.find(tag => tag.id === id);
+    if (tagToEdit) {
+      setEditingId(id);
+      setEditingData({ ...tagToEdit });
+      // Initialize custom path input if needed
+      if (tagToEdit.path && !getPathOptions(tagToEdit.type).includes(tagToEdit.path)) {
+        setCustomPathInput(prev => ({ ...prev, [id]: tagToEdit.path }));
+        setEditingData({ ...tagToEdit, path: "__custom__" });
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditingData(null);
+    setCustomPathInput({});
+  };
+
+  const handleSave = (id: string) => {
+    if (!editingData) return;
+    
+    // If using custom path, use the custom input value
+    const finalData = editingData.path === "__custom__" 
+      ? { ...editingData, path: customPathInput[id] || "" }
+      : editingData;
+
+    const updatedMappings = hardwareMappings.map(tag => tag.id === id ? finalData : tag);
     updateConfig(["hardware_mappings"], updatedMappings);
     setEditingId(null);
+    setEditingData(null);
+    setCustomPathInput({});
   };
+
   const handleDelete = (id: string) => {
     const updatedMappings = hardwareMappings.filter(tag => tag.id !== id);
     updateConfig(["hardware_mappings"], updatedMappings);
   };
+
   const handleAdd = () => {
     if (!newTag.name.trim() || !newTag.path.trim()) return;
-    const updatedMappings = [...hardwareMappings, { ...newTag, id: Date.now().toString() }];
+    const finalNewTag = newTag.path === "__custom__" 
+      ? { ...newTag, path: newTagCustomPath, id: Date.now().toString() }
+      : { ...newTag, id: Date.now().toString() };
+    
+    const updatedMappings = [...hardwareMappings, finalNewTag];
     updateConfig(["hardware_mappings"], updatedMappings);
     setNewTag({ id: Date.now().toString(), name: "", type: "network", path: "", description: "" });
+    setNewTagCustomPath("");
   };
 
   useEffect(() => {
@@ -86,7 +120,7 @@ export function HardwareMappingsTab() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Hardware Mappings</CardTitle>
+        <CardTitle>Port Settings</CardTitle>
         <CardDescription>
           Define hardware resource mappings (network, serial, GPIO, etc.) for your system. These will be used in the YAML config and backend.
         </CardDescription>
@@ -108,20 +142,20 @@ export function HardwareMappingsTab() {
               {hardwareMappings.map((tag, index) => (
                 <TableRow key={tag.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium text-muted-foreground">{index + 1}</TableCell>
-                  {editingId === tag.id ? (
+                  {editingId === tag.id && editingData ? (
                     <>
                       <TableCell>
                         <Input
-                          value={tag.name}
-                          onChange={e => handleSave(tag.id, { ...tag, name: e.target.value })}
+                          value={editingData.name}
+                          onChange={e => setEditingData({ ...editingData, name: e.target.value })}
                           className="h-8"
                           placeholder="Enter name"
                         />
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={tag.type}
-                          onValueChange={value => handleSave(tag.id, { ...tag, type: value })}
+                          value={editingData.type}
+                          onValueChange={value => setEditingData({ ...editingData, type: value })}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
@@ -138,12 +172,12 @@ export function HardwareMappingsTab() {
                           <span>Loading...</span>
                         ) : (
                           <Select
-                            value={tag.path === "__custom__" ? "__custom__" : tag.path}
+                            value={editingData.path}
                             onValueChange={value => {
                               if (value === "__custom__") {
-                                handleSave(tag.id, { ...tag, path: value });
+                                setEditingData({ ...editingData, path: value });
                               } else {
-                                handleSave(tag.id, { ...tag, path: value });
+                                setEditingData({ ...editingData, path: value });
                                 setCustomPathInput((prev) => ({ ...prev, [tag.id]: "" }));
                               }
                             }}
@@ -152,20 +186,17 @@ export function HardwareMappingsTab() {
                               <SelectValue placeholder="Select or enter path" />
                             </SelectTrigger>
                             <SelectContent>
-                              {getPathOptions(tag.type).map((opt: string) => (
+                              {getPathOptions(editingData.type).map((opt: string) => (
                                 <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                               ))}
                               <SelectItem value="__custom__">Custom...</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
-                        {tag.path === "__custom__" && (
+                        {editingData.path === "__custom__" && (
                           <Input
                             value={customPathInput[tag.id] || ""}
-                            onChange={e => {
-                              setCustomPathInput(prev => ({ ...prev, [tag.id]: e.target.value }));
-                              handleSave(tag.id, { ...tag, path: e.target.value });
-                            }}
+                            onChange={e => setCustomPathInput(prev => ({ ...prev, [tag.id]: e.target.value }))}
                             placeholder="Enter custom path"
                             className="h-8 mt-1"
                           />
@@ -173,8 +204,8 @@ export function HardwareMappingsTab() {
                       </TableCell>
                       <TableCell>
                         <Input
-                          value={tag.description}
-                          onChange={e => handleSave(tag.id, { ...tag, description: e.target.value })}
+                          value={editingData.description}
+                          onChange={e => setEditingData({ ...editingData, description: e.target.value })}
                           className="h-8"
                           placeholder="Description"
                         />
@@ -183,7 +214,7 @@ export function HardwareMappingsTab() {
                         <div className="flex gap-1">
                           <Button 
                             size="sm" 
-                            onClick={() => handleSave(tag.id, tag)}
+                            onClick={() => handleSave(tag.id)}
                             className="h-8 w-8 p-0"
                           >
                             <Check className="h-4 w-4" />
