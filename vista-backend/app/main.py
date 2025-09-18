@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 
 from app.routers import dashboard, deploy, hardware, config
 from app.routers import dnp3
-from app.routers import snmp_set, opcua
+from app.routers import snmp_set, opcua, modbus
 from app.routers import iec104
 from app.services.config_monitor import config_monitor
 
@@ -101,6 +101,7 @@ app.include_router(deploy.router)
 app.include_router(snmp_set.router)
 app.include_router(dnp3.router)
 app.include_router(opcua.router)
+app.include_router(modbus.router)
 app.include_router(iec104.router)
 
 # Application lifecycle events

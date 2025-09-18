@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Save,
   FileDown,
+  FileUp,
   AlertTriangle,
   Loader2,
 } from "lucide-react";
@@ -68,6 +69,7 @@ import { SnmpSetDialog } from "@/components/dialogs/snmp-set-dialog";
 import { OpcuaWriteDialog } from "@/components/dialogs/opcua-write-dialog";
 import { Dnp3WriteDialog } from "@/components/dialogs/dnp3-write-dialog";
 import { Iec104WriteDialog } from "@/components/dialogs/iec104-write-dialog";
+import { ModbusWriteDialog } from "@/components/dialogs/modbus-write-dialog";
 import { useSnmpSet } from "@/hooks/useSnmpSet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -149,6 +151,8 @@ export function IOTagDetailView({
   const [dnp3WriteTag, setDnp3WriteTag] = useState<IOTag | null>(null);
   const [iec104WriteOpen, setIec104WriteOpen] = useState(false);
   const [iec104WriteTag, setIec104WriteTag] = useState<IOTag | null>(null);
+  const [modbusWriteOpen, setModbusWriteOpen] = useState(false);
+  const [modbusWriteTag, setModbusWriteTag] = useState<IOTag | null>(null);
   const [opcuaWriteTag, setOpcuaWriteTag] = useState<IOTag | null>(null);
   const { snmpSet } = useSnmpSet();
 
@@ -406,6 +410,329 @@ export function IOTagDetailView({
     setTagFormOpen(false);
     setEditingTag(null);
   };
+  // CSV Export Function
+  const handleExportCSV = () => {
+    if (tagsToDisplay.length === 0) {
+      toast.error("No tags to export", { duration: 3000 });
+      return;
+    }
+
+    const csvHeaders = [
+      "Name",
+      "Data Type", 
+      "Register Type",
+      "Conversion Type",
+      "Address",
+      "Start Bit",
+      "Length Bit",
+      "Span Low",
+      "Span High",
+      "Default Value",
+      "Scan Rate",
+      "Read Write",
+      "Description",
+      "Scale Type",
+      "Formula",
+      "Scale",
+      "Offset",
+      "Clamp To Low",
+      "Clamp To High",
+      "Clamp To Zero",
+      "Signal Reversal",
+      "Value 0",
+      "Value 1",
+    ];
+
+    const csvData = tagsToDisplay.map((tag: IOTag) => [
+      tag.name || "",
+      tag.dataType || "",
+      tag.registerType || "",
+      tag.conversionType || "",
+      tag.address || "",
+      tag.startBit || 0,
+      tag.lengthBit || 64,
+      tag.spanLow || 0,
+      tag.spanHigh || 1000,
+      tag.defaultValue || 0,
+      tag.scanRate || 1,
+      tag.readWrite || "",
+      tag.description || "",
+      tag.scaleType || "",
+      tag.formula || "",
+      tag.scale || 1,
+      tag.offset || 0,
+      tag.clampToLow || false,
+      tag.clampToHigh || false,
+      tag.clampToZero || false,
+      tag.signalReversal || false,
+      tag.value0 || "",
+      tag.value1 || "",
+    ]);
+
+    const csvContent = [csvHeaders, ...csvData]
+      .map(row => row.map(field => 
+        typeof field === 'string' && field.includes(',') 
+          ? `"${field.replace(/"/g, '""')}"` 
+          : field
+      ).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${deviceToDisplay.name}_tags.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    toast.success(`Exported ${tagsToDisplay.length} tags to CSV`, { duration: 3000 });
+  };
+
+  // CSV Import Function
+  const handleImportCSV = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) {
+        toast.error("Failed to read file", { duration: 3000 });
+        return;
+      }
+
+      try {
+        // Smart CSV/TSV parsing function that detects delimiter
+        const parseCSV = (text: string): string[][] => {
+          const rows: string[][] = [];
+          const lines = text.split(/\r?\n/);
+          
+          if (lines.length === 0) return rows;
+          
+          // Auto-detect delimiter by checking the first line
+          const firstLine = lines[0];
+          const tabCount = (firstLine.match(/\t/g) || []).length;
+          const commaCount = (firstLine.match(/,/g) || []).length;
+          
+          // Use tab if there are more tabs than commas, or if there are tabs and no commas
+          const delimiter = (tabCount > commaCount || (tabCount > 0 && commaCount === 0)) ? '\t' : ',';
+          
+          console.log('Detected delimiter:', delimiter === '\t' ? 'TAB' : 'COMMA');
+          console.log('First line tab count:', tabCount, 'comma count:', commaCount);
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            
+            if (delimiter === '\t') {
+              // Simple tab splitting for TSV
+              const row = line.split('\t').map(cell => cell.trim());
+              if (row.some(cell => cell.length > 0)) {
+                rows.push(row);
+              }
+            } else {
+              // CSV parsing with quote handling
+              const row: string[] = [];
+              let current = '';
+              let inQuotes = false;
+              
+              for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                
+                if (char === '"' && !inQuotes) {
+                  inQuotes = true;
+                } else if (char === '"' && inQuotes && nextChar === '"') {
+                  current += '"';
+                  i++; // Skip next quote
+                } else if (char === '"' && inQuotes) {
+                  inQuotes = false;
+                } else if (char === ',' && !inQuotes) {
+                  row.push(current.trim());
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              
+              row.push(current.trim());
+              if (row.some(cell => cell.length > 0)) {
+                rows.push(row);
+              }
+            }
+          }
+          
+          return rows;
+        };
+
+        const rows = parseCSV(text);
+        
+        if (rows.length < 2) {
+          toast.error("CSV file must have at least a header and one data row", { duration: 3000 });
+          return;
+        }
+
+        const headers = rows[0].map(h => h.replace(/^"|"$/g, '').toLowerCase().replace(/\s+/g, ''));
+        const dataRows = rows.slice(1);
+
+        console.log('CSV Headers:', headers);
+        console.log('Number of data rows:', dataRows.length);
+        console.log('First data row length:', dataRows[0]?.length, 'Headers length:', headers.length);
+        if (dataRows[0]) {
+          console.log('First data row:', dataRows[0]);
+        }
+
+        const newTags: IOTag[] = [];
+        let importErrors: string[] = [];
+
+        dataRows.forEach((values, index) => {
+          // Ensure the row has enough columns, pad with empty strings if needed
+          while (values.length < headers.length) {
+            values.push('');
+          }
+          
+          // If row has more columns than headers, truncate
+          if (values.length > headers.length) {
+            values = values.slice(0, headers.length);
+          }
+
+          const tagData: any = {};
+          headers.forEach((header, i) => {
+            tagData[header] = values[i] ? values[i].replace(/^"|"$/g, '') : '';
+          });
+
+          // Create tag with more flexible field mapping
+          const tag: IOTag = {
+            id: `imported-tag-${Date.now()}-${index}`,
+            name: tagData.name || `ImportedTag${index + 1}`,
+            dataType: tagData.datatype || tagData['datatype'] || "Analog",
+            registerType: tagData.registertype || tagData['registertype'] || "Coil",
+            conversionType: tagData.conversiontype || tagData['conversiontype'] || "FLOAT, Big Endian (ABCD)",
+            address: tagData.address || "0",
+            startBit: parseInt(tagData.startbit || tagData['startbit']) || 0,
+            lengthBit: parseInt(tagData.lengthbit || tagData['lengthbit']) || 64,
+            spanLow: parseFloat(tagData.spanlow || tagData['spanlow']) || 0,
+            spanHigh: parseFloat(tagData.spanhigh || tagData['spanhigh']) || 1000,
+            defaultValue: parseFloat(tagData.defaultvalue || tagData['defaultvalue']) || 0,
+            scanRate: parseInt(tagData.scanrate || tagData['scanrate']) || 1,
+            readWrite: tagData.readwrite || tagData['readwrite'] || "Read/Write",
+            description: tagData.description || "",
+            scaleType: tagData.scaletype || tagData['scaletype'] || "No Scale",
+            formula: tagData.formula || "",
+            scale: parseFloat(tagData.scale) || 1,
+            offset: parseFloat(tagData.offset) || 0,
+            clampToLow: (tagData.clamptolow || tagData['clamptolow'] || '').toLowerCase() === 'true',
+            clampToHigh: (tagData.clamptohigh || tagData['clamptohigh'] || '').toLowerCase() === 'true',
+            clampToZero: (tagData.clamptozero || tagData['clamptozero'] || '').toLowerCase() === 'true',
+            signalReversal: (tagData.signalreversal || tagData['signalreversal'] || '').toLowerCase() === 'true',
+            value0: tagData.value0 || tagData['value0'] || "",
+            value1: tagData.value1 || tagData['value1'] || "",
+          };
+
+          // Basic validation
+          if (!tag.name.trim()) {
+            importErrors.push(`Row ${index + 2}: Tag name is required`);
+            return;
+          }
+
+          // Check for duplicate names
+          const duplicateInExisting = tagsToDisplay.some(existingTag => 
+            existingTag.name.toLowerCase() === tag.name.toLowerCase()
+          );
+          const duplicateInImport = newTags.some(newTag => 
+            newTag.name.toLowerCase() === tag.name.toLowerCase()
+          );
+
+          if (duplicateInExisting || duplicateInImport) {
+            importErrors.push(`Row ${index + 2}: Duplicate tag name "${tag.name}"`);
+            return;
+          }
+
+          newTags.push(tag);
+        });
+
+        if (importErrors.length > 0 && newTags.length === 0) {
+          toast.error(`Import failed with ${importErrors.length} errors: ${importErrors.slice(0, 3).join(', ')}${importErrors.length > 3 ? '...' : ''}`, { duration: 5000 });
+          return;
+        }
+
+        if (newTags.length === 0) {
+          toast.error("No valid tags found in CSV file", { duration: 3000 });
+          return;
+        }
+
+        // Show warning if there were errors but some tags were imported
+        if (importErrors.length > 0) {
+          toast.warning(`Imported ${newTags.length} tags with ${importErrors.length} errors. First few errors: ${importErrors.slice(0, 2).join(', ')}`, { duration: 5000 });
+        }
+
+        // Add imported tags to existing tags
+        const updatedTags = [...tagsToDisplay, ...newTags];
+        
+        // Update the store
+        const allPortsFromStore: IOPortConfig[] = getConfig().io_setup?.ports || [];
+        const portIndex = allPortsFromStore.findIndex((p) => p.id === portId);
+
+        if (portIndex === -1) {
+          toast.error(`Port ${portId} not found.`, { duration: 5000 });
+          return;
+        }
+
+        const targetPort = { ...allPortsFromStore[portIndex] };
+        const deviceIndex = targetPort.devices.findIndex(
+          (d) => d.id === deviceToDisplay.id
+        );
+
+        if (deviceIndex === -1) {
+          toast.error(
+            `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`,
+            { duration: 5000 }
+          );
+          return;
+        }
+
+        const targetDevice = { ...targetPort.devices[deviceIndex] };
+        targetDevice.tags = updatedTags;
+
+        targetPort.devices = targetPort.devices.map((d: DeviceConfig) =>
+          d.id === deviceToDisplay.id ? targetDevice : d
+        );
+
+        const finalUpdatedPorts = allPortsFromStore.map((p: IOPortConfig) =>
+          p.id === portId ? targetPort : p
+        );
+
+        updateConfig(["io_setup", "ports"], finalUpdatedPorts);
+        localStorage.setItem("io_ports_data", JSON.stringify(finalUpdatedPorts));
+
+        toast.success(`Successfully imported ${newTags.length} tags from CSV`, { duration: 3000 });
+
+      } catch (error) {
+        console.error('CSV parsing error:', error);
+        toast.error("Failed to parse CSV file. Please check the file format.", { duration: 3000 });
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+
+
+  // File input handler
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.type !== 'text/csv' && !file.name.endsWith('.csv') && !file.name.endsWith('.tsv') && !file.name.endsWith('.txt')) {
+        toast.error("Please select a CSV, TSV, or TXT file", { duration: 3000 });
+        return;
+      }
+      handleImportCSV(file);
+    }
+    // Reset the input so the same file can be selected again
+    event.target.value = '';
+  };
+
+
 
   const polledValues = usePolledTagValues(1000); // 1s polling
 
@@ -420,6 +747,36 @@ export function IOTagDetailView({
             Configure input/output tags for data acquisition and processing
           </p>
         </div>
+                <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            onClick={handleExportCSV}
+            disabled={tagsToDisplay.length === 0}
+          >
+            <FileDown className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+          <input
+            type="file"
+            ref={(ref) => {
+              if (ref) {
+                ref.style.display = 'none';
+              }
+            }}
+            accept=".csv,.tsv,.txt"
+            onChange={handleFileChange}
+            id="csv-import-input"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              const input = document.getElementById('csv-import-input') as HTMLInputElement;
+              if (input) input.click();
+            }}
+          >
+            <FileUp className="h-4 w-4 mr-2" /> Import CSV
+          </Button>
+        </div>
+        
         <div className="flex space-x-2">
           <Button onClick={handleAddTag}>
             <Plus className="h-4 w-4 mr-2" /> Add
@@ -556,14 +913,6 @@ export function IOTagDetailView({
                           Set
                         </Button>
                       )}
-      {deviceToDisplay.deviceType === "IEC-104" && iec104WriteTag && (
-        <Iec104WriteDialog
-          open={iec104WriteOpen}
-          onOpenChange={setIec104WriteOpen}
-          device={deviceToDisplay}
-          tag={iec104WriteTag}
-        />
-      )}
                       {deviceToDisplay.deviceType === "IEC-104" && (
                         <Button
                           variant="outline"
@@ -602,6 +951,20 @@ export function IOTagDetailView({
                             setDnp3WriteOpen(true);
                           }}
                           disabled={(tag.readWrite || "Read/Write") === "Read Only" || !tag.address?.match(/^(AO|BO)\./i)}
+                        >
+                          Write
+                        </Button>
+                      )}
+                      {deviceToDisplay.deviceType === "Modbus TCP" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModbusWriteTag(tag);
+                            setModbusWriteOpen(true);
+                          }}
+                          disabled={(tag.readWrite || "Read/Write") === "Read Only"}
                         >
                           Write
                         </Button>
@@ -665,6 +1028,8 @@ export function IOTagDetailView({
           tag={snmpSetTag}
         />
       )}
+      
+      {/* OPC-UA Write Dialog */}
       {deviceToDisplay.deviceType === "OPC-UA" && opcuaWriteTag && (
         <OpcuaWriteDialog
           open={opcuaWriteOpen}
@@ -673,12 +1038,34 @@ export function IOTagDetailView({
           tag={opcuaWriteTag}
         />
       )}
+      
+      {/* DNP3 Write Dialog */}
       {deviceToDisplay.deviceType === "DNP3.0" && dnp3WriteTag && (
         <Dnp3WriteDialog
           open={dnp3WriteOpen}
           onOpenChange={setDnp3WriteOpen}
           device={deviceToDisplay}
           tag={dnp3WriteTag}
+        />
+      )}
+      
+      {/* IEC-104 Write Dialog */}
+      {deviceToDisplay.deviceType === "IEC-104" && iec104WriteTag && (
+        <Iec104WriteDialog
+          open={iec104WriteOpen}
+          onOpenChange={setIec104WriteOpen}
+          device={deviceToDisplay}
+          tag={iec104WriteTag}
+        />
+      )}
+      
+      {/* Modbus Write Dialog */}
+      {deviceToDisplay.deviceType === "Modbus TCP" && modbusWriteTag && (
+        <ModbusWriteDialog
+          open={modbusWriteOpen}
+          onOpenChange={setModbusWriteOpen}
+          device={deviceToDisplay}
+          tag={modbusWriteTag}
         />
       )}
     </div>
@@ -1112,6 +1499,7 @@ function TagForm({ onSave, onCancel, existingTag, device }: TagFormProps) {
                 </div>
               </>
             )}
+            
             {device.deviceType === "IEC-104" && (
               <>
               <div className="space-y-2">
