@@ -41,32 +41,32 @@ def get_latest_polled_values():
 
 def ping_host(ip, count=2, timeout=1):
     try:
-        # logger.info(f"Attempting to ping {ip} with count={count}, timeout={timeout}")
-        # logger.info(f"Running as: {subprocess.run(['whoami'], capture_output=True, text=True).stdout.strip()}")
+        # polling_logger.info(f"Attempting to ping {ip} with count={count}, timeout={timeout}")
+        # polling_logger.info(f"Running as: {subprocess.run(['whoami'], capture_output=True, text=True).stdout.strip()}")
         result = subprocess.run(
             ['ping', '-c', str(count), '-W', str(timeout), ip],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        # logger.info(f"Ping command exit code: {result.returncode}")
-        # logger.info(f"Ping stdout: {result.stdout}")
+        # polling_logger.info(f"Ping command exit code: {result.returncode}")
+        # polling_logger.info(f"Ping stdout: {result.stdout}")
         if result.stderr:
-            # logger.info(f"Ping stderr: {result.stderr}")
+            # polling_logger.info(f"Ping stderr: {result.stderr}")
             pass
         if result.returncode == 0:
-            # logger.info(f"Ping to {ip} successful")
+            # polling_logger.info(f"Ping to {ip} successful")
             return True, None
         else:
             err = f"Ping to {ip} failed:\n{result.stdout}\n{result.stderr}"
-            # logger.error(err)
+            # polling_logger.error(err)
             return False, err
     except Exception as e:
-        # logger.error(f"Exception during ping to {ip}: {e}")
+        # polling_logger.error(f"Exception during ping to {ip}: {e}")
         return False, str(e)
 
 def get_tag_conversion_type(tag):
     ct = tag.get('conversionType')
     if not ct or not isinstance(ct, str):
-        # logger.warning(f"Tag {tag.get('name', 'unknown')} missing or invalid conversionType, defaulting to 'INT, Big Endian (ABCD)'")
+        # polling_logger.warning(f"Tag {tag.get('name', 'unknown')} missing or invalid conversionType, defaulting to 'INT, Big Endian (ABCD)'")
         return 'INT, Big Endian (ABCD)'
     return ct
 
@@ -75,11 +75,11 @@ def get_tag_length_bit(tag):
     try:
         lb_int = int(lb)
         if lb_int not in (16, 32):
-            # logger.warning(f"Tag {tag.get('name', 'unknown')} has invalid lengthBit {lb}, defaulting to 16")
+            # polling_logger.warning(f"Tag {tag.get('name', 'unknown')} has invalid lengthBit {lb}, defaulting to 16")
             return 16
         return lb_int
     except Exception:
-        # logger.warning(f"Tag {tag.get('name', 'unknown')} missing or invalid lengthBit, defaulting to 16")
+        # polling_logger.warning(f"Tag {tag.get('name', 'unknown')} missing or invalid lengthBit, defaulting to 16")
         return 16
 
 def convert_register_value(registers, pos, tag_config):
@@ -88,7 +88,7 @@ def convert_register_value(registers, pos, tag_config):
         length_bit = get_tag_length_bit(tag_config)
         scale = tag_config.get('scale', 1)
         offset = tag_config.get('offset', 0)
-        # logger.debug(f"Converting tag {tag_config.get('name')}: conversion={conversion_type}, length={length_bit}, scale={scale}, offset={offset}")
+        # polling_logger.debug(f"Converting tag {tag_config.get('name')}: conversion={conversion_type}, length={length_bit}, scale={scale}, offset={offset}")
         raw_value = 0
         if length_bit == 16:
             if pos < len(registers):
@@ -138,7 +138,7 @@ def convert_register_value(registers, pos, tag_config):
             final_value = 0
         return final_value
     except Exception as e:
-        # logger.error(f"Error converting value for tag {tag_config.get('name', 'unknown')}: {e}")
+        # polling_logger.error(f"Error converting value for tag {tag_config.get('name', 'unknown')}: {e}")
         return 0
 
 def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
@@ -148,7 +148,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         ip = device_config.get('ipAddress')
         port = device_config.get('portNumber', 502)
         unit = device_config.get('unitNumber', 1)
-        # logger.info(
+        # polling_logger.info(
         #     f"Polling Modbus TCP device: id={device_id}, name={device_name}, ip={ip}, port={port}, unit={unit}, scan_time_ms={scan_time_ms}"
         # )
         ping_ok, ping_err = ping_host(ip)
@@ -165,11 +165,11 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         "timestamp": int(time.time()),
                     }
         if not ping_ok:
-            # logger.error(f"Device {ip} is not reachable by ping. Skipping polling.")
+            # polling_logger.error(f"Device {ip} is not reachable by ping. Skipping polling.")
             return
         client = ModbusTcpClient(ip, port=port)
         if not client.connect():
-            # logger.error(f"Failed to connect to {ip}:{port}")
+            # polling_logger.error(f"Failed to connect to {ip}:{port}")
             with _latest_polled_values_lock:
                 for tag in tags:
                     tag_id = tag.get('id', 'UnknownTagID')
@@ -180,7 +180,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         "timestamp": int(time.time()),
                     }
             return False
-        # logger.info(f"Connected to {ip}:{port}")
+        # polling_logger.info(f"Connected to {ip}:{port}")
         addresses = []
         for tag in tags:
             try:
@@ -189,10 +189,10 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                     addr = addr - 40001
                 addresses.append(addr)
             except Exception as e:
-                # logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
+                # polling_logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
                 pass
         if not addresses:
-            # logger.warning(f"No valid addresses found for device {device_name}")
+            # polling_logger.warning(f"No valid addresses found for device {device_name}")
             return
         min_addr = min(addresses)
         max_registers_needed = 0
@@ -204,7 +204,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
             registers_needed = 2 if length_bit == 32 else 1
             max_registers_needed = max(max_registers_needed, addr + registers_needed - min_addr)
         count = max_registers_needed
-        # logger.info(f"Reading {count} registers starting from address {min_addr} (calculated from tag configurations)")
+        # polling_logger.info(f"Reading {count} registers starting from address {min_addr} (calculated from tag configurations)")
         # Modbus protocol allows a maximum of 125 registers per read
         MAX_REGISTERS_PER_READ = 125
 
@@ -214,7 +214,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 # Check if stop was requested (for graceful shutdown)
                 current_thread = threading.current_thread()
                 if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
-                    logger.info(f"TCP polling for {device_name} stopped by request")
+                    polling_logger.info(f"TCP polling for {device_name} stopped by request")
                     break
                 all_registers = []
                 total_needed = count
@@ -226,7 +226,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                     except Exception as exc:
                         now = int(time.time())
                         error_msg = str(exc)
-                        # logger.error(f"Exception during Modbus read: {error_msg}")
+                        # polling_logger.error(f"Exception during Modbus read: {error_msg}")
                         with _latest_polled_values_lock:
                             for tag in tags:
                                 tag_id = tag.get('id', 'UnknownTagID')
@@ -239,7 +239,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         time.sleep(scan_time_ms / 1000.0)
                         break
                     if result.isError():
-                        # logger.error(f"Error reading registers from {device_name}: {result}")
+                        # polling_logger.error(f"Error reading registers from {device_name}: {result}")
                         verbose_msg = None
                         if hasattr(result, 'exception_code'):
                             code = result.exception_code
@@ -265,7 +265,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 else:
                     # Only process tags if all reads succeeded
                     now = int(time.time())
-                    # logger.info(f"Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
+                    # polling_logger.info(f"Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
                     with _latest_polled_values_lock:
                         for tag in tags:
                             tag_id = tag.get('id', 'UnknownTagID')
@@ -278,7 +278,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     reg_addr = address
                                 pos = reg_addr - min_addr
                                 converted_value = convert_register_value(all_registers, pos, tag)
-                                # logger.info(f"{device_name} [{tag_name} @ {address}] = {converted_value} ({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
+                                # polling_logger.info(f"{device_name} [{tag_name} @ {address}] = {converted_value} ({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": converted_value,
                                     "status": "ok",
@@ -286,7 +286,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "timestamp": now,
                                 }
                             except Exception as e:
-                                # logger.error(f"Error processing tag {tag_name}: {e}")
+                                # polling_logger.error(f"Error processing tag {tag_name}: {e}")
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": None,
                                     "status": "conversion_error",
@@ -297,7 +297,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         finally:
             client.close()
     except Exception as e:
-        # logger.exception(f"Exception in polling thread for device {device_config.get('name')}: {e}")
+        # polling_logger.exception(f"Exception in polling thread for device {device_config.get('name')}: {e}")
         pass
 
 def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
@@ -321,7 +321,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
         parity_map = {'None': 'N', 'Even': 'E', 'Odd': 'O'}
         parity_char = parity_map.get(parity, 'N')
         
-        logger.info(
+        polling_logger.info(
             f"Polling Modbus RTU device: id={device_id}, name={device_name}, "
             f"port={serial_port}, baud={baudrate}, parity={parity_char}, "
             f"stopbits={stopbits}, bytesize={bytesize}, unit={unit}, scan_time_ms={scan_time_ms}"
@@ -351,11 +351,11 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                     addr = addr - 40001
                 addresses.append(addr)
             except Exception as e:
-                logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
+                polling_logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
                 pass
         
         if not addresses:
-            logger.warning(f"No valid addresses found for RTU device {device_name}")
+            polling_logger.warning(f"No valid addresses found for RTU device {device_name}")
             return
         
         min_addr = min(addresses)
@@ -375,12 +375,12 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
             # Check if stop was requested (for graceful shutdown)
             current_thread = threading.current_thread()
             if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
-                logger.info(f"RTU polling for {device_name} stopped by request")
+                polling_logger.info(f"RTU polling for {device_name} stopped by request")
                 break
                 
             try:
                 if not client.connect():
-                    logger.error(f"Failed to connect to RTU device on {serial_port}")
+                    polling_logger.error(f"Failed to connect to RTU device on {serial_port}")
                     with _latest_polled_values_lock:
                         for tag in tags:
                             tag_id = tag.get('id', 'UnknownTagID')
@@ -409,7 +409,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                     except Exception as exc:
                         now = int(time.time())
                         error_msg = f"RTU read exception: {str(exc)}"
-                        logger.error(error_msg)
+                        polling_logger.error(error_msg)
                         with _latest_polled_values_lock:
                             for tag in tags:
                                 tag_id = tag.get('id', 'UnknownTagID')
@@ -422,7 +422,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                         break
                     
                     if result.isError():
-                        logger.error(f"RTU error reading registers from {device_name}: {result}")
+                        polling_logger.error(f"RTU error reading registers from {device_name}: {result}")
                         verbose_msg = None
                         if hasattr(result, 'exception_code'):
                             code = result.exception_code
@@ -450,7 +450,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                 else:
                     # Process tags only if all reads succeeded
                     now = int(time.time())
-                    logger.debug(f"RTU Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
+                    polling_logger.debug(f"RTU Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
                     
                     with _latest_polled_values_lock:
                         for tag in tags:
@@ -465,7 +465,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                 pos = reg_addr - min_addr
                                 converted_value = convert_register_value(all_registers, pos, tag)
                                 
-                                logger.debug(f"RTU {device_name} [{tag_name} @ {address}] = {converted_value} "
+                                polling_logger.debug(f"RTU {device_name} [{tag_name} @ {address}] = {converted_value} "
                                            f"({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
                                 
                                 _latest_polled_values[device_name][tag_id] = {
@@ -475,7 +475,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                     "timestamp": now,
                                 }
                             except Exception as e:
-                                logger.error(f"Error processing RTU tag {tag_name}: {e}")
+                                polling_logger.error(f"Error processing RTU tag {tag_name}: {e}")
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": None,
                                     "status": "rtu_conversion_error",
@@ -484,7 +484,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                 }
                 
             except serial.SerialException as se:
-                logger.error(f"Serial port error for RTU device {device_name}: {se}")
+                polling_logger.error(f"Serial port error for RTU device {device_name}: {se}")
                 with _latest_polled_values_lock:
                     for tag in tags:
                         tag_id = tag.get('id', 'UnknownTagID')
@@ -495,7 +495,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                             "timestamp": int(time.time()),
                         }
             except Exception as e:
-                logger.error(f"Unexpected error in RTU polling for {device_name}: {e}")
+                polling_logger.error(f"Unexpected error in RTU polling for {device_name}: {e}")
                 with _latest_polled_values_lock:
                     for tag in tags:
                         tag_id = tag.get('id', 'UnknownTagID')
@@ -512,7 +512,7 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
             time.sleep(scan_time_ms / 1000.0)
             
     except Exception as e:
-        logger.exception(f"Exception in RTU polling thread for device {device_config.get('name')}: {e}")
+        polling_logger.exception(f"Exception in RTU polling thread for device {device_config.get('name')}: {e}")
 
 def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
     """Poll SNMP device using synchronous SNMP operations to avoid asyncio issues"""
@@ -542,7 +542,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
             'snmpV3ContextEngineId': device_config.get('snmpV3ContextEngineId', ''),
         }
         
-        logger.info(
+        polling_logger.info(
             f"Polling SNMP device: id={device_id}, name={device_name}, "
             f"ip={ip}, port={port}, version={snmp_device_config['snmpVersion']}, "
             f"community={community}, scan_time_ms={scan_time_ms}"
@@ -565,14 +565,14 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                         "error": ping_err or f"Device {ip} is not reachable by ping.",
                         "timestamp": int(time.time()),
                     }
-            logger.error(f"SNMP Device {ip} is not reachable by ping. Skipping polling.")
+            polling_logger.error(f"SNMP Device {ip} is not reachable by ping. Skipping polling.")
             return
         
         while True:
             # Check if stop was requested (for graceful shutdown)
             current_thread = threading.current_thread()
             if hasattr(current_thread, '_stop_requested') and current_thread._stop_requested:
-                logger.info(f"SNMP polling for {device_name} stopped by request")
+                polling_logger.info(f"SNMP polling for {device_name} stopped by request")
                 break
                 
             try:
@@ -585,7 +585,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                     oid = tag.get('address')  # Using 'address' field for OID
                     
                     if not oid:
-                        logger.warning(f"Tag {tag_name} missing OID address")
+                        polling_logger.warning(f"Tag {tag_name} missing OID address")
                         with _latest_polled_values_lock:
                             _latest_polled_values[device_name][tag_id] = {
                                 "value": None,
@@ -612,7 +612,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                 # Keep as string if not numeric
                                 final_value = raw_value
                             
-                            logger.debug(f"SNMP {device_name} [{tag_name} @ {oid}] = {final_value}")
+                            polling_logger.debug(f"SNMP {device_name} [{tag_name} @ {oid}] = {final_value}")
                             
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {
@@ -623,7 +623,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                 }
                         else:
                             error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
-                            logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
+                            polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": None,
@@ -633,7 +633,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                 }
                     
                     except Exception as e:
-                        logger.error(f"Error polling SNMP tag {tag_name}: {e}")
+                        polling_logger.error(f"Error polling SNMP tag {tag_name}: {e}")
                         with _latest_polled_values_lock:
                             _latest_polled_values[device_name][tag_id] = {
                                 "value": None,
@@ -646,26 +646,26 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                 time.sleep(scan_time_ms / 1000.0)
                 
             except KeyboardInterrupt:
-                logger.info(f"SNMP polling for {device_name} interrupted by user")
+                polling_logger.info(f"SNMP polling for {device_name} interrupted by user")
                 break
             except Exception as e:
-                logger.exception(f"Unexpected error in SNMP polling cycle for {device_name}: {e}")
+                polling_logger.exception(f"Unexpected error in SNMP polling cycle for {device_name}: {e}")
                 time.sleep(5)  # Wait 5 seconds before retrying
             
     except Exception as e:
-        logger.exception(f"Exception in SNMP polling thread for device {device_config.get('name')}: {e}")
+        polling_logger.exception(f"Exception in SNMP polling thread for device {device_config.get('name')}: {e}")
 
 def start_polling_from_config(config):
     # Import here to avoid circular import issues
     from gateway_manager import gateway_manager
     
-    # logger.info('Starting polling from config...')
+    # polling_logger.info('Starting polling from config...')
     if config is None:
-        logger.warning('No configuration provided to start_polling_from_config. Skipping polling setup.')
+        polling_logger.warning('No configuration provided to start_polling_from_config. Skipping polling setup.')
         return
     
     # First, stop all existing polling threads
-    logger.info('Stopping existing polling threads before starting new ones...')
+    polling_logger.info('Stopping existing polling threads before starting new ones...')
     gateway_manager.stop_all_polling_threads()
     
     # Wait a moment for threads to stop
@@ -686,7 +686,7 @@ def start_polling_from_config(config):
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)
                 thread_name = f"tcp-{device_name}"
-                logger.info(f"Starting managed TCP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber')}")
+                polling_logger.info(f"Starting managed TCP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber')}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_modbus_tcp_device,
@@ -699,7 +699,7 @@ def start_polling_from_config(config):
                 # Pass port config to device for serial settings
                 device_with_port = {**device, 'portConfig': port}
                 thread_name = f"rtu-{device_name}"
-                logger.info(f"Starting managed RTU polling thread for device {device_name} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
+                polling_logger.info(f"Starting managed RTU polling thread for device {device_name} on port {port.get('serialSettings', {}).get('port', 'unknown')}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_modbus_rtu_device,
@@ -710,7 +710,7 @@ def start_polling_from_config(config):
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 60000)  # Default to 60 seconds for SNMP
                 thread_name = f"snmp-{device_name}"
-                logger.info(f"Starting managed SNMP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber', 161)}")
+                polling_logger.info(f"Starting managed SNMP polling thread for device {device_name} at {device.get('ipAddress')}:{device.get('portNumber', 161)}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_snmp_device_sync,
@@ -721,7 +721,7 @@ def start_polling_from_config(config):
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)  # Default to 1 second for OPC-UA
                 thread_name = f"opcua-{device_name}"
-                logger.info(f"Starting managed OPC-UA polling thread for device {device_name} at {device.get('opcuaServerUrl')}")
+                polling_logger.info(f"Starting managed OPC-UA polling thread for device {device_name} at {device.get('opcuaServerUrl')}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_opcua_device_sync,
@@ -732,7 +732,7 @@ def start_polling_from_config(config):
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 2000)  # Default to 2 seconds for DNP3
                 thread_name = f"dnp3-{device_name}"
-                logger.info(f"Starting managed DNP3 polling thread for device {device_name} at {device.get('dnp3IpAddress', 'unknown')}:{device.get('dnp3PortNumber', 20000)}")
+                polling_logger.info(f"Starting managed DNP3 polling thread for device {device_name} at {device.get('dnp3IpAddress', 'unknown')}:{device.get('dnp3PortNumber', 20000)}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_dnp3_device_sync,
@@ -743,14 +743,14 @@ def start_polling_from_config(config):
                 tags = device.get('tags', [])
                 scan_time = port.get('scanTime', 1000)  # Default to 1 second for IEC-104
                 thread_name = f"iec104-{device_name}"
-                logger.info(f"Starting managed IEC-104 polling thread for device {device_name} at {device.get('iec104IpAddress', 'unknown')}:{device.get('iec104PortNumber', 2404)}")
+                polling_logger.info(f"Starting managed IEC-104 polling thread for device {device_name} at {device.get('iec104IpAddress', 'unknown')}:{device.get('iec104PortNumber', 2404)}")
                 gateway_manager.start_polling_thread(
                     thread_name,
                     poll_iec104_device_sync,
                     (device, tags, scan_time)
                 )
             else:
-                logger.warning(f"Unknown device type: {device_type} for device {device_name}")
+                polling_logger.warning(f"Unknown device type: {device_type} for device {device_name}")
 
 def stop_all_polling():
     """Stop all active polling threads"""
