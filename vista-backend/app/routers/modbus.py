@@ -11,7 +11,7 @@ from app.services.modbus_service import (
     PYMODBUS_AVAILABLE
 )
 
-router = APIRouter(prefix="/deploy", tags=["modbus"])
+router = APIRouter(prefix="/deploy/api/modbus", tags=["modbus"])
 logger = logging.getLogger(__name__)
 
 
@@ -142,7 +142,7 @@ async def read_register(request: ModbusReadRequest):
         )
 
 
-@router.post("/api/modbus/write")
+@router.post("/write")
 async def write_register(request: ModbusWriteRequest):
     """
     Write a value to a Modbus register.
