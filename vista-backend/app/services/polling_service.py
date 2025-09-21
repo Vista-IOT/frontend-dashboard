@@ -1,16 +1,19 @@
 import time
-import logging
+# Old logging import replaced
 import threading
 from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
 import serial
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
 from app.services.iec104_service import poll_iec104_device_sync, iec104_get_with_error
 
-logger = logging.getLogger(__name__)
+# Initialize specialized loggers
+polling_logger = get_polling_logger()
+error_logger = get_error_logger()
 
 MODBUS_EXCEPTION_CODES = {
     1: "Illegal Function: The function code received in the query is not recognized or allowed.",

@@ -1,4 +1,5 @@
-import logging
+# Old logging import replaced
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
 import time
 import threading
 import socket
@@ -7,7 +8,9 @@ from typing import Dict, Any, Optional, Union, List, Tuple
 from datetime import datetime
 import asyncio
 
-logger = logging.getLogger(__name__)
+# Initialize specialized loggers
+polling_logger = get_polling_logger()
+error_logger = get_error_logger()
 
 # =====================
 # DNP3 Constants & Maps
