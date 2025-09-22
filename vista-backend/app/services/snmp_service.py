@@ -1,4 +1,6 @@
+# Updated to use centralized polling logger
 import asyncio
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
 import logging
 import subprocess
 import time
@@ -32,14 +34,14 @@ try:
         usmAesCfb256Protocol,
     )
     PYSNMP_AVAILABLE = True
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.info("pysnmp library loaded successfully")
 except ImportError as e:
     PYSNMP_AVAILABLE = False
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.warning(f"pysnmp library not available: {e}. Falling back to command-line tools.")
 
-logger = logging.getLogger(__name__)
+logger = get_polling_logger()
 
 # Protocol mapping for pysnmp (only if available)
 if PYSNMP_AVAILABLE:

@@ -1,10 +1,13 @@
+# Updated to use centralized polling logger
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+
 import c104
 import time
 import logging
 from typing import Dict, Any, List, Tuple, Optional
 from enum import IntEnum
 
-logger = logging.getLogger(__name__)
+logger = get_polling_logger()
 
 # IEC 60870-5-104 Protocol Constants (for backward compatibility)
 class TypeID(IntEnum):

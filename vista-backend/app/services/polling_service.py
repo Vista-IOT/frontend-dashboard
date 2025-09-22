@@ -5,7 +5,7 @@ from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
 import serial
-from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context, get_startup_logger
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
@@ -41,19 +41,19 @@ def get_latest_polled_values():
 
 def ping_host(ip, count=2, timeout=1):
     try:
-        # polling_logger.info(f"Attempting to ping {ip} with count={count}, timeout={timeout}")
-        # polling_logger.info(f"Running as: {subprocess.run(['whoami'], capture_output=True, text=True).stdout.strip()}")
+        polling_logger.info(f"Attempting to ping {ip} with count={count}, timeout={timeout}")
+        polling_logger.info(f"Running as: {subprocess.run(['whoami'], capture_output=True, text=True).stdout.strip()}")
         result = subprocess.run(
             ['ping', '-c', str(count), '-W', str(timeout), ip],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        # polling_logger.info(f"Ping command exit code: {result.returncode}")
-        # polling_logger.info(f"Ping stdout: {result.stdout}")
+        polling_logger.info(f"Ping command exit code: {result.returncode}")
+        polling_logger.info(f"Ping stdout: {result.stdout}")
         if result.stderr:
-            # polling_logger.info(f"Ping stderr: {result.stderr}")
+            polling_logger.info(f"Ping stderr: {result.stderr}")
             pass
         if result.returncode == 0:
-            # polling_logger.info(f"Ping to {ip} successful")
+            polling_logger.info(f"Ping to {ip} successful")
             return True, None
         else:
             err = f"Ping to {ip} failed:\n{result.stdout}\n{result.stderr}"
@@ -148,9 +148,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         ip = device_config.get('ipAddress')
         port = device_config.get('portNumber', 502)
         unit = device_config.get('unitNumber', 1)
-        # polling_logger.info(
-        #     f"Polling Modbus TCP device: id={device_id}, name={device_name}, ip={ip}, port={port}, unit={unit}, scan_time_ms={scan_time_ms}"
-        # )
+        polling_logger.info(f"Polling Modbus TCP device: id={device_id}, name={device_name}, ip={ip}, port={port}, unit={unit}, scan_time_ms={scan_time_ms}")
         ping_ok, ping_err = ping_host(ip)
         with _latest_polled_values_lock:
             if device_name not in _latest_polled_values:
@@ -165,11 +163,11 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         "timestamp": int(time.time()),
                     }
         if not ping_ok:
-            # polling_logger.error(f"Device {ip} is not reachable by ping. Skipping polling.")
+            polling_logger.error(f"Device {ip} is not reachable by ping. Skipping polling.")
             return
         client = ModbusTcpClient(ip, port=port)
         if not client.connect():
-            # polling_logger.error(f"Failed to connect to {ip}:{port}")
+            polling_logger.error(f"Failed to connect to {ip}:{port}")
             with _latest_polled_values_lock:
                 for tag in tags:
                     tag_id = tag.get('id', 'UnknownTagID')
@@ -180,7 +178,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         "timestamp": int(time.time()),
                     }
             return False
-        # polling_logger.info(f"Connected to {ip}:{port}")
+        polling_logger.info(f"Connected to {ip}:{port}")
         addresses = []
         for tag in tags:
             try:
@@ -192,7 +190,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 # polling_logger.error(f"Invalid address for tag {tag.get('name')}: {e}")
                 pass
         if not addresses:
-            # polling_logger.warning(f"No valid addresses found for device {device_name}")
+            polling_logger.warning(f"No valid addresses found for device {device_name}")
             return
         min_addr = min(addresses)
         max_registers_needed = 0
@@ -204,7 +202,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
             registers_needed = 2 if length_bit == 32 else 1
             max_registers_needed = max(max_registers_needed, addr + registers_needed - min_addr)
         count = max_registers_needed
-        # polling_logger.info(f"Reading {count} registers starting from address {min_addr} (calculated from tag configurations)")
+        polling_logger.info(f"Reading {count} registers starting from address {min_addr} (calculated from tag configurations)")
         # Modbus protocol allows a maximum of 125 registers per read
         MAX_REGISTERS_PER_READ = 125
 
@@ -226,7 +224,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                     except Exception as exc:
                         now = int(time.time())
                         error_msg = str(exc)
-                        # polling_logger.error(f"Exception during Modbus read: {error_msg}")
+                        polling_logger.error(f"Exception during Modbus read: {error_msg}")
                         with _latest_polled_values_lock:
                             for tag in tags:
                                 tag_id = tag.get('id', 'UnknownTagID')
@@ -239,7 +237,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                         time.sleep(scan_time_ms / 1000.0)
                         break
                     if result.isError():
-                        # polling_logger.error(f"Error reading registers from {device_name}: {result}")
+                        polling_logger.error(f"Error reading registers from {device_name}: {result}")
                         verbose_msg = None
                         if hasattr(result, 'exception_code'):
                             code = result.exception_code
@@ -265,7 +263,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                 else:
                     # Only process tags if all reads succeeded
                     now = int(time.time())
-                    # polling_logger.info(f"Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
+                    polling_logger.info(f"Raw registers [{min_addr}-{min_addr+count-1}]: {all_registers}")
                     with _latest_polled_values_lock:
                         for tag in tags:
                             tag_id = tag.get('id', 'UnknownTagID')
@@ -278,7 +276,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     reg_addr = address
                                 pos = reg_addr - min_addr
                                 converted_value = convert_register_value(all_registers, pos, tag)
-                                # polling_logger.info(f"{device_name} [{tag_name} @ {address}] = {converted_value} ({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
+                                polling_logger.info(f"{device_name} [{tag_name} @ {address}] = {converted_value} ({get_tag_conversion_type(tag)}, {get_tag_length_bit(tag)}-bit)")
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": converted_value,
                                     "status": "ok",
@@ -286,7 +284,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "timestamp": now,
                                 }
                             except Exception as e:
-                                # polling_logger.error(f"Error processing tag {tag_name}: {e}")
+                                polling_logger.error(f"Error processing tag {tag_name}: {e}")
                                 _latest_polled_values[device_name][tag_id] = {
                                     "value": None,
                                     "status": "conversion_error",
@@ -297,7 +295,7 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
         finally:
             client.close()
     except Exception as e:
-        # polling_logger.exception(f"Exception in polling thread for device {device_config.get('name')}: {e}")
+        polling_logger.exception(f"Exception in polling thread for device {device_config.get('name')}: {e}")
         pass
 
 def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
@@ -755,7 +753,11 @@ def start_polling_from_config(config):
 def stop_all_polling():
     """Stop all active polling threads"""
     from gateway_manager import gateway_manager
-    return gateway_manager.stop_all_polling_threads()
+    startup_logger = get_startup_logger()
+    startup_logger.info("🛑 Stopping all polling threads for configuration deployment...")
+    stopped_count = gateway_manager.stop_all_polling_threads()
+    startup_logger.info(f"🛑 Successfully stopped {stopped_count} polling threads")
+    return stopped_count
 
 def get_polling_threads_status():
     """Get status of all polling threads"""

@@ -80,18 +80,35 @@ async def test_connection(request: ModbusTestConnectionRequest):
         
         success, error = await test_modbus_connection(modbus_config)
         
-        return ModbusResponse(
-            success=success,
-            data={"connected": success} if success else None,
-            error=error
-        )
+        if error:
+            logger.error(f"[MODBUS TEST] FAILED to connect to {modbus_config.ip_address}:{modbus_config.port_number}: {error}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    'success': False,
+                    'error': error,
+                    'endpoint': f"{modbus_config.ip_address}:{modbus_config.port_number}",
+                    'operation': 'modbus_test_connection'
+                }
+            )
+        else:
+            logger.info(f"[MODBUS TEST] SUCCESS: Connected to {modbus_config.ip_address}:{modbus_config.port_number}")
+            return ModbusResponse(
+                success=True,
+                data={"connected": True, "endpoint": f"{modbus_config.ip_address}:{modbus_config.port_number}"},
+                error=None
+            )
         
     except Exception as e:
-        logger.error(f"Error testing Modbus TCP connection: {e}")
-        return ModbusResponse(
-            success=False,
-            data=None,
-            error=str(e)
+        logger.error(f"[MODBUS TEST] EXCEPTION testing connection to {request.ipAddress}:{request.portNumber}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                'success': False,
+                'error': str(e),
+                'endpoint': f"{request.ipAddress}:{request.portNumber}",
+                'operation': 'modbus_test_connection'
+            }
         )
 
 
@@ -116,10 +133,25 @@ async def read_register(request: ModbusReadRequest):
         )
         
         if error:
-            return ModbusResponse(
-                success=False,
-                data=None,
-                error=error
+            logger.error(f"[MODBUS READ] FAILED to read register {request.address}: {error}")
+            # Determine appropriate HTTP status code based on error type
+            if 'Failed to connect' in error or 'Connection' in error:
+                http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+            elif 'timeout' in error.lower() or 'timed out' in error.lower():
+                http_status = status.HTTP_408_REQUEST_TIMEOUT
+            elif 'Invalid' in error or 'illegal' in error.lower():
+                http_status = status.HTTP_400_BAD_REQUEST
+            else:
+                http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
+                
+            raise HTTPException(
+                status_code=http_status,
+                detail={
+                    'success': False,
+                    'error': error,
+                    'address': request.address,
+                    'operation': 'modbus_read'
+                }
             )
         else:
             return ModbusResponse(
@@ -133,12 +165,19 @@ async def read_register(request: ModbusReadRequest):
                 error=None
             )
             
+    except HTTPException:
+        # Re-raise HTTP exceptions (from error handling above)
+        raise
     except Exception as e:
-        logger.error(f"Error reading Modbus register {request.address}: {e}")
-        return ModbusResponse(
-            success=False,
-            data=None,
-            error=str(e)
+        logger.error(f"[MODBUS READ] EXCEPTION reading register {request.address}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                'success': False,
+                'error': str(e),
+                'address': request.address,
+                'operation': 'modbus_read'
+            }
         )
 
 
@@ -181,10 +220,25 @@ async def write_register(request: ModbusWriteRequest):
         
         if error:
             logger.error(f"[MODBUS WRITE] FAILED to write to register {request.address} on {device_endpoint}: {error}")
-            return ModbusResponse(
-                success=False,
-                data=None,
-                error=error
+            # Determine appropriate HTTP status code based on error type
+            if 'Failed to connect' in error or 'Connection' in error:
+                http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+            elif 'timeout' in error.lower() or 'timed out' in error.lower():
+                http_status = status.HTTP_408_REQUEST_TIMEOUT
+            elif 'Invalid' in error or 'illegal' in error.lower():
+                http_status = status.HTTP_400_BAD_REQUEST
+            else:
+                http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
+                
+            raise HTTPException(
+                status_code=http_status,
+                detail={
+                    'success': False,
+                    'error': error,
+                    'device': device_endpoint,
+                    'address': request.address,
+                    'operation': 'modbus_write'
+                }
             )
         else:
             logger.info(f"[MODBUS WRITE] SUCCESS: Wrote value {request.value} to register {request.address} on {device_endpoint}")
@@ -201,12 +255,19 @@ async def write_register(request: ModbusWriteRequest):
                 error=None
             )
             
+    except HTTPException:
+        # Re-raise HTTP exceptions (from error handling above)
+        raise
     except Exception as e:
         logger.error(f"[MODBUS WRITE] EXCEPTION writing to register {request.address}: {e}")
-        return ModbusResponse(
-            success=False,
-            data=None,
-            error=str(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                'success': False,
+                'error': str(e),
+                'address': request.address,
+                'operation': 'modbus_write'
+            }
         )
 
 

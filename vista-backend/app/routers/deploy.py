@@ -9,6 +9,7 @@ from typing import Dict, Any
 from app.services.initializer import initialize_backend
 from app.services.hardware_configurator import apply_network_configuration
 from app.utils.config_summary import generate_config_summary
+from app.logging_config import get_startup_logger
 from app.services.polling_service import get_latest_polled_values, stop_all_polling, get_polling_threads_status
 import threading
 from pathlib import Path
@@ -17,6 +18,7 @@ import time
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+startup_logger = get_startup_logger()
 
 router = APIRouter(
     prefix="/deploy",
@@ -33,19 +35,20 @@ def restart_backend():
         # Get the script directory (where run.py and deployment scripts are)
         script_dir = Path(__file__).parent.parent.parent  # Go up from app/routers/ to root
         
+        startup_logger.info("🔄 Backend restart requested - switching to deployment script")
         logger.info("Initiating backend restart with new configuration...")
         
-        # Use the deployment script for proper process management
-        deploy_script = script_dir / "deploy.py"
-        if deploy_script.exists():
-            # Run the deployment script with restart command
+        # Use the deployment wrapper script for proper process management
+        deploy_wrapper = script_dir / "deploy_wrapper.py"
+        if deploy_wrapper.exists():
+            # Run the deployment wrapper with restart command
+            # The wrapper will log all output to startup.log
             subprocess.Popen(
-                [sys.executable, str(deploy_script), "restart"],
+                [sys.executable, str(deploy_wrapper), "restart"],
                 cwd=str(script_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
                 start_new_session=True
             )
+            startup_logger.info("🚀 Backend deployment restart initiated - output will be logged to startup.log")
             logger.info("Backend deployment restart initiated successfully")
         else:
             logger.warning(f"Deployment script not found. Falling back to initialization only.")
@@ -84,10 +87,15 @@ async def deploy_config(request: Request):
             import time
             time.sleep(1)  # Give time for response to be sent
             try:
+                startup_logger.info("🔄 " + "="*60)
+                startup_logger.info("🔄 CONFIGURATION DEPLOYMENT - CLEAN RESTART INITIATED")
+                startup_logger.info("🔄 " + "="*60)
                 logger.info("Performing clean restart to deploy new configuration...")
                 
                 # First, stop all existing polling threads
+                startup_logger.info("🛑 Stopping all existing polling threads before restart...")
                 stopped_count = stop_all_polling()
+                startup_logger.info(f"🛑 Successfully stopped {stopped_count} polling threads")
                 logger.info(f"Stopped {stopped_count} existing polling threads")
                 
                 # Give threads a moment to fully stop
@@ -128,6 +136,9 @@ async def reinit_backend():
     This endpoint requires root privileges for network interface configuration.
     """
     try:
+        startup_logger.info("🔄 " + "="*45)
+        startup_logger.info("🔄 BACKEND REINITIALIZATION REQUESTED")
+        startup_logger.info("🔄 " + "="*45)
         logger.info("Backend reinitialization requested via /deploy/reinit")
         
         # Check if we're running with sufficient privileges for network configuration
@@ -161,14 +172,5 @@ async def reinit_backend():
 @router.get("/api/io/polled-values")
 def get_polled_values():
     values = get_latest_polled_values()
-    logger.info(f"Polled values: {values}")
-    
-    # Log each tag's value or error message
-    for device_name, tags in values.items():
-        for tag_id, tag_info in tags.items():
-            if tag_info['status'] in ['ok', 'good']:
-                logger.info(f"Tag {tag_id} from device {device_name} polled successfully with value: {tag_info['value']}")
-            else:
-                logger.error(f"Tag {tag_id} from device {device_name} failed to poll with error: {tag_info['error']}")
     
     return JSONResponse(values)

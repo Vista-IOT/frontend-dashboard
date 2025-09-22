@@ -15,12 +15,25 @@ from starlette.types import Message
 class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware to log all API requests and responses with timing"""
     
+    # Endpoints to exclude from API logging (high-frequency endpoints)
+    IGNORED_ENDPOINTS = [
+        "/deploy/api/io/polled-values",
+        "/api/dashboard/overview"
+    ]
+    
     def __init__(self, app, log_body: bool = False):
         super().__init__(app)
         self.log_body = log_body
         self.api_logger = get_api_logger()
         self.perf_logger = get_performance_logger()
         self.security_logger = get_security_logger()
+
+    def _should_log_endpoint(self, url: str) -> bool:
+        """Check if endpoint should be logged (returns False for ignored endpoints)"""
+        from urllib.parse import urlparse
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        return path not in self.IGNORED_ENDPOINTS
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Start timing
@@ -56,7 +69,8 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         if request_body:
             request_data['body'] = self._sanitize_body(request_body)
         
-        self.api_logger.info(f"API Request: {method} {url}", extra={'extra_data': request_data})
+        if self._should_log_endpoint(url):
+            self.api_logger.info(f"API Request: {method} {url}", extra={'extra_data': request_data})
         
         # Security logging for suspicious patterns
         self._log_security_events(request, client_ip, user_agent)
@@ -115,9 +129,10 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         else:
             log_level = 'info'
         
-        getattr(self.api_logger, log_level)(
-            f"API Response: {method} {url} - {status_code} ({process_time*1000:.2f}ms)",
-            extra={'extra_data': response_data}
+        if self._should_log_endpoint(url):
+            getattr(self.api_logger, log_level)(
+                f"API Response: {method} {url} - {status_code} ({process_time*1000:.2f}ms)",
+                extra={'extra_data': response_data}
         )
         
         # Performance logging for slow requests
@@ -221,6 +236,13 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.max_size = max_size
         self.security_logger = get_security_logger()
+
+    def _should_log_endpoint(self, url: str) -> bool:
+        """Check if endpoint should be logged (returns False for ignored endpoints)"""
+        from urllib.parse import urlparse
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        return path not in self.IGNORED_ENDPOINTS
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         content_length = request.headers.get('content-length')

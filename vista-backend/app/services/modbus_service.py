@@ -1,3 +1,6 @@
+# Updated to use centralized polling logger
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+
 import logging
 import time
 import struct
@@ -10,14 +13,14 @@ try:
     from pymodbus.exceptions import ModbusException, ConnectionException
     from pymodbus.pdu import ExceptionResponse
     PYMODBUS_AVAILABLE = True
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.info("pymodbus library loaded successfully")
 except ImportError as e:
     PYMODBUS_AVAILABLE = False
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.warning(f"pymodbus library not available: {e}. Modbus functionality will be limited.")
 
-logger = logging.getLogger(__name__)
+logger = get_polling_logger()
 
 # Modbus function codes
 MODBUS_READ_COILS = 1

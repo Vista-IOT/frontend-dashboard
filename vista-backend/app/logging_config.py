@@ -139,6 +139,7 @@ class LoggingManager:
     def setup_all_loggers(self):
         """Setup all application loggers"""
         loggers_config = {
+            'startup': {'console_level': logging.INFO, 'file_level': logging.DEBUG, 'use_json': False},
             'api': {'console_level': logging.INFO, 'file_level': logging.DEBUG, 'use_json': True},
             'polling': {'console_level': logging.INFO, 'file_level': logging.DEBUG, 'use_json': False},
             'system': {'console_level': logging.INFO, 'file_level': logging.INFO, 'use_json': False},
@@ -157,19 +158,23 @@ class LoggingManager:
     
     def log_startup_info(self):
         """Log application startup information"""
-        system_logger = self.get_logger('system')
-        system_logger.info("="*60)
-        system_logger.info("Vista IoT Backend Starting Up")
-        system_logger.info("="*60)
-        system_logger.info(f"Log directory: {self.base_dir}")
-        system_logger.info(f"Startup time: {datetime.now().isoformat()}")
-        system_logger.info("Logging system initialized successfully")
+        startup_logger = self.get_logger('startup')
+        startup_logger.info("="*60)
+        startup_logger.info("Vista IoT Backend Starting Up")
+        startup_logger.info("="*60)
+        startup_logger.info(f"Log directory: {self.base_dir}")
+        startup_logger.info(f"Startup time: {datetime.now().isoformat()}")
+        startup_logger.info("Logging system initialized successfully")
 
 
 # Global logging manager instance
 log_manager = LoggingManager()
 
 # Convenience functions for getting loggers
+def get_startup_logger() -> logging.Logger:
+    """Get the startup/initialization logger"""
+    return log_manager.get_logger('startup')
+
 def get_api_logger() -> logging.Logger:
     """Get the API logger"""
     return log_manager.get_logger('api')

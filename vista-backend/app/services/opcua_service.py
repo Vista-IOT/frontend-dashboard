@@ -1,3 +1,6 @@
+# Updated to use centralized polling logger
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+
 import asyncio
 import logging
 import time
@@ -11,14 +14,14 @@ try:
     from asyncua.common.node import Node
     from asyncua.crypto.security_policies import SecurityPolicyBasic256Sha256, SecurityPolicyBasic256, SecurityPolicyBasic128Rsa15
     ASYNCUA_AVAILABLE = True
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.info("asyncua library loaded successfully")
 except ImportError as e:
     ASYNCUA_AVAILABLE = False
-    logger = logging.getLogger(__name__)
+    logger = get_polling_logger()
     logger.warning(f"asyncua library not available: {e}. OPC-UA functionality will be limited.")
 
-logger = logging.getLogger(__name__)
+logger = get_polling_logger()
 
 # Security policy mapping
 SECURITY_POLICIES = {

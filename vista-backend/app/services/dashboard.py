@@ -25,7 +25,7 @@ class DashboardService:
         Returns a dict with status and data keys.
         """
         try:
-            logger.info("Processing dashboard overview request")
+            logger.debug("Processing dashboard overview request")
             
             # System info - Using native commands for better accuracy
             cpu = 0
