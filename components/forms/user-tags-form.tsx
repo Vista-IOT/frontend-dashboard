@@ -46,7 +46,11 @@ import {
 
 import { useConfigStore } from "@/lib/stores/configuration-store";
 import type { UserTag } from "@/lib/stores/configuration-store";
-import type { UserTagFormValues } from "@/lib/stores/configuration-store"; // if it's there too
+import type { UserTagFormValues } from "@/lib/stores/configuration-store";
+
+// Import CSV components
+import { CSVImportExport } from "@/components/common/csv-import-export";
+import { userTagColumns, validateUserTag } from "@/lib/csv-configs";
 
 // Tag Dialog Component for both adding and editing tags
 function TagDialog({
@@ -105,113 +109,60 @@ function TagDialog({
         setDescriptor1("");
         setDiscreteValue("0");
       }
+      setIsNameTouched(false);
     }
   }, [open, editTag]);
-  const { getConfig } = useConfigStore();
-  const handleSubmit = () => {
-    setIsNameTouched(true);
 
+  const handleSubmit = () => {
     const errors: string[] = [];
 
-    // --- Name Validation ---
+    // --- Tag name validation ---
     if (!tagName.trim()) {
-      errors.push("Tag name is required.");
+      errors.push("User tag name is required.");
     } else {
       if (tagName.length < 3) {
-        errors.push("Tag name must be at least 3 characters.");
+        errors.push("User tag name must be at least 3 characters long.");
       }
       if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
         errors.push(
-          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+          "User tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
         );
       }
-      if (/^\s|\s$/.test(tagName)) {
-        errors.push("Tag name cannot start or end with spaces.");
-      }
       if (/^\d+$/.test(tagName)) {
-        errors.push("Tag name cannot be only numbers.");
+        errors.push("User tag name cannot be all numbers.");
       }
-
-      // Uniqueness
-      const allTags: UserTag[] = getConfig().user_tags;
-      const nameExists = allTags.some(
-        (tag) =>
-          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
-          tag.id !== editTag?.id
-      );
-
-      if (nameExists) {
-        errors.push("A tag with this name already exists.");
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("User tag name cannot start or end with a space.");
       }
     }
 
-    // --- Data Type Validation ---
-    const validTypes = ["Analog", "Discrete"];
-    if (!validTypes.includes(dataType)) {
-      errors.push("Invalid data type selected.");
-    }
-
-    // --- Analog-specific validations ---
-    if (dataType === "Analog") {
-      const high = parseFloat(spanHigh);
-      const low = parseFloat(spanLow);
-      const defaultVal = parseFloat(defaultValue);
-
-      if (isNaN(high) || isNaN(low)) {
-        errors.push("Span High and Span Low must be valid numbers.");
-      } else if (low >= high) {
-        errors.push("Span Low must be less than Span High.");
-      }
-
-      if (isNaN(defaultVal)) {
-        errors.push("Default value must be a valid number.");
-      }
-    }
-
-    // --- Discrete-specific validations ---
-    if (dataType === "Discrete") {
-      if (!descriptor0.trim() || !descriptor1.trim()) {
-        errors.push("Both descriptors are required for Discrete tags.");
-      }
-      if (descriptor0.length > 25 || descriptor1.length > 25) {
-        errors.push("Descriptors should be under 25 characters.");
-      }
-      if (!/[a-zA-Z0-9]/.test(descriptor0) || !/[a-zA-Z0-9]/.test(descriptor1)) {
-        errors.push("Descriptors must contain letters or numbers.");
-      }
-    }
-
-    // --- Description validation (optional) ---
+    // --- Description validation ---
     if (description && description.length > 100) {
       errors.push("Description should not exceed 100 characters.");
     }
     if (description && !/[a-zA-Z0-9]/.test(description)) {
-      errors.push("Description must contain letters or numbers.");
+      errors.push("Description should include some letters or numbers.");
     }
 
-    // --- Display errors ---
     if (errors.length > 0) {
-      errors.forEach((err) =>
-        toast.error(err, {
-          duration: 4000,
-        })
-      );
+      toast.error(errors[0], { duration: 5000 });
       return;
     }
 
-    // --- Construct Tag Object ---
-    const tagData = {
-      id: editTag ? editTag.id : Date.now(),
+    const tagData: UserTagFormValues = {
+      id: editTag?.id || Date.now().toString(),
       name: tagName,
-      dataType: dataType,
+      dataType,
       defaultValue:
-        dataType === "Analog" ? parseFloat(defaultValue) : discreteValue,
-      spanHigh: dataType === "Analog" ? parseFloat(spanHigh) : "1",
-      spanLow: dataType === "Analog" ? parseFloat(spanLow) : "0",
-      descriptor0: dataType === "Discrete" ? descriptor0 : "",
-      descriptor1: dataType === "Discrete" ? descriptor1 : "",
-      readWrite: readWrite,
-      description: description,
+        dataType === "Analog"
+          ? parseFloat(defaultValue)
+          : parseInt(discreteValue),
+      spanHigh: parseFloat(spanHigh),
+      spanLow: parseFloat(spanLow),
+      readWrite,
+      description,
+      descriptor0: dataType === "Discrete" ? descriptor0 : undefined,
+      descriptor1: dataType === "Discrete" ? descriptor1 : undefined,
     };
 
     onSaveTag(tagData, !!editTag);
@@ -220,157 +171,142 @@ function TagDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            {editTag ? "Edit Tag" : "New Tag"}
+          <DialogTitle>
+            {editTag ? "Edit User Tag" : "Add New User Tag"}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="p-4 border rounded-md">
-          <div className="font-medium flex items-center gap-2 mb-4">
-            <FileText className="h-4 w-4" />
-            Basic
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="tag-name">Tag Name</Label>
+            <Input
+              id="tag-name"
+              value={tagName}
+              onChange={(e) => {
+                setTagName(e.target.value);
+                setIsNameTouched(true);
+              }}
+              placeholder="Enter tag name"
+            />
           </div>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-              <Label htmlFor="tag-name" className="flex items-center gap-1">
-                Name: <span className="text-red-500">*</span>
-              </Label>
+          <div>
+            <Label htmlFor="data-type">Data Type</Label>
+            <Select value={dataType} onValueChange={setDataType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select data type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Analog">Analog</SelectItem>
+                <SelectItem value="Discrete">Discrete</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {dataType === "Analog" ? (
+            <>
               <div>
+                <Label htmlFor="default-value">Default Value</Label>
                 <Input
-                  id="tag-name"
-                  value={tagName}
-                  onChange={(e) => setTagName(e.target.value)}
-                  onBlur={() => setIsNameTouched(true)}
-                  placeholder="Enter name"
-                  className={
-                    isNameTouched && !tagName.trim() ? "border-red-500" : ""
-                  }
+                  id="default-value"
+                  value={defaultValue}
+                  onChange={(e) => setDefaultValue(e.target.value)}
+                  placeholder="Enter default value"
                 />
-                {isNameTouched && !tagName.trim() && (
-                  <p className="text-sm text-red-500 mt-1">Name is required.</p>
-                )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-              <Label htmlFor="data-type">Data Type:</Label>
-              <Select value={dataType} onValueChange={setDataType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select data type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Analog">Analog</SelectItem>
-                  <SelectItem value="Discrete">Discrete</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {dataType === "Analog" ? (
-              <>
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="default-value">Default Value:</Label>
-                  <Input
-                    id="default-value"
-                    value={defaultValue}
-                    onChange={(e) => setDefaultValue(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="span-high">Span High:</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="span-high">Span High</Label>
                   <Input
                     id="span-high"
                     value={spanHigh}
                     onChange={(e) => setSpanHigh(e.target.value)}
+                    placeholder="High value"
                   />
                 </div>
-
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="span-low">Span Low:</Label>
+                <div>
+                  <Label htmlFor="span-low">Span Low</Label>
                   <Input
                     id="span-low"
                     value={spanLow}
                     onChange={(e) => setSpanLow(e.target.value)}
+                    placeholder="Low value"
                   />
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="default-value">Default Value:</Label>
-                  <RadioGroup
-                    value={discreteValue}
-                    onValueChange={setDiscreteValue}
-                    className="flex items-center gap-4"
-                  >
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="0" id="value-0" />
-                      <Label htmlFor="value-0">0</Label>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="1" id="value-1" />
-                      <Label htmlFor="value-1">1</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="descriptor-0">Descriptor 0:</Label>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label>Default Value</Label>
+                <RadioGroup value={discreteValue} onValueChange={setDiscreteValue}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="0" id="r1" />
+                    <Label htmlFor="r1">0</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="1" id="r2" />
+                    <Label htmlFor="r2">1</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="descriptor0">Descriptor for 0</Label>
                   <Input
-                    id="descriptor-0"
+                    id="descriptor0"
                     value={descriptor0}
                     onChange={(e) => setDescriptor0(e.target.value)}
+                    placeholder="e.g. Off"
                   />
                 </div>
-
-                <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                  <Label htmlFor="descriptor-1">Descriptor 1:</Label>
+                <div>
+                  <Label htmlFor="descriptor1">Descriptor for 1</Label>
                   <Input
-                    id="descriptor-1"
+                    id="descriptor1"
                     value={descriptor1}
                     onChange={(e) => setDescriptor1(e.target.value)}
+                    placeholder="e.g. On"
                   />
                 </div>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-              <Label htmlFor="read-write">Read Write:</Label>
-              <Select value={readWrite} onValueChange={setReadWrite}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select access type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Read/Write">Read/Write</SelectItem>
-                  <SelectItem value="Read Only">Read Only</SelectItem>
-                  <SelectItem value="Write Only">Write Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <Label htmlFor="read-write">Read/Write</Label>
+            <Select value={readWrite} onValueChange={setReadWrite}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select access type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Read/Write">Read/Write</SelectItem>
+                <SelectItem value="Read Only">Read Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="grid grid-cols-[120px_1fr] items-start gap-2">
-              <Label htmlFor="description" className="pt-2">
-                Description:
-              </Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="min-h-[100px]"
-              />
-            </div>
+          <div>
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter description (optional)"
+              rows={2}
+            />
           </div>
         </div>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>OK</Button>
+          <Button onClick={handleSubmit}>
+            {editTag ? "Update Tag" : "Add Tag"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -434,6 +370,24 @@ export function UserTagsForm() {
     }
   };
 
+  // CSV Import handler
+  const handleCSVImport = (importedTags: UserTag[]) => {
+    // Check for duplicate names
+    const existingNames = userTags.map(tag => tag.name.toLowerCase());
+    const duplicates = importedTags.filter(tag => 
+      existingNames.includes(tag.name.toLowerCase())
+    );
+
+    if (duplicates.length > 0) {
+      toast.error(`Cannot import tags with duplicate names: ${duplicates.map(t => t.name).join(', ')}`, { duration: 5000 });
+      return;
+    }
+
+    // Add imported tags to existing ones
+    const updatedTags = [...userTags, ...importedTags];
+    updateConfig(["user_tags"], updatedTags);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -441,34 +395,46 @@ export function UserTagsForm() {
         <CardDescription>Configure custom user-defined tags</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Button onClick={handleAddTag} className="flex items-center gap-1">
-            <Plus className="h-4 w-4" />
-            Add
-          </Button>
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <Button onClick={handleAddTag} className="flex items-center gap-1">
+              <Plus className="h-4 w-4" />
+              Add
+            </Button>
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    variant="outline"
-                    onClick={handleDeleteTag}
-                    className="flex items-center gap-1"
-                    disabled={userTags.length === 0}
-                  >
-                    <X className="h-4 w-4" />
-                    Delete
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {userTags.length === 0 && (
-                <TooltipContent>
-                  No user tags available to delete
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="outline"
+                      onClick={handleDeleteTag}
+                      className="flex items-center gap-1"
+                      disabled={userTags.length === 0}
+                    >
+                      <X className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {userTags.length === 0 && (
+                  <TooltipContent>
+                    No user tags available to delete
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* CSV Import/Export */}
+          <CSVImportExport
+            data={userTags}
+            filename="user_tags.csv"
+            columns={userTagColumns}
+            onImport={handleCSVImport}
+            validateRow={validateUserTag}
+            disabled={false}
+          />
         </div>
 
         <div className="border rounded-md">
@@ -480,7 +446,7 @@ export function UserTagsForm() {
                 <TableHead>Default Value</TableHead>
                 <TableHead>Span High</TableHead>
                 <TableHead>Span Low</TableHead>
-                <TableHead>Read Write</TableHead>
+                <TableHead>Read/Write</TableHead>
                 <TableHead>Description</TableHead>
               </TableRow>
             </TableHeader>

@@ -39,6 +39,10 @@ import { toast } from "sonner";
 import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
+// Import CSV components
+import { CSVImportExport } from "@/components/common/csv-import-export";
+import { statsTagColumns, validateStatsTag } from "@/lib/csv-configs";
+
 function StatsTagDialog({
   open,
   onOpenChange,
@@ -71,8 +75,8 @@ function StatsTagDialog({
         setTagName(editTag.name || "");
         setTagType(editTag.type || "Average");
         setReferTag(editTag.referTag || "");
-        setUpdateCycle(editTag.updateCycle || "60");
-        setUpdateUnit(editTag.updateUnit || "sec");
+        setUpdateCycle(editTag.updateCycleValue || "60");
+        setUpdateUnit(editTag.updateCycleUnit || "sec");
         setDescription(editTag.description || "");
       } else {
         setTagName("");
@@ -98,70 +102,44 @@ function StatsTagDialog({
       errors.push("Stats tag name is required.");
     } else {
       if (tagName.length < 3) {
-        errors.push("Stats tag name must be at least 3 characters.");
+        errors.push("Stats tag name must be at least 3 characters long.");
       }
       if (!/^[a-zA-Z0-9-_]+$/.test(tagName)) {
         errors.push(
-          "Tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
+          "Stats tag name can only contain letters, numbers, hyphens (-), and underscores (_)."
         );
       }
-      if (/^\s|\s$/.test(tagName)) {
-        errors.push("Tag name cannot start or end with spaces.");
-      }
       if (/^\d+$/.test(tagName)) {
-        errors.push("Tag name cannot be only numbers.");
+        errors.push("Stats tag name cannot be all numbers.");
       }
-
-      const nameExists = statsTags.some(
-        (tag) =>
-          tag.name.trim().toLowerCase() === tagName.trim().toLowerCase() &&
-          tag.id !== editTag?.id
-      );
-      if (nameExists) {
-        errors.push("A stats tag with this name already exists.");
+      if (/^\s|\s$/.test(tagName)) {
+        errors.push("Stats tag name cannot start or end with a space.");
       }
     }
 
-    // --- Refer tag validation ---
+    // --- Refer Tag validation ---
     if (!referTag.trim()) {
-      errors.push("Refer Tag is required.");
-    }
-
-    // --- Update Cycle validation ---
-    if (
-      updateCycle !== "" &&
-      (!/^\d+$/.test(updateCycle) || parseInt(updateCycle) <= 0)
-    ) {
-      errors.push("Update cycle must be a positive number.");
+      errors.push("Reference tag is required.");
     }
 
     // --- Description validation ---
     if (description && description.length > 100) {
       errors.push("Description should not exceed 100 characters.");
     }
-    if (description && !/[a-zA-Z0-9]/.test(description)) {
-      errors.push("Description should contain letters or numbers.");
-    }
 
-    // --- Display errors if any ---
     if (errors.length > 0) {
-      errors.forEach((err) =>
-        toast.error(err, {
-          duration: 4000,
-        })
-      );
+      toast.error(errors[0], { duration: 5000 });
       return;
     }
 
-    // --- All validations passed ---
     const tagData = {
-      id: editTag ? editTag.id : Date.now(),
+      id: editTag?.id || Date.now().toString(),
       name: tagName,
       type: tagType,
-      referTag: referTag,
-      updateCycle: updateCycle,
-      updateUnit: updateUnit,
-      description: description,
+      referTag,
+      updateCycleValue: parseInt(updateCycle) || 60,
+      updateCycleUnit: updateUnit,
+      description,
     };
 
     onSaveTag(tagData, !!editTag);
@@ -170,9 +148,11 @@ function StatsTagDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Tag</DialogTitle>
+          <DialogTitle>
+            {editTag ? "Edit Stats Tag" : "Add New Stats Tag"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="p-4 border rounded-md bg-slate-100 space-y-4">
@@ -184,8 +164,7 @@ function StatsTagDialog({
               id="tag-name"
               value={tagName}
               onChange={(e) => setTagName(e.target.value)}
-              className="bg-white"
-              placeholder="Enter Name"
+              placeholder="Enter stats tag name"
             />
           </div>
 
@@ -197,15 +176,18 @@ function StatsTagDialog({
               <Input
                 id="refer-tag"
                 value={referTag}
-                className="bg-white rounded-r-none"
-                readOnly
+                onChange={(e) => setReferTag(e.target.value)}
+                placeholder="Select a tag to reference"
+                className="flex-1"
               />
               <Button
+                type="button"
                 variant="outline"
-                className="rounded-l-none px-2 bg-white border-l-0"
+                size="sm"
+                className="ml-2"
                 onClick={() => setTagSelectionDialogOpen(true)}
               >
-                ...
+                Browse
               </Button>
             </div>
           </div>
@@ -215,13 +197,14 @@ function StatsTagDialog({
               Type
             </Label>
             <Select value={tagType} onValueChange={setTagType}>
-              <SelectTrigger className="bg-white">
-                <SelectValue placeholder="Select type" />
+              <SelectTrigger>
+                <SelectValue placeholder="Select stats type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Average">Average</SelectItem>
-                <SelectItem value="Maximum">Maximum</SelectItem>
-                <SelectItem value="Minimum">Minimum</SelectItem>
+                <SelectItem value="Max">Max</SelectItem>
+                <SelectItem value="Min">Min</SelectItem>
+                <SelectItem value="Sum">Sum</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -235,10 +218,11 @@ function StatsTagDialog({
                 id="update-cycle"
                 value={updateCycle}
                 onChange={(e) => setUpdateCycle(e.target.value)}
-                className="bg-white w-full rounded-r-none"
+                placeholder="60"
+                className="flex-1"
               />
               <Select value={updateUnit} onValueChange={setUpdateUnit}>
-                <SelectTrigger className="bg-white w-20 rounded-l-none border-l-0">
+                <SelectTrigger className="w-20 ml-2">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -259,7 +243,8 @@ function StatsTagDialog({
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="min-h-[150px] bg-white"
+              placeholder="Enter description (optional)"
+              rows={2}
             />
           </div>
         </div>
@@ -268,16 +253,21 @@ function StatsTagDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>OK</Button>
+          <Button onClick={handleSubmit} className="bg-blue-500 hover:bg-blue-600">
+            {editTag ? "Update" : "Add"}
+          </Button>
         </DialogFooter>
-
-        <TagSelectionDialog
-          open={tagSelectionDialogOpen}
-          onOpenChange={setTagSelectionDialogOpen}
-          onSelectTag={handleTagSelection}
-          excludeCalculationTags={true}
-        />
       </DialogContent>
+
+      <TagSelectionDialog
+        open={tagSelectionDialogOpen}
+        onOpenChange={setTagSelectionDialogOpen}
+        onSelectTag={handleTagSelection}
+        userTags={userTags || []}
+        calculationTags={calculationTags || []}
+        statsTags={statsTags || []}
+        systemTags={systemTags || []}
+      />
     </Dialog>
   );
 }
@@ -340,6 +330,24 @@ export function StatsTagsForm() {
     }
   };
 
+  // CSV Import handler
+  const handleCSVImport = (importedTags: any[]) => {
+    // Check for duplicate names
+    const existingNames = tags.map((tag: any) => tag.name.toLowerCase());
+    const duplicates = importedTags.filter((tag: any) => 
+      existingNames.includes(tag.name.toLowerCase())
+    );
+
+    if (duplicates.length > 0) {
+      toast.error(`Cannot import tags with duplicate names: ${duplicates.map((t: any) => t.name).join(', ')}`, { duration: 5000 });
+      return;
+    }
+
+    // Add imported tags to existing ones
+    const updatedTags = [...tags, ...importedTags];
+    updateConfig(["stats_tags"], updatedTags);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -347,20 +355,32 @@ export function StatsTagsForm() {
         <CardDescription>Configure statistical data points</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Button
-            onClick={handleAddTag}
-            className="bg-green-500 hover:bg-green-600"
-          >
-            <Plus className="h-4 w-4" /> Add...
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDeleteTag}
-            disabled={tags.length === 0 || selectedTagId === null}
-          >
-            <X className="h-4 w-4" /> Delete
-          </Button>
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAddTag}
+              className="bg-green-500 hover:bg-green-600"
+            >
+              <Plus className="h-4 w-4" /> Add...
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteTag}
+              disabled={tags.length === 0 || selectedTagId === null}
+            >
+              <X className="h-4 w-4" /> Delete
+            </Button>
+          </div>
+
+          {/* CSV Import/Export */}
+          <CSVImportExport
+            data={tags}
+            filename="stats_tags.csv"
+            columns={statsTagColumns}
+            onImport={handleCSVImport}
+            validateRow={validateStatsTag}
+            disabled={false}
+          />
         </div>
 
         <div className="border rounded-md">
@@ -368,8 +388,8 @@ export function StatsTagsForm() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Reference Tag</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Refer Tag</TableHead>
                 <TableHead>Update Cycle</TableHead>
                 <TableHead>Description</TableHead>
               </TableRow>
@@ -388,20 +408,18 @@ export function StatsTagsForm() {
                 tags.map((tag: any) => (
                   <TableRow
                     key={tag.id}
-                    className={selectedTagId === tag.id ? "bg-muted" : ""}
+                    className={
+                      selectedTagId === tag.id ? "bg-muted" : ""
+                    }
                     onClick={() => setSelectedTagId(tag.id)}
+                    onDoubleClick={() => handleModifyTag()}
                     style={{ cursor: "pointer" }}
-                    onDoubleClick={() => {
-                      setEditingTag(tag);
-                      setTagDialogOpen(true);
-                    }}
                   >
-                    <TableCell>{tag.name}</TableCell>
-                    <TableCell>{tag.type}</TableCell>
+                    <TableCell className="font-medium">{tag.name}</TableCell>
                     <TableCell>{tag.referTag}</TableCell>
+                    <TableCell>{tag.type}</TableCell>
                     <TableCell>
-                      {tag.updateCycle}
-                      {tag.updateUnit}
+                      {tag.updateCycleValue} {tag.updateCycleUnit}
                     </TableCell>
                     <TableCell className="truncate max-w-[200px]">
                       {tag.description}

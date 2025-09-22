@@ -48,6 +48,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// Import CSV components
+import { CSVImportExport } from "@/components/common/csv-import-export";
+import { calculationTagColumns, validateCalculationTag } from "@/lib/csv-configs";
+
 // Type definitions
 // Import the z schema from the form component to ensure type compatibility
 import { z } from "zod";
@@ -107,7 +111,7 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
       id: Date.now().toString(),
       defaultValue: formValues.defaultValue as number | string,
       dataType: "Analog", // Default data type for calculation tags
-      address: "", // Calculation tags don't need physical addresses
+      address: "", // Default empty address
       description: "", // Default empty description
     };
 
@@ -122,22 +126,24 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
 
   // Handle update calculation tag
   const handleUpdateTag = (formValues: CalculationTagFormValues) => {
-    if (!formValues.id || !editingTag) return;
+    if (!editingTag) return;
 
     const updatedTag: CalculationTag = {
       ...formValues,
       id: editingTag.id,
-      dataType: editingTag.dataType, // Preserve existing data type
-      address: editingTag.address, // Preserve existing address
-      description: editingTag.description, // Preserve existing description
+      dataType: editingTag.dataType || "Analog",
+      address: editingTag.address || "",
+      description: formValues.description || "",
+      defaultValue: formValues.defaultValue as number | string,
     };
 
-    updateConfig(
-      ["calculation_tags"],
-      calculationTags.map((t) => (t.id === updatedTag.id ? updatedTag : t))
+    const updatedTags = calculationTags.map((t) =>
+      t.id === editingTag.id ? updatedTag : t
     );
 
+    updateConfig(["calculation_tags"], updatedTags);
     setEditingTag(null);
+
     toast({
       title: "Tag Updated",
       description: `Calculation tag ${updatedTag.name} has been updated successfully.`,
@@ -162,26 +168,31 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
     }
   };
 
-  // Handle move tag up
-  const handleMoveUp = (index: number) => {
-    if (index > 0) {
-      const newTags = [...calculationTags];
-      const temp = newTags[index];
-      newTags[index] = newTags[index - 1];
-      newTags[index - 1] = temp;
-      updateConfig(["calculation_tags"], newTags);
-    }
-  };
+  // CSV Import handler
+  const handleCSVImport = (importedTags: CalculationTag[]) => {
+    // Check for duplicate names
+    const existingNames = calculationTags.map(tag => tag.name.toLowerCase());
+    const duplicates = importedTags.filter(tag => 
+      existingNames.includes(tag.name.toLowerCase())
+    );
 
-  // Handle move tag down
-  const handleMoveDown = (index: number) => {
-    if (index < calculationTags.length - 1) {
-      const newTags = [...calculationTags];
-      const temp = newTags[index];
-      newTags[index] = newTags[index + 1];
-      newTags[index + 1] = temp;
-      updateConfig(["calculation_tags"], newTags);
+    if (duplicates.length > 0) {
+      toast({
+        title: "Import Error",
+        description: `Cannot import tags with duplicate names: ${duplicates.map(t => t.name).join(', ')}`,
+        variant: "destructive"
+      });
+      return;
     }
+
+    // Add imported tags to existing ones
+    const updatedTags = [...calculationTags, ...importedTags];
+    updateConfig(["calculation_tags"], updatedTags);
+
+    toast({
+      title: "Import Successful",
+      description: `Successfully imported ${importedTags.length} calculation tags.`,
+    });
   };
 
   const noCalculationTags = calculationTags.length === 0;
@@ -231,197 +242,86 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
                   </TooltipTrigger>
                   {noCalculationTags && (
                     <TooltipContent>
-                      No calculation tags to delete
+                      No calculation tags available to delete
                     </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          const selectedTag = calculationTags.find(
-                            (t) => t.id === selectedTagId
-                          );
-                          if (selectedTag) {
-                            setEditingTag(selectedTag);
-                          } else {
-                            toast({
-                              title: "No Tag Selected",
-                              description: "Please select a tag to modify.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        disabled={noCalculationTags || !selectedTagId}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Modify...
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {noCalculationTags && (
-                    <TooltipContent>
-                      No calculation tags to modify
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (selectedTagId) {
-                            const index = calculationTags.findIndex(
-                              (t) => t.id === selectedTagId
-                            );
-                            if (index > 0) {
-                              handleMoveUp(index);
-                            } else {
-                              toast({
-                                title: "Cannot Move Up",
-                                description:
-                                  "The selected tag is already at the top.",
-                                variant: "destructive",
-                              });
-                            }
-                          } else {
-                            toast({
-                              title: "No Tag Selected",
-                              description: "Please select a tag to move up.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        disabled={
-                          noCalculationTags ||
-                          !selectedTagId ||
-                          calculationTags.length === 1
-                        }
-                      >
-                        <ArrowUp className="h-4 w-4 mr-2" />
-                        Up
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {noCalculationTags && (
-                    <TooltipContent>No calculation tags to move</TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <span>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (selectedTagId) {
-                            const index = calculationTags.findIndex(
-                              (t) => t.id === selectedTagId
-                            );
-                            if (index < calculationTags.length - 1) {
-                              handleMoveDown(index);
-                            } else {
-                              toast({
-                                title: "Cannot Move Down",
-                                description:
-                                  "The selected tag is already at the bottom.",
-                                variant: "destructive",
-                              });
-                            }
-                          } else {
-                            toast({
-                              title: "No Tag Selected",
-                              description: "Please select a tag to move down.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        disabled={
-                          noCalculationTags ||
-                          !selectedTagId ||
-                          calculationTags.length === 1
-                        }
-                      >
-                        <ArrowDown className="h-4 w-4 mr-2" />
-                        Down
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {noCalculationTags && (
-                    <TooltipContent>No calculation tags to move</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
             </div>
+
+            {/* CSV Import/Export */}
+            <CSVImportExport
+              data={calculationTags}
+              filename="calculation_tags.csv"
+              columns={calculationTagColumns}
+              onImport={handleCSVImport}
+              validateRow={validateCalculationTag}
+              disabled={false}
+            />
           </div>
 
-          <div className="rounded-md border">
+          <div className="border rounded-md">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">Name</TableHead>
-                  <TableHead>Default Value</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Formula</TableHead>
-                  <TableHead>A</TableHead>
-                  <TableHead>B</TableHead>
-                  <TableHead>C</TableHead>
-                  <TableHead>D</TableHead>
-                  <TableHead>E</TableHead>
-                  <TableHead>F</TableHead>
-                  <TableHead>G</TableHead>
-                  <TableHead>H</TableHead>
-                  <TableHead>Period(s)</TableHead>
-                  <TableHead>Read Write</TableHead>
-                  <TableHead>Span High</TableHead>
-                  <TableHead>Span Low</TableHead>
+                  <TableHead>Default Value</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Variables</TableHead>
+                  <TableHead>Description</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {calculationTags.map((tag, index) => (
-                  <TableRow
-                    key={tag.id}
-                    className={`cursor-pointer hover:bg-muted/50 ${
-                      selectedTagId === tag.id ? "bg-muted" : ""
-                    }`}
-                    onClick={() => {
-                      // Handle row selection
-                      setSelectedTagId(tag.id);
-                    }}
-                  >
-                    <TableCell className="font-medium">
-                      {tag.isParent && (
-                        <span className="mr-1 inline-flex items-center">
-                          1 <ChevronRight className="h-4 w-4" />
-                        </span>
-                      )}
-                      {tag.name}
+                {noCalculationTags ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No calculation tags configured
                     </TableCell>
-                    <TableCell>{tag.defaultValue}</TableCell>
-                    <TableCell>{tag.formula}</TableCell>
-                    <TableCell>{tag.a}</TableCell>
-                    <TableCell>{tag.b}</TableCell>
-                    <TableCell>{tag.c}</TableCell>
-                    <TableCell>{tag.d}</TableCell>
-                    <TableCell>{tag.e}</TableCell>
-                    <TableCell>{tag.f}</TableCell>
-                    <TableCell>{tag.g}</TableCell>
-                    <TableCell>{tag.h}</TableCell>
-                    <TableCell>{tag.period}</TableCell>
-                    <TableCell>{tag.readWrite}</TableCell>
-                    <TableCell>{tag.spanHigh}</TableCell>
-                    <TableCell>{tag.spanLow}</TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  calculationTags.map((tag) => (
+                    <TableRow
+                      key={tag.id}
+                      className={
+                        selectedTagId === tag.id
+                          ? "bg-muted/50 hover:bg-muted cursor-pointer"
+                          : "hover:bg-muted/30 cursor-pointer"
+                      }
+                      onClick={() => {
+                        setSelectedTagId(tag.id);
+                      }}
+                      onDoubleClick={() => {
+                        setEditingTag(tag);
+                      }}
+                    >
+                      <TableCell className="font-medium">
+                        {tag.isParent && (
+                          <span className="mr-1 inline-flex items-center">
+                            1 <ChevronRight className="h-4 w-4" />
+                          </span>
+                        )}
+                        {tag.name}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {tag.formula}
+                      </TableCell>
+                      <TableCell>{tag.defaultValue}</TableCell>
+                      <TableCell>{tag.period || 1}</TableCell>
+                      <TableCell className="max-w-[150px] truncate">
+                        {[tag.a, tag.b, tag.c, tag.d, tag.e, tag.f, tag.g, tag.h]
+                          .filter(Boolean)
+                          .join(", ") || "None"}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {tag.description || ""}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -453,18 +353,14 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
           <DialogHeader>
             <DialogTitle>Edit Calculation Tag</DialogTitle>
             <DialogDescription>
-              Modify settings for {editingTag?.name}
+              Modify the calculation tag configuration
             </DialogDescription>
           </DialogHeader>
           {editingTag && (
             <CalculationTagForm
-              onSubmit={handleUpdateTag}
-              onCancel={() => setEditingTag(null)}
               initialValues={{
-                id: editingTag.id,
                 name: editingTag.name,
-                description: editingTag.description || "",
-                defaultValue: typeof editingTag.defaultValue === 'number' ? editingTag.defaultValue : Number(editingTag.defaultValue) || 0,
+                defaultValue: editingTag.defaultValue as number,
                 formula: editingTag.formula,
                 a: editingTag.a || "",
                 b: editingTag.b || "",
@@ -475,11 +371,14 @@ export default function CalculationTagTab({}: CalculationTagTabProps) {
                 g: editingTag.g || "",
                 h: editingTag.h || "",
                 period: editingTag.period || 1,
-                readWrite: editingTag.readWrite || "Read/Write",
-                spanHigh: editingTag.spanHigh || 1000,
-                spanLow: editingTag.spanLow || 0,
+                description: editingTag.description || "",
+                readWrite: "Read/Write",
+                spanHigh: 1000,
+                spanLow: 0,
                 isParent: editingTag.isParent || false,
               }}
+              onSubmit={handleUpdateTag}
+              onCancel={() => setEditingTag(null)}
             />
           )}
         </DialogContent>
