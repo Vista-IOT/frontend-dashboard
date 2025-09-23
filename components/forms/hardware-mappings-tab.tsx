@@ -13,10 +13,6 @@ import { useConfigStore, HardwareMappingTag, SystemTag } from "@/lib/stores/conf
 const TAG_TYPES = [
   { value: "network", label: "Network Interface" },
   { value: "serial", label: "Serial/COM Port" },
-  { value: "gpio", label: "GPIO" },
-  { value: "usb", label: "USB Device" },
-  { value: "disk", label: "Disk/Partition" },
-  { value: "custom", label: "Custom" },
 ];
 
 export function HardwareMappingsTab() {
@@ -107,7 +103,7 @@ export function HardwareMappingsTab() {
     if (!hardware) return Array.from(new Set(hardwareMappings.filter(tag => tag.type === type).map(tag => tag.path)));
     // Detected options
     let detected: string[] = [];
-    if (type === "network") detected = (hardware.network_interfaces as Array<any>)?.map((iface) => iface.name) || [];
+    if (type === "network") detected = (hardware.network_interfaces as Array<any>)?.filter((iface) => iface.type === "Ethernet").map((iface) => iface.name) || [];
     if (type === "serial") detected = (hardware.serial_ports as Array<any>)?.map((port) => port.path) || [];
     if (type === "gpio") detected = (hardware.gpio?.gpio_chips as Array<any>)?.map((chip) => chip.path) || [];
     if (type === "usb") detected = (hardware.usb_devices as Array<any>)?.map((dev) => dev.path) || [];
