@@ -1,11 +1,123 @@
 # Updated to use centralized polling logger
 import asyncio
-from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+import re
+
+from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
 import logging
 import subprocess
 import time
 import threading
 from typing import Dict, Any, Optional, Union
+
+# SNMP Error Code Mappings and Enhanced Error Handling
+# Standard SNMP Error Status Codes (RFC 3416)
+SNMP_ERROR_CODES = {
+    0: "noError: The request completed successfully",
+    1: "tooBig: The response is too large to fit in a single SNMP message", 
+    2: "noSuchName: The specified OID does not exist on the target device",
+    3: "badValue: The value specified for the variable is invalid",
+    4: "readOnly: Attempt to set the value of a read-only variable", 
+    5: "genErr: A general error occurred during the operation",
+    6: "noAccess: The variable is not accessible for the requested operation",
+    7: "wrongType: The data type specified is incorrect for this variable",
+    8: "wrongLength: The value length is inappropriate for this variable",
+    9: "wrongEncoding: The value is incorrectly encoded",
+    10: "wrongValue: The value is out of range or inappropriate",
+    11: "noCreation: The variable cannot be created",
+    12: "inconsistentValue: The value is inconsistent with other variables", 
+    13: "resourceUnavailable: Required resources are not available",
+    14: "commitFailed: The set operation could not be committed",
+    15: "undoFailed: The set operation could not be undone",
+    16: "authorizationError: Access denied due to authorization failure",
+    17: "notWritable: The variable is not writable in its current state",
+    18: "inconsistentName: The variable name is inconsistent"
+}
+
+def get_snmp_error_verbose(error_code: int) -> str:
+    """Get verbose description for SNMP error code"""
+    return SNMP_ERROR_CODES.get(error_code, f"Unknown SNMP error code: {error_code}")
+
+def extract_snmp_error_details(error_result, error_indication=None, error_index=None):
+    """Extract detailed error information from SNMP responses"""
+    error_info = {
+        'error_code': None,
+        'error_index': None,
+        'error_message': str(error_result),
+        'verbose_description': None,
+        'error_indication': None
+    }
+    
+    # Handle pysnmp error objects
+    if hasattr(error_result, 'errorStatus'):
+        error_info['error_code'] = int(error_result.errorStatus)
+        error_info['verbose_description'] = get_snmp_error_verbose(error_info['error_code'])
+    
+    if hasattr(error_result, 'errorIndex'):
+        error_info['error_index'] = int(error_result.errorIndex)
+    
+    # Handle separate error indication and index (from pysnmp async calls)
+    if error_indication is not None:
+        error_info['error_indication'] = str(error_indication)
+    
+    if error_index is not None:
+        error_info['error_index'] = int(error_index)
+    
+    # Try to extract error code from error string if not found in object
+    if error_info['error_code'] is None:
+        # Look for patterns like "errorStatus: 2" or similar
+        error_str = str(error_result)
+        code_match = re.search(r'errorStatus[:\s]+(\d+)', error_str, re.IGNORECASE)
+        if code_match:
+            error_info['error_code'] = int(code_match.group(1))
+            error_info['verbose_description'] = get_snmp_error_verbose(error_info['error_code'])
+    
+    return error_info
+
+def map_snmp_error_to_http_status(snmp_error_code: int) -> int:
+    """Map SNMP error codes to appropriate HTTP status codes"""
+    mapping = {
+        0: 200,  # noError -> OK
+        1: 413,  # tooBig -> Payload Too Large
+        2: 404,  # noSuchName -> Not Found
+        3: 400,  # badValue -> Bad Request
+        4: 405,  # readOnly -> Method Not Allowed
+        5: 500,  # genErr -> Internal Server Error
+        6: 403,  # noAccess -> Forbidden
+        7: 400,  # wrongType -> Bad Request
+        8: 400,  # wrongLength -> Bad Request
+        9: 400,  # wrongEncoding -> Bad Request
+        10: 400, # wrongValue -> Bad Request
+        11: 400, # noCreation -> Bad Request
+        12: 400, # inconsistentValue -> Bad Request
+        13: 503, # resourceUnavailable -> Service Unavailable
+        14: 500, # commitFailed -> Internal Server Error
+        15: 500, # undoFailed -> Internal Server Error
+        16: 401, # authorizationError -> Unauthorized
+        17: 405, # notWritable -> Method Not Allowed
+        18: 400, # inconsistentName -> Bad Request
+    }
+    return mapping.get(snmp_error_code, 500)  # Default to Internal Server Error
+
+def format_enhanced_snmp_error(error_details: dict, operation: str = "SNMP operation", oid: str = None) -> str:
+    """Format a comprehensive SNMP error message with all available details"""
+    parts = [f"{operation} failed"]
+    
+    if oid:
+        parts.append(f" for OID {oid}")
+    
+    if error_details['error_code'] is not None:
+        parts.append(f" [Error Code {error_details['error_code']}]")
+    
+    if error_details['verbose_description']:
+        parts.append(f": {error_details['verbose_description']}")
+    
+    if error_details['error_index'] is not None:
+        parts.append(f" (at index {error_details['error_index']})")
+    
+    if error_details['error_indication']:
+        parts.append(f" - {error_details['error_indication']}")
+    
+    return "".join(parts)
 
 # Try to import pysnmp, fall back gracefully if not available
 try:
@@ -241,12 +353,12 @@ async def snmp_get_pysnmp(device_config: Dict[str, Any], oid: str) -> Optional[s
         logger.warning("pysnmp not available, skipping pysnmp attempt")
         return None
 
-async def snmp_get_pysnmp_detailed(device_config: Dict[str, Any], oid: str) -> (Optional[str], Optional[str]):
+async def snmp_get_pysnmp_detailed(device_config: Dict[str, Any], oid: str) -> (Optional[str], Optional[str], Optional[dict]):
     """
-    Execute SNMP GET using pysnmp library and return (value, error_message).
+    Execute SNMP GET using pysnmp library and return (value, error_message, error_details).
     """
     if not PYSNMP_AVAILABLE:
-        return None, "pysnmp not available"
+        return None, "pysnmp not available", None
     try:
         snmp_version = device_config.get('snmpVersion', 'v2c')
         ip = device_config.get('ip')
@@ -298,11 +410,18 @@ async def snmp_get_pysnmp_detailed(device_config: Dict[str, Any], oid: str) -> (
                     ObjectType(ObjectIdentity(oid)),
                 )
 
+            # Use enhanced error handling
             if errorIndication:
-                return None, f"pysnmp error: {errorIndication}"
+                error_details = extract_snmp_error_details(errorIndication, errorIndication, errorIndex)
+                enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+                return None, enhanced_error, error_details
+            
             if errorStatus:
-                return None, f"pysnmp error: {errorStatus.prettyPrint()} at index {errorIndex}"
-            return str(varBinds[0][1]), None
+                error_details = extract_snmp_error_details(errorStatus, errorIndication, errorIndex)
+                enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+                return None, enhanced_error, error_details
+            
+            return str(varBinds[0][1]), None, None
         finally:
             if transport is not None:
                 try:
@@ -310,11 +429,13 @@ async def snmp_get_pysnmp_detailed(device_config: Dict[str, Any], oid: str) -> (
                 except Exception:
                     pass
     except Exception as e:
-        return None, f"pysnmp exception: {e}"
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': str(e)}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+        return None, enhanced_error, error_details
 
-def snmp_get_command_line_detailed(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str]):
+def snmp_get_command_line_detailed(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str], Optional[dict]):
     """
-    Execute SNMP GET using command line tool and return (value, error_message).
+    Execute SNMP GET using command line tool and return (value, error_message, error_details).
     """
     try:
         cmd = build_snmp_command_line(device_config, oid, timeout, retries)
@@ -334,16 +455,40 @@ def snmp_get_command_line_detailed(device_config: Dict[str, Any], oid: str, time
                     raw_value = value_part
             else:
                 raw_value = output
-            return raw_value, None
-        # Build verbose error message
+            return raw_value, None, None
+        
+        # Build enhanced error message from CLI output
         stderr = (result.stderr or '').strip()
         stdout = (result.stdout or '').strip()
         msg = stderr or stdout or 'No response'
-        return None, f"snmpget error: {msg}"
+        
+        # Try to extract SNMP error codes from CLI error messages
+        error_details = {'error_message': msg, 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': None}
+        
+        # Look for common SNMP CLI error patterns
+        if 'no such name' in msg.lower() or 'no such object' in msg.lower():
+            error_details['error_code'] = 2
+            error_details['verbose_description'] = get_snmp_error_verbose(2)
+        elif 'bad value' in msg.lower():
+            error_details['error_code'] = 3
+            error_details['verbose_description'] = get_snmp_error_verbose(3)
+        elif 'timeout' in msg.lower():
+            error_details['error_indication'] = 'Request timeout'
+        elif 'authorization' in msg.lower() or 'authentication' in msg.lower():
+            error_details['error_code'] = 16
+            error_details['verbose_description'] = get_snmp_error_verbose(16)
+        
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+        return None, enhanced_error, error_details
+        
     except subprocess.TimeoutExpired:
-        return None, "snmpget timeout: target did not respond in time"
+        error_details = {'error_message': 'Request timeout', 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': 'snmpget timeout: target did not respond in time'}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+        return None, enhanced_error, error_details
     except Exception as e:
-        return None, f"snmpget exception: {e}"
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'snmpget exception: {e}'}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
+        return None, enhanced_error, error_details
 
 def snmp_get_with_error(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str]):
     """
@@ -354,27 +499,104 @@ def snmp_get_with_error(device_config: Dict[str, Any], oid: str, timeout: int = 
         value = None
         error = None
         if PYSNMP_AVAILABLE:
-            value, error = asyncio.run(snmp_get_pysnmp_detailed(device_config, oid))
+            value, error, _ = asyncio.run(snmp_get_pysnmp_detailed(device_config, oid))
             if value is not None:
                 return value, None
         # Fallback to command line
-        cli_value, cli_error = snmp_get_command_line_detailed(device_config, oid, timeout, retries)
+        cli_value, cli_error, _ = snmp_get_command_line_detailed(device_config, oid, timeout, retries)
         return cli_value, cli_error
     except Exception as e:
         return None, f"unified snmp_get error: {e}"
+
+# Enhanced version with detailed error info
+def snmp_get_with_error_detailed(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str], Optional[dict], Optional[int]):
+    """
+    Unified SNMP GET returning (value, error_message, error_details, http_status_code).
+    """
+    try:
+        value = None
+        error = None
+        error_details = None
+        
+        if PYSNMP_AVAILABLE:
+            value, error, error_details = asyncio.run(snmp_get_pysnmp_detailed(device_config, oid))
+            if value is not None:
+                return value, None, None, 200
+        
+        # Fallback to command line if pysnmp failed or unavailable
+        if value is None:
+            cli_value, cli_error, cli_error_details = snmp_get_command_line_detailed(device_config, oid, timeout, retries)
+            if cli_value is not None:
+                return cli_value, None, None, 200
+            else:
+                error = cli_error
+                error_details = cli_error_details
+        
+        # Determine HTTP status code from error details
+        http_status = 500  # Default
+        if error_details and error_details.get('error_code') is not None:
+            http_status = map_snmp_error_to_http_status(error_details['error_code'])
+        elif 'timeout' in (error or '').lower():
+            http_status = 408  # Request Timeout
+        elif 'authorization' in (error or '').lower() or 'authentication' in (error or '').lower():
+            http_status = 401  # Unauthorized
+        
+        return None, error, error_details, http_status
+        
+    except Exception as e:
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'unified snmp_get error: {e}'}
+        return None, f"unified snmp_get error: {e}", error_details, 500
 
 # Async variants for use inside FastAPI event loop
 async def snmp_get_with_error_async(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str]):
     try:
         if PYSNMP_AVAILABLE:
-            val, err = await snmp_get_pysnmp_detailed(device_config, oid)
+            val, err, _ = await snmp_get_pysnmp_detailed(device_config, oid)
             if val is not None:
                 return val, None
         # CLI fallback in executor to avoid blocking loop
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, snmp_get_command_line_detailed, device_config, oid, timeout, retries)
+        cli_value, cli_error, _ = await loop.run_in_executor(None, snmp_get_command_line_detailed, device_config, oid, timeout, retries)
+        return cli_value, cli_error
     except Exception as e:
         return None, f"unified snmp_get_async error: {e}"
+
+async def snmp_get_with_error_async_detailed(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> (Optional[str], Optional[str], Optional[dict], Optional[int]):
+    """
+    Enhanced async SNMP GET returning (value, error_message, error_details, http_status_code).
+    """
+    try:
+        if PYSNMP_AVAILABLE:
+            val, err, err_details = await snmp_get_pysnmp_detailed(device_config, oid)
+            if val is not None:
+                return val, None, None, 200
+        else:
+            err_details = None
+        
+        # CLI fallback in executor to avoid blocking loop
+        loop = asyncio.get_running_loop()
+        cli_value, cli_error, cli_error_details = await loop.run_in_executor(None, snmp_get_command_line_detailed, device_config, oid, timeout, retries)
+        
+        if cli_value is not None:
+            return cli_value, None, None, 200
+        
+        # Determine appropriate error details and HTTP status
+        error_details = err_details or cli_error_details
+        error = err or cli_error
+        
+        http_status = 500  # Default
+        if error_details and error_details.get('error_code') is not None:
+            http_status = map_snmp_error_to_http_status(error_details['error_code'])
+        elif 'timeout' in (error or '').lower():
+            http_status = 408
+        elif 'authorization' in (error or '').lower() or 'authentication' in (error or '').lower():
+            http_status = 401
+        
+        return None, error, error_details, http_status
+        
+    except Exception as e:
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'unified snmp_get_async error: {e}'}
+        return None, f"unified snmp_get_async error: {e}", error_details, 500
 
 # -------------------------------
 # SNMP SET Implementation
@@ -418,10 +640,10 @@ def _map_asn_to_pysnmp_value(asn_type: str, value: str):
     raise ValueError(f"Unsupported ASN type for SET: {asn_type}")
 
 
-async def snmp_set_pysnmp_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str) -> (bool, Optional[str]):
-    """Perform SNMP SET via pysnmp; return (success, error)."""
+async def snmp_set_pysnmp_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str) -> (bool, Optional[str], Optional[dict]):
+    """Perform SNMP SET via pysnmp; return (success, error, error_details)."""
     if not PYSNMP_AVAILABLE:
-        return False, "pysnmp not available"
+        return False, "pysnmp not available", None
     try:
         snmp_version = device_config.get('snmpVersion', 'v2c')
         ip = device_config.get('ip')
@@ -429,7 +651,7 @@ async def snmp_set_pysnmp_detailed(device_config: Dict[str, Any], oid: str, asn_
 
         var_bind_value = _map_asn_to_pysnmp_value(asn_type, value)
         if var_bind_value is None:
-            return False, "pysnmp not available"
+            return False, "pysnmp not available", None
 
         transport = None
         try:
@@ -477,11 +699,18 @@ async def snmp_set_pysnmp_detailed(device_config: Dict[str, Any], oid: str, asn_
                     ObjectType(ObjectIdentity(oid), var_bind_value),
                 )
 
+            # Use enhanced error handling
             if errorIndication:
-                return False, f"pysnmp error: {errorIndication}"
+                error_details = extract_snmp_error_details(errorIndication, errorIndication, errorIndex)
+                enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+                return False, enhanced_error, error_details
+            
             if errorStatus:
-                return False, f"pysnmp error: {errorStatus.prettyPrint()} at index {errorIndex}"
-            return True, None
+                error_details = extract_snmp_error_details(errorStatus, errorIndication, errorIndex)
+                enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+                return False, enhanced_error, error_details
+            
+            return True, None, None
         finally:
             if transport is not None:
                 try:
@@ -489,9 +718,12 @@ async def snmp_set_pysnmp_detailed(device_config: Dict[str, Any], oid: str, asn_
                 except Exception:
                     pass
     except ValueError as ve:
-        return False, str(ve)
+        error_details = {'error_message': str(ve), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': str(ve)}
+        return False, str(ve), error_details
     except Exception as e:
-        return False, f"pysnmp exception: {e}"
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'pysnmp exception: {e}'}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+        return False, enhanced_error, error_details
 
 
 def build_snmpset_command_line(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> list:
@@ -528,8 +760,8 @@ def build_snmpset_command_line(device_config: Dict[str, Any], oid: str, asn_type
     return [*base, oid, type_token, value_arg]
 
 
-def snmp_set_command_line_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str]):
-    """Execute snmpset and return (success, error)."""
+def snmp_set_command_line_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str], Optional[dict]):
+    """Execute snmpset and return (success, error, error_details)."""
     try:
         cmd = build_snmpset_command_line(device_config, oid, asn_type, value, timeout, retries)
         result = subprocess.run(
@@ -539,40 +771,142 @@ def snmp_set_command_line_detailed(device_config: Dict[str, Any], oid: str, asn_
             timeout=timeout + 5,
         )
         if result.returncode == 0:
-            return True, None
+            return True, None, None
+        
+        # Build enhanced error message from CLI output
         stderr = (result.stderr or '').strip()
         stdout = (result.stdout or '').strip()
         msg = stderr or stdout or 'No response'
-        return False, f"snmpset error: {msg}"
+        
+        # Try to extract SNMP error codes from CLI error messages
+        error_details = {'error_message': msg, 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': None}
+        
+        # Look for common SNMP CLI error patterns
+        if 'no such name' in msg.lower() or 'no such object' in msg.lower():
+            error_details['error_code'] = 2
+            error_details['verbose_description'] = get_snmp_error_verbose(2)
+        elif 'bad value' in msg.lower():
+            error_details['error_code'] = 3
+            error_details['verbose_description'] = get_snmp_error_verbose(3)
+        elif 'read only' in msg.lower() or 'not-writable' in msg.lower():
+            error_details['error_code'] = 4
+            error_details['verbose_description'] = get_snmp_error_verbose(4)
+        elif 'wrong type' in msg.lower():
+            error_details['error_code'] = 7
+            error_details['verbose_description'] = get_snmp_error_verbose(7)
+        elif 'authorization' in msg.lower() or 'authentication' in msg.lower():
+            error_details['error_code'] = 16
+            error_details['verbose_description'] = get_snmp_error_verbose(16)
+        elif 'timeout' in msg.lower():
+            error_details['error_indication'] = 'Request timeout'
+        
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+        return False, enhanced_error, error_details
+        
     except subprocess.TimeoutExpired:
-        return False, "snmpset timeout: target did not respond in time"
+        error_details = {'error_message': 'Request timeout', 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': 'snmpset timeout: target did not respond in time'}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+        return False, enhanced_error, error_details
     except Exception as e:
-        return False, f"snmpset exception: {e}"
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'snmpset exception: {e}'}
+        enhanced_error = format_enhanced_snmp_error(error_details, "SNMP SET", oid)
+        return False, enhanced_error, error_details
 
 
 def snmp_set_with_error(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str]):
     """Unified SNMP SET: try pysnmp first, then CLI; returns (success, error)."""
     try:
         if PYSNMP_AVAILABLE:
-            ok, err = asyncio.run(snmp_set_pysnmp_detailed(device_config, oid, asn_type, value))
+            ok, err, _ = asyncio.run(snmp_set_pysnmp_detailed(device_config, oid, asn_type, value))
             if ok:
                 return True, None
         # Fallback to CLI
-        return snmp_set_command_line_detailed(device_config, oid, asn_type, value, timeout, retries)
+        ok, err, _ = snmp_set_command_line_detailed(device_config, oid, asn_type, value, timeout, retries)
+        return ok, err
     except Exception as e:
         return False, f"unified snmp_set error: {e}"
+
+def snmp_set_with_error_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str], Optional[dict], Optional[int]):
+    """Enhanced SNMP SET: returns (success, error, error_details, http_status_code)."""
+    try:
+        success = False
+        error = None
+        error_details = None
+        
+        if PYSNMP_AVAILABLE:
+            success, error, error_details = asyncio.run(snmp_set_pysnmp_detailed(device_config, oid, asn_type, value))
+            if success:
+                return True, None, None, 200
+        
+        # Fallback to CLI if pysnmp failed or unavailable
+        if not success:
+            cli_success, cli_error, cli_error_details = snmp_set_command_line_detailed(device_config, oid, asn_type, value, timeout, retries)
+            if cli_success:
+                return True, None, None, 200
+            else:
+                error = cli_error
+                error_details = cli_error_details
+        
+        # Determine HTTP status code from error details
+        http_status = 500  # Default
+        if error_details and error_details.get('error_code') is not None:
+            http_status = map_snmp_error_to_http_status(error_details['error_code'])
+        elif 'timeout' in (error or '').lower():
+            http_status = 408  # Request Timeout
+        elif 'authorization' in (error or '').lower() or 'authentication' in (error or '').lower():
+            http_status = 401  # Unauthorized
+        
+        return False, error, error_details, http_status
+        
+    except Exception as e:
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'unified snmp_set error: {e}'}
+        return False, f"unified snmp_set error: {e}", error_details, 500
 
 async def snmp_set_with_error_async(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str]):
     try:
         if PYSNMP_AVAILABLE:
-            ok, err = await snmp_set_pysnmp_detailed(device_config, oid, asn_type, value)
+            ok, err, _ = await snmp_set_pysnmp_detailed(device_config, oid, asn_type, value)
             if ok:
                 return True, None
         loop = asyncio.get_running_loop()
-        ok, err = await loop.run_in_executor(None, snmp_set_command_line_detailed, device_config, oid, asn_type, value, timeout, retries)
+        ok, err, _ = await loop.run_in_executor(None, snmp_set_command_line_detailed, device_config, oid, asn_type, value, timeout, retries)
         return ok, err
     except Exception as e:
         return False, f"unified snmp_set_async error: {e}"
+
+async def snmp_set_with_error_async_detailed(device_config: Dict[str, Any], oid: str, asn_type: str, value: str, timeout: int = 5, retries: int = 1) -> (bool, Optional[str], Optional[dict], Optional[int]):
+    """Enhanced async SNMP SET: returns (success, error, error_details, http_status_code)."""
+    try:
+        if PYSNMP_AVAILABLE:
+            ok, err, err_details = await snmp_set_pysnmp_detailed(device_config, oid, asn_type, value)
+            if ok:
+                return True, None, None, 200
+        else:
+            err_details = None
+        
+        loop = asyncio.get_running_loop()
+        cli_ok, cli_err, cli_err_details = await loop.run_in_executor(None, snmp_set_command_line_detailed, device_config, oid, asn_type, value, timeout, retries)
+        
+        if cli_ok:
+            return True, None, None, 200
+        
+        # Determine appropriate error details and HTTP status
+        error_details = err_details or cli_err_details
+        error = err or cli_err
+        
+        http_status = 500  # Default
+        if error_details and error_details.get('error_code') is not None:
+            http_status = map_snmp_error_to_http_status(error_details['error_code'])
+        elif 'timeout' in (error or '').lower():
+            http_status = 408
+        elif 'authorization' in (error or '').lower() or 'authentication' in (error or '').lower():
+            http_status = 401
+        
+        return False, error, error_details, http_status
+        
+    except Exception as e:
+        error_details = {'error_message': str(e), 'error_code': None, 'error_index': None, 'verbose_description': None, 'error_indication': f'unified snmp_set_async error: {e}'}
+        return False, f"unified snmp_set_async error: {e}", error_details, 500
 
 def snmp_get(device_config: Dict[str, Any], oid: str, timeout: int = 5, retries: int = 1) -> Optional[str]:
     """Compatibility wrapper returning only the value."""
@@ -634,8 +968,8 @@ def poll_snmp_device_sync(device_config: Dict[str, Any], tags: list, scan_time_m
                         }
                         continue
                     
-                    # Get SNMP value using unified function
-                    raw_value = snmp_get(device_config, oid)
+                    # Get SNMP value using enhanced function
+                    raw_value, snmp_error, error_details, http_status = snmp_get_with_error_detailed(device_config, oid)
                     
                     if raw_value is not None:
                         # Apply scaling and offset if configured
@@ -659,10 +993,31 @@ def poll_snmp_device_sync(device_config: Dict[str, Any], tags: list, scan_time_m
                             "timestamp": now,
                         }
                     else:
+                        # Use enhanced error message if available
+                        error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
+                        status_code = "snmp_get_failed"
+                        
+                        # Provide more specific status based on error details
+                        if error_details and error_details.get('error_code') is not None:
+                            error_code = error_details['error_code']
+                            if error_code == 2:
+                                status_code = "snmp_no_such_name"
+                            elif error_code == 16:
+                                status_code = "snmp_auth_error"
+                            elif error_code in [3, 7, 8, 9, 10]:
+                                status_code = "snmp_bad_value"
+                            elif error_code == 4:
+                                status_code = "snmp_read_only"
+                            elif error_code in [13, 14, 15]:
+                                status_code = "snmp_resource_error"
+                        elif 'timeout' in (snmp_error or '').lower():
+                            status_code = "snmp_timeout"
+                        
+                        logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
                         results[tag_id] = {
                             "value": None,
-                            "status": "snmp_get_failed",
-                            "error": f"SNMP GET failed for OID {oid}",
+                            "status": status_code,
+                            "error": error_msg,
                             "timestamp": now,
                         }
                 
@@ -697,4 +1052,3 @@ async def poll_snmp_device(ip: str, oids: list, community: str = 'public', port:
     tags = [{'id': f'oid_{i}', 'name': f'OID_{i}', 'address': oid} for i, oid in enumerate(oids)]
     
     return poll_snmp_device_sync(device_config, tags, scan_time_s * 1000)
-

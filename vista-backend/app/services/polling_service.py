@@ -6,7 +6,7 @@ import subprocess
 import struct
 import serial
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context, get_startup_logger
-from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error, snmp_get
+from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error_detailed, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
 from app.services.iec104_service import poll_iec104_device_sync, iec104_get_with_error
@@ -595,7 +595,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                     
                     try:
                         # Use enhanced SNMP service for all versions (v1, v2c, v3)
-                        raw_value, snmp_error = snmp_get_with_error(snmp_device_config, oid)
+                        raw_value, snmp_error, error_details, http_status = snmp_get_with_error_detailed(snmp_device_config, oid)
                         
                         if raw_value is not None:
                             # Apply scaling and offset if configured
@@ -620,15 +620,39 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "timestamp": now,
                                 }
                         else:
-                            error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
-                            polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
-                            with _latest_polled_values_lock:
-                                _latest_polled_values[device_name][tag_id] = {
-                                    "value": None,
-                                    "status": "snmp_get_failed",
-                                    "error": error_msg,
-                                    "timestamp": now,
-                                }
+                        # Use enhanced error message if available
+                        error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
+                        status_code = "snmp_get_failed"
+                        
+                        # Provide more specific status based on error details
+                        if error_details and error_details.get('error_code') is not None:
+                            error_code = error_details['error_code']
+                            if error_code == 2:
+                                status_code = "snmp_no_such_name"
+                            elif error_code == 16:
+                                status_code = "snmp_auth_error"
+                            elif error_code in [3, 7, 8, 9, 10]:
+                                status_code = "snmp_bad_value"
+                            elif error_code == 4:
+                                status_code = "snmp_read_only"
+                            elif error_code in [13, 14, 15]:
+                                status_code = "snmp_resource_error"
+                        elif 'timeout' in (snmp_error or '').lower():
+                            status_code = "snmp_timeout"
+                        
+                        # Log detailed error information
+                        if error_details and error_details.get('error_code') is not None:
+                            logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code {error_details['error_code']}]: {error_details.get('verbose_description', 'Unknown error')}")
+                        else:
+                            logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
+                        
+                        with _latest_polled_values_lock:
+                            _latest_polled_values[device_name][tag_id] = {
+                                "value": None,
+                                "status": status_code,
+                                "error": error_msg,
+                                "timestamp": now,
+                            }
                     
                     except Exception as e:
                         polling_logger.error(f"Error polling SNMP tag {tag_name}: {e}")
