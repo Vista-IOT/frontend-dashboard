@@ -597,7 +597,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                         # Use enhanced SNMP service for all versions (v1, v2c, v3)
                         raw_value, snmp_error, error_details, http_status = snmp_get_with_error_detailed(snmp_device_config, oid)
                         
-                        if raw_value is not None:
+                        if raw_value is not None and raw_value != "":
                             # Apply scaling and offset if configured
                             scale = tag.get('scale', 1)
                             offset = tag.get('offset', 0)
@@ -617,6 +617,28 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "value": final_value,
                                     "status": "ok",
                                     "error": None,
+                                    "timestamp": now,
+                                }
+                        elif raw_value == "":
+                            # Handle empty string as "noSuchName" error (OID not available)
+                            from app.services.snmp_service import get_snmp_error_verbose, format_enhanced_snmp_error
+                            error_details_empty = {
+                                'error_code': 2,  # noSuchName
+                                'error_index': None,
+                                'verbose_description': get_snmp_error_verbose(2),
+                                'error_message': f'Empty response for OID {oid}',
+                                'error_indication': 'OID not available on target device'
+                            }
+                            enhanced_error = format_enhanced_snmp_error(error_details_empty, "SNMP GET", oid)
+                            status_code = "snmp_no_such_name"
+                            
+                            polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code 2]: OID not available on target device")
+                            
+                            with _latest_polled_values_lock:
+                                _latest_polled_values[device_name][tag_id] = {
+                                    "value": None,
+                                    "status": status_code,
+                                    "error": enhanced_error,
                                     "timestamp": now,
                                 }
                         else:
