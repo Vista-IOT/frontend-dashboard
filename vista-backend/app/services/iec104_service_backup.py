@@ -1,10 +1,9 @@
-# Updated to use centralized polling logger and enhanced error handling
+# Updated to use centralized polling logger
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
 
 import c104
 import time
 import logging
-import re
 from typing import Dict, Any, List, Tuple, Optional
 from enum import IntEnum
 
@@ -43,190 +42,6 @@ class CauseOfTransmission(IntEnum):
     ACTIVATION_TERMINATION = 10
     INTERROGATED_BY_STATION = 20
     INTERROGATED_BY_GROUP_1 = 21
-
-# IEC 60870-5-104 Error Codes and Verbose Descriptions
-# Standard IEC-104 Cause of Transmission Error Codes
-IEC104_COT_ERROR_CODES = {
-    7: "ACTIVATION_CON: Command activation confirmation",
-    8: "DEACTIVATION: Command deactivation",
-    9: "DEACTIVATION_CON: Command deactivation confirmation", 
-    10: "ACTIVATION_TERMINATION: Command activation termination",
-    44: "UNKNOWN_TYPE_ID: Unknown type identification",
-    45: "UNKNOWN_COT: Unknown cause of transmission",
-    46: "UNKNOWN_CA: Unknown common address of ASDU",
-    47: "UNKNOWN_IOA: Unknown information object address"
-}
-
-# IEC-104 ASDU Reject Reasons (Negative confirmations)
-IEC104_REJECT_CODES = {
-    1: "REQUEST_NOT_SUPPORTED: The requested function is not supported",
-    2: "OBJECT_UNKNOWN: The information object is unknown", 
-    3: "OBJECT_NOT_ACCESSIBLE: The information object is not accessible",
-    4: "INVALID_QUALIFIER: Invalid qualifier of command",
-    5: "INVALID_IOA: Invalid information object address",
-    6: "COMMAND_NOT_PERMITTED: Command not permitted in current state",
-    7: "TYPE_ID_NOT_SUPPORTED: Type identification not supported",
-    8: "TEMPORARY_UNAVAILABLE: Temporarily not available",
-    9: "LOCAL_OVERRIDE_ACTIVE: Local override is active",
-    10: "OBJECT_BLOCKED: Information object is blocked",
-    11: "SUBSTATION_NOT_READY: Substation not ready",
-    12: "DEVICE_TROUBLE: Device trouble"
-}
-
-# IEC-104 Connection State Error Codes
-IEC104_CONNECTION_ERROR_CODES = {
-    0: "CLOSED: Connection is closed",
-    1: "OPENING: Connection is opening",  
-    2: "OPENED: Connection is opened but not started",
-    3: "STOPPED: Connection is stopped",
-    4: "STARTED: Connection is started and ready",
-    5: "CLOSING: Connection is closing",
-    6: "MUTED: Connection is muted (data transmission suspended)",
-    7: "ERROR: Connection is in error state"
-}
-
-# IEC-104 Quality Descriptor Error Codes (for measured values)
-IEC104_QUALITY_ERROR_CODES = {
-    0x01: "OVERFLOW: Value overflow detected",
-    0x10: "BLOCKED: Value is blocked", 
-    0x20: "SUBSTITUTED: Value is substituted",
-    0x40: "NOT_TOPICAL: Value is not topical (old)",
-    0x80: "INVALID: Value is invalid"
-}
-
-# IEC-104 Command State Error Codes
-IEC104_COMMAND_ERROR_CODES = {
-    0: "SUCCESS: Command executed successfully",
-    1: "TIMEOUT: Command execution timeout",
-    2: "LOCAL_OVERRIDE: Command rejected due to local override",
-    3: "EQUIPMENT_FAULT: Command rejected due to equipment fault",
-    4: "NOT_PERMITTED: Command not permitted in current state",
-    5: "ALREADY_EXECUTING: Command already executing",
-    6: "INVALID_PARAMETER: Invalid command parameter"
-}
-
-def get_iec104_cot_error_verbose(cot_code: int) -> str:
-    """Get verbose description for IEC-104 Cause of Transmission error code"""
-    return IEC104_COT_ERROR_CODES.get(cot_code, f"Unknown COT error code: {cot_code}")
-
-def get_iec104_reject_verbose(reject_code: int) -> str:
-    """Get verbose description for IEC-104 reject code"""
-    return IEC104_REJECT_CODES.get(reject_code, f"Unknown reject code: {reject_code}")
-
-def get_iec104_connection_error_verbose(state_code: int) -> str:
-    """Get verbose description for IEC-104 connection state"""
-    return IEC104_CONNECTION_ERROR_CODES.get(state_code, f"Unknown connection state: {state_code}")
-
-def get_iec104_quality_error_verbose(quality_flags: int) -> str:
-    """Get verbose description for IEC-104 quality descriptor flags"""
-    errors = []
-    for flag, description in IEC104_QUALITY_ERROR_CODES.items():
-        if quality_flags & flag:
-            errors.append(description)
-    
-    if errors:
-        return "; ".join(errors)
-    else:
-        return "GOOD: No quality issues detected"
-
-def get_iec104_command_error_verbose(command_state: int) -> str:
-    """Get verbose description for IEC-104 command error codes"""
-    return IEC104_COMMAND_ERROR_CODES.get(command_state, f"Unknown command state: {command_state}")
-
-def extract_iec104_error_details(error_result, connection_state=None, quality_flags=None, cot_code=None):
-    """Extract detailed error information from IEC-104 responses"""
-    error_info = {
-        'error_type': None,
-        'error_code': None,
-        'error_message': str(error_result),
-        'verbose_description': None,
-        'connection_state': None,
-        'quality_flags': None,
-        'cot_code': None,
-        'additional_info': {}
-    }
-    
-    # Handle c104 specific errors
-    if hasattr(error_result, '__class__'):
-        error_info['error_type'] = error_result.__class__.__name__
-    
-    # Handle connection state information
-    if connection_state is not None:
-        error_info['connection_state'] = connection_state
-        error_info['verbose_description'] = get_iec104_connection_error_verbose(connection_state)
-    
-    # Handle quality flags for measured values
-    if quality_flags is not None:
-        error_info['quality_flags'] = quality_flags
-        quality_desc = get_iec104_quality_error_verbose(quality_flags)
-        if error_info['verbose_description']:
-            error_info['verbose_description'] += f"; Quality: {quality_desc}"
-        else:
-            error_info['verbose_description'] = f"Quality: {quality_desc}"
-    
-    # Handle cause of transmission codes
-    if cot_code is not None:
-        error_info['cot_code'] = cot_code
-        cot_desc = get_iec104_cot_error_verbose(cot_code)
-        if error_info['verbose_description']:
-            error_info['verbose_description'] += f"; COT: {cot_desc}"
-        else:
-            error_info['verbose_description'] = f"COT: {cot_desc}"
-    
-    # Try to extract error codes from error message string
-    error_str = str(error_result).lower()
-    
-    # Common IEC-104 error patterns
-    if 'timeout' in error_str:
-        error_info['error_code'] = 1
-        error_info['verbose_description'] = "TIMEOUT: Connection or operation timeout"
-    elif 'connection' in error_str and ('refused' in error_str or 'failed' in error_str):
-        error_info['error_code'] = 2
-        error_info['verbose_description'] = "CONNECTION_REFUSED: Unable to establish connection to IEC-104 server"
-    elif 'unknown' in error_str and 'type' in error_str:
-        error_info['error_code'] = 44
-        error_info['verbose_description'] = get_iec104_cot_error_verbose(44)
-    elif 'unknown' in error_str and 'address' in error_str:
-        error_info['error_code'] = 47
-        error_info['verbose_description'] = get_iec104_cot_error_verbose(47)
-    elif 'not permitted' in error_str:
-        error_info['error_code'] = 6
-        error_info['verbose_description'] = get_iec104_reject_verbose(6)
-    elif 'blocked' in error_str:
-        error_info['error_code'] = 10
-        error_info['verbose_description'] = get_iec104_reject_verbose(10)
-    elif 'invalid' in error_str:
-        error_info['error_code'] = 4
-        error_info['verbose_description'] = get_iec104_reject_verbose(4)
-    
-    # If no specific error found, provide generic description
-    if not error_info['verbose_description']:
-        error_info['verbose_description'] = f"IEC-104 Error: {error_info['error_message']}"
-    
-    return error_info
-
-def map_iec104_error_to_http_status(iec104_error_code: int) -> int:
-    """Map IEC-104 error codes to appropriate HTTP status codes"""
-    mapping = {
-        0: 200,  # SUCCESS -> OK
-        1: 408,  # TIMEOUT -> Request Timeout
-        2: 503,  # CONNECTION_REFUSED -> Service Unavailable
-        3: 403,  # NOT_ACCESSIBLE -> Forbidden
-        4: 400,  # INVALID_QUALIFIER -> Bad Request
-        5: 400,  # INVALID_IOA -> Bad Request
-        6: 405,  # COMMAND_NOT_PERMITTED -> Method Not Allowed
-        7: 501,  # TYPE_ID_NOT_SUPPORTED -> Not Implemented
-        8: 503,  # TEMPORARY_UNAVAILABLE -> Service Unavailable
-        9: 409,  # LOCAL_OVERRIDE_ACTIVE -> Conflict
-        10: 423, # OBJECT_BLOCKED -> Locked
-        11: 503, # SUBSTATION_NOT_READY -> Service Unavailable
-        12: 500, # DEVICE_TROUBLE -> Internal Server Error
-        44: 501, # UNKNOWN_TYPE_ID -> Not Implemented
-        45: 400, # UNKNOWN_COT -> Bad Request
-        46: 400, # UNKNOWN_CA -> Bad Request
-        47: 404, # UNKNOWN_IOA -> Not Found
-    }
-    return mapping.get(iec104_error_code, 500)  # Default to Internal Server Error
 
 def parse_iec104_address(address: str) -> Tuple[str, int, Optional[str]]:
     """
@@ -278,7 +93,7 @@ def convert_c104_value_to_python(info, type_id: str):
         return None
 
 class IEC104Client:
-    """IEC-104 Client wrapper using c104 library with enhanced error handling"""
+    """IEC-104 Client wrapper using c104 library"""
     
     def __init__(self, host: str, port: int = 2404, asdu_address: int = 1):
         self.host = str(host)
@@ -292,11 +107,11 @@ class IEC104Client:
         self.connected = False
         self.points_cache = {}  # Cache points by IOA
         
-    def connect(self) -> Tuple[bool, Optional[Dict]]:
-        """Connect to the IEC-104 server with detailed error information"""
+    def connect(self) -> bool:
+        """Connect to the IEC-104 server"""
         try:
-            if self.connected and self.connection and self.connection.is_connected:
-                return True, None
+            if self.connected:
+                return True
                 
             # Add connection to client
             self.connection = self.client.add_connection(
@@ -306,23 +121,15 @@ class IEC104Client:
             )
             
             if not self.connection:
-                error_info = extract_iec104_error_details(
-                    f"Failed to create connection to {self.host}:{self.port}",
-                    connection_state=0  # CLOSED
-                )
-                logger.error(f"Failed to create IEC-104 connection to {self.host}:{self.port}")
-                return False, error_info
+                logger.error(f"Failed to create connection to {self.host}:{self.port}")
+                return False
                 
             # Add station with the specified ASDU address
             self.station = self.connection.add_station(common_address=self.asdu_address)
             
             if not self.station:
-                error_info = extract_iec104_error_details(
-                    f"Failed to create station with ASDU {self.asdu_address}",
-                    connection_state=0  # CLOSED
-                )
-                logger.error(f"Failed to create IEC-104 station with ASDU {self.asdu_address}")
-                return False, error_info
+                logger.error(f"Failed to create station with ASDU {self.asdu_address}")
+                return False
                 
             # Start the client
             self.client.start()
@@ -333,32 +140,24 @@ class IEC104Client:
             # Wait for connection to establish
             time.sleep(1.0)
             
-            # Check connection state and provide detailed information
-            connection_state = getattr(self.connection, 'state', 0)
-            
             # Check if connected and unmute if needed
             if self.connection.is_connected:
                 if self.connection.is_muted:
-                    logger.info(f"IEC-104 connection to {self.host}:{self.port} is muted, unmuting...")
+                    logger.info(f"Connection to {self.host}:{self.port} is muted, unmuting...")
                     self.connection.unmute()
                     time.sleep(0.5)
                     
                 self.connected = True
-                logger.info(f"IEC-104 connection to {self.host}:{self.port} successful (state: {connection_state})")
-                return True, None
+                logger.info(f"IEC-104 connection to {self.host}:{self.port} successful (state: {self.connection.state})")
+                return True
             else:
-                error_info = extract_iec104_error_details(
-                    f"Connection failed to {self.host}:{self.port}",
-                    connection_state=connection_state
-                )
-                logger.error(f"IEC-104 connection to {self.host}:{self.port} failed (state: {connection_state})")
-                return False, error_info
+                logger.error(f"IEC-104 connection to {self.host}:{self.port} failed (state: {self.connection.state})")
+                return False
             
         except Exception as e:
-            error_info = extract_iec104_error_details(e, connection_state=7)  # ERROR state
             logger.error(f"Error connecting to IEC-104 server: {e}")
             self.connected = False
-            return False, error_info
+            return False
     
     def disconnect(self):
         """Disconnect from the IEC-104 server"""
@@ -412,24 +211,16 @@ class IEC104Client:
             
         return point
             
-    def read_point(self, ioa: int, type_id: str = "M_SP_NA_1") -> Tuple[Any, Optional[Dict]]:
-        """Read a single point using c104 library with enhanced error handling"""
+    def read_point(self, ioa: int, type_id: str = "M_SP_NA_1") -> Tuple[Any, Optional[str]]:
+        """Read a single point using c104 library"""
         try:
             if not self.connected or not self.station:
-                error_info = extract_iec104_error_details(
-                    "Client not connected",
-                    connection_state=0  # CLOSED
-                )
-                return None, error_info
+                return None, "Client not connected"
                 
             # Ensure point exists
             point = self._ensure_point(ioa, type_id)
             if not point:
-                error_info = extract_iec104_error_details(
-                    f"Failed to create/get point with IOA {ioa}",
-                    cot_code=47  # UNKNOWN_IOA
-                )
-                return None, error_info
+                return None, f"Failed to create/get point with IOA {ioa}"
                 
             # Trigger interrogation to get fresh data
             try:
@@ -442,56 +233,28 @@ class IEC104Client:
             try:
                 info = point.info
                 if info and hasattr(info, 'value'):
-                    # Check quality flags if available
-                    quality_flags = None
-                    if hasattr(info, 'quality'):
-                        quality_flags = getattr(info.quality, 'flags', None)
-                    
-                    # Extract quality issues if present
-                    if quality_flags and (quality_flags & 0xF1):  # Check for error flags
-                        error_info = extract_iec104_error_details(
-                            f"Quality issues detected for point {ioa}",
-                            quality_flags=quality_flags
-                        )
-                        python_value = convert_c104_value_to_python(info, type_id)
-                        return python_value, error_info
-                    
                     # Convert c104 value to Python primitive for serialization
                     python_value = convert_c104_value_to_python(info, type_id)
                     return python_value, None
                 else:
-                    error_info = extract_iec104_error_details(
-                        f"No data available for point {ioa} (type: {type_id})",
-                        cot_code=2  # Object not accessible
-                    )
-                    return None, error_info
+                    return None, f"No data available for point {ioa} (type: {type_id})"
             except Exception as read_e:
-                error_info = extract_iec104_error_details(read_e)
-                return None, error_info
+                return None, f"Error reading point value: {read_e}"
             
         except Exception as e:
-            error_info = extract_iec104_error_details(e)
             logger.error(f"Error reading IEC-104 point {ioa}: {e}")
-            return None, error_info
+            return None, str(e)
     
-    def write_point(self, ioa: int, value: Any, type_id: str = "C_SC_NA_1") -> Tuple[bool, Optional[Dict]]:
-        """Write a single point using c104 library with enhanced error handling"""
+    def write_point(self, ioa: int, value: Any, type_id: str = "C_SC_NA_1") -> Tuple[bool, Optional[str]]:
+        """Write a single point using c104 library"""
         try:
             if not self.connected or not self.station:
-                error_info = extract_iec104_error_details(
-                    "Client not connected",
-                    connection_state=0  # CLOSED
-                )
-                return False, error_info
+                return False, "Client not connected"
                 
             # Ensure point exists
             point = self._ensure_point(ioa, type_id)
             if not point:
-                error_info = extract_iec104_error_details(
-                    f"Failed to create/get point with IOA {ioa}",
-                    cot_code=47  # UNKNOWN_IOA
-                )
-                return False, error_info
+                return False, f"Failed to create/get point with IOA {ioa}"
                 
             # Create the appropriate command object, set it on point, then transmit
             success = False
@@ -531,34 +294,23 @@ class IEC104Client:
                     point.info = cmd
                     success = point.transmit(c104.Cot.ACTIVATION)
                 else:
-                    error_info = extract_iec104_error_details(
-                        f"Unsupported command type: {type_id}",
-                        cot_code=44  # UNKNOWN_TYPE_ID
-                    )
-                    return False, error_info
+                    return False, f"Unsupported command type: {type_id}"
                     
             except Exception as cmd_e:
-                error_info = extract_iec104_error_details(cmd_e)
-                return False, error_info
+                return False, f"Command transmission error: {cmd_e}"
                 
             if success:
-                logger.info(f"Successfully sent IEC-104 command to point {ioa}")
+                logger.info(f"Successfully sent command to point {ioa}")
                 return True, None
             else:
-                error_info = extract_iec104_error_details(
-                    "Failed to transmit command",
-                    cot_code=6  # Command not permitted
-                )
-                return False, error_info
+                return False, "Failed to transmit command"
                 
         except Exception as e:
-            error_info = extract_iec104_error_details(e)
             logger.error(f"Error writing IEC-104 point {ioa}: {e}")
-            return False, error_info
-
+            return False, str(e)
 def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, Any]], scan_time_ms: int = 1000):
     """
-    Poll IEC-104 device synchronously using c104 library with enhanced error handling.
+    Poll IEC-104 device synchronously using c104 library - matches other protocol patterns.
     This function runs in a continuous loop like other protocol polling functions.
     """
     
@@ -599,10 +351,8 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
             try:
                 start_time = time.time()
                 
-                connect_success, connect_error = client.connect()
-                if not connect_success:
-                    error_msg = connect_error.get('verbose_description', 'Connection failed') if connect_error else 'Connection failed'
-                    logger.error(f"IEC-104 device '{device_name}': Failed to connect to {host}:{port} - {error_msg}")
+                if not client.connect():
+                    logger.error(f"IEC-104 device '{device_name}': Failed to connect to {host}:{port}")
                     # Update all tags with connection error
                     with _latest_polled_values_lock:
                         for tag in tags:
@@ -610,8 +360,7 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                             _latest_polled_values[device_name][tag_id] = {
                                 "value": None,
                                 "status": "error",
-                                "error": error_msg,
-                                "error_details": connect_error,
+                                "error": "Connection failed",
                                 "timestamp": int(time.time()),
                             }
                     time.sleep(scan_time_ms / 1000.0)
@@ -634,7 +383,6 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                                     "value": None,
                                     "status": "error",
                                     "error": parse_error,
-                                    "error_details": extract_iec104_error_details(parse_error),
                                     "timestamp": int(time.time()),
                                 }
                             logger.warning(f"IEC-104 device '{device_name}': Address parse error for tag '{tag_name}': {parse_error}")
@@ -645,19 +393,17 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                             type_id = tag.get('type') or tag.get('iec104PointType', 'M_ME_NA_1')
                         
                         logger.debug(f"IEC-104 device '{device_name}': Reading tag '{tag_name}' IOA={ioa}, Type={type_id}")
-                        value, error_info = client.read_point(ioa, type_id)
+                        value, error = client.read_point(ioa, type_id)
                         
                         with _latest_polled_values_lock:
-                            if error_info:
-                                error_msg = error_info.get('verbose_description', 'Read error')
+                            if error:
                                 _latest_polled_values[device_name][tag_id] = {
-                                    "value": value,  # Include value even if there are quality issues
+                                    "value": None,
                                     "status": "error",
-                                    "error": error_msg,
-                                    "error_details": error_info,
+                                    "error": error,
                                     "timestamp": int(time.time()),
                                 }
-                                logger.warning(f"IEC-104 device '{device_name}': Error reading tag '{tag_name}' (IOA {ioa}): {error_msg}")
+                                logger.warning(f"IEC-104 device '{device_name}': Error reading tag '{tag_name}' (IOA {ioa}): {error}")
                             else:
                                 # Ensure value is a Python primitive for serialization
                                 safe_value = value
@@ -672,19 +418,16 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                                     "value": safe_value,
                                     "status": "good",
                                     "error": None,
-                                    "error_details": None,
                                     "timestamp": int(time.time()),
                                 }
                                 successful_reads += 1
                                 logger.info(f"IEC-104 device '{device_name}': Successfully read tag '{tag_name}' (IOA {ioa}): {safe_value}")
                     else:
-                        error_info = extract_iec104_error_details("No address specified")
                         with _latest_polled_values_lock:
                             _latest_polled_values[device_name][tag_id] = {
                                 "value": None,
                                 "status": "error", 
                                 "error": "No address specified",
-                                "error_details": error_info,
                                 "timestamp": int(time.time()),
                             }
                         logger.warning(f"IEC-104 device '{device_name}': Tag '{tag_name}' has no address specified")
@@ -698,9 +441,7 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                     time.sleep(sleep_time)
                     
             except Exception as e:
-                error_info = extract_iec104_error_details(e)
-                error_msg = error_info.get('verbose_description', str(e))
-                logger.error(f"IEC-104 device '{device_name}': Error during polling cycle: {error_msg}")
+                logger.error(f"IEC-104 device '{device_name}': Error during polling cycle: {e}")
                 # Update all tags with error status
                 with _latest_polled_values_lock:
                     for tag in tags:
@@ -708,8 +449,7 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                         _latest_polled_values[device_name][tag_id] = {
                             "value": None,
                             "status": "error",
-                            "error": error_msg,
-                            "error_details": error_info,
+                            "error": str(e),
                             "timestamp": int(time.time()),
                         }
                 time.sleep(scan_time_ms / 1000.0)
@@ -724,41 +464,36 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
             pass
         logger.info(f"IEC-104 device '{device_name}': Polling thread stopped")
 
-def iec104_get_with_error(device_config: Dict[str, Any], address: str) -> Tuple[Any, Optional[Dict]]:
-    """Get single IEC-104 point value with enhanced error handling using c104 library"""
+def iec104_get_with_error(device_config: Dict[str, Any], address: str) -> Tuple[Any, Optional[str]]:
+    """Get single IEC-104 point value with error handling using c104 library"""
     # Extract IEC-104 specific configuration
     host = device_config.get('iec104IpAddress') or device_config.get('ip')
     port = device_config.get('iec104PortNumber') or device_config.get('port', 2404)
     asdu_address = device_config.get('iec104AsduAddress') or device_config.get('asdu_address', 1)
     
     if not host:
-        error_info = extract_iec104_error_details("No host specified in device config (iec104IpAddress or ip)")
-        return None, error_info
+        return None, "No host specified in device config (iec104IpAddress or ip)"
         
     if not address:
-        error_info = extract_iec104_error_details("No address specified")
-        return None, error_info
+        return None, "No address specified"
     
     # Parse the address
     type_id, ioa, parse_error = parse_iec104_address(address)
     if parse_error:
-        error_info = extract_iec104_error_details(parse_error)
-        return None, error_info
+        return None, parse_error
         
     client = IEC104Client(host, port, asdu_address)
     
     try:
-        connect_success, connect_error = client.connect()
-        if not connect_success:
-            return None, connect_error
+        if not client.connect():
+            return None, f"Failed to connect to {host}:{port}"
             
-        value, error_info = client.read_point(ioa, type_id)
-        return value, error_info
+        value, error = client.read_point(ioa, type_id)
+        return value, error
         
     except Exception as e:
-        error_info = extract_iec104_error_details(e)
         logger.error(f"Error getting IEC-104 point {address}: {e}")
-        return None, error_info
+        return None, str(e)
         
     finally:
         try:
@@ -766,26 +501,23 @@ def iec104_get_with_error(device_config: Dict[str, Any], address: str) -> Tuple[
         except:
             pass
 
-def iec104_set_with_error(device_config: Dict[str, Any], address: str, value: Any, public_address: int = None, point_number: int = None) -> Tuple[bool, Optional[Dict]]:
-    """Set single IEC-104 point value with enhanced error handling using c104 library"""
+def iec104_set_with_error(device_config: Dict[str, Any], address: str, value: Any, public_address: int = None, point_number: int = None) -> Tuple[bool, Optional[str]]:
+    """Set single IEC-104 point value with error handling using c104 library"""
     # Extract IEC-104 specific configuration
     host = device_config.get('iec104IpAddress') or device_config.get('ip')
     port = device_config.get('iec104PortNumber') or device_config.get('port', 2404)
     asdu_address = device_config.get('iec104AsduAddress') or device_config.get('asdu_address', 1)
     
     if not host:
-        error_info = extract_iec104_error_details("No host specified in device config (iec104IpAddress or ip)")
-        return False, error_info
+        return False, "No host specified in device config (iec104IpAddress or ip)"
         
     if not address:
-        error_info = extract_iec104_error_details("No address specified")
-        return False, error_info
+        return False, "No address specified"
     
     # Parse the address
     type_id, ioa, parse_error = parse_iec104_address(address)
     if parse_error:
-        error_info = extract_iec104_error_details(parse_error)
-        return False, error_info
+        return False, parse_error
         
     # Convert read types to write types
     if type_id.startswith('M_'):
@@ -794,17 +526,15 @@ def iec104_set_with_error(device_config: Dict[str, Any], address: str, value: An
     client = IEC104Client(host, port, asdu_address)
     
     try:
-        connect_success, connect_error = client.connect()
-        if not connect_success:
-            return False, connect_error
+        if not client.connect():
+            return False, f"Failed to connect to {host}:{port}"
             
-        success, error_info = client.write_point(ioa, value, type_id)
-        return success, error_info
+        success, error = client.write_point(ioa, value, type_id)
+        return success, error
         
     except Exception as e:
-        error_info = extract_iec104_error_details(e)
         logger.error(f"Error setting IEC-104 point {address}: {e}")
-        return False, error_info
+        return False, str(e)
         
     finally:
         try:
