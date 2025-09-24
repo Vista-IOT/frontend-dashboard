@@ -8,6 +8,22 @@ import re
 from typing import Dict, Any, List, Tuple, Optional
 from enum import IntEnum
 
+def convert_to_boolean(value):
+    """Convert various value types to boolean, handling string 'false' correctly"""
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
+        if value_lower in ('false', 'f', '0', 'off', 'no'):
+            return False
+        elif value_lower in ('true', 't', '1', 'on', 'yes'):
+            return True
+        else:
+            # For other strings, use standard boolean conversion
+            return bool(value)
+    elif isinstance(value, (int, float)):
+        return bool(value)
+    else:
+        return bool(value)
+
 logger = get_polling_logger()
 
 # IEC 60870-5-104 Protocol Constants (for backward compatibility)
@@ -378,8 +394,28 @@ class IEC104Client:
             
     def _ensure_point(self, ioa: int, type_id: str):
         """Ensure a point exists for the given IOA and type"""
+        # For write operations, always clear cache and recreate point to avoid type conflicts
         if ioa in self.points_cache:
-            return self.points_cache[ioa]
+            cached_point = self.points_cache[ioa]
+            try:
+                # Check if cached point type matches requested type
+                cached_type_name = str(cached_point.type).split('.')[-1] if hasattr(cached_point, 'type') else None
+                if cached_type_name == type_id:
+                    return cached_point
+                else:
+                    # Clear cache and remove point if type doesn't match
+                    logger.debug(f"Type mismatch for IOA {ioa}: cached={cached_type_name}, requested={type_id}")
+                    del self.points_cache[ioa]
+                    # Try to remove the point from station to force recreation
+                    if self.station:
+                        try:
+                            self.station.remove_point(io_address=ioa)
+                        except:
+                            pass  # Ignore if remove fails
+            except Exception as e:
+                logger.debug(f"Error checking cached point type for IOA {ioa}: {e}")
+                # Clear cache on any error
+                del self.points_cache[ioa]
             
         # Map type_id string to c104 Type enum
         type_mapping = {
@@ -398,7 +434,14 @@ class IEC104Client:
             "C_SE_NC_1": c104.Type.C_SE_NC_1,
         }
         
-        c104_type = type_mapping.get(type_id, c104.Type.M_SP_NA_1)
+        # For write operations, ensure we use command type, not monitoring type
+        c104_type = type_mapping.get(type_id)
+        if not c104_type:
+            # Default based on operation type
+            if type_id.startswith('C_'):
+                c104_type = c104.Type.C_SC_NA_1  # Default command type
+            else:
+                c104_type = c104.Type.M_SP_NA_1  # Default monitoring type
         
         # First try to get existing point
         point = self.station.get_point(io_address=ioa)
@@ -411,6 +454,70 @@ class IEC104Client:
             self.points_cache[ioa] = point
             
         return point
+    
+    def _force_recreate_point(self, ioa: int, type_id: str):
+        """Force recreation of a point with the specified type, removing any existing point"""
+        logger.debug(f"🔄 Forcing recreation of point IOA={ioa} with type={type_id}")
+        try:
+            # AGGRESSIVE CLEANUP: Clear from cache and ensure fresh point creation
+            if ioa in self.points_cache:
+                logger.debug(f"🗑️ Removing IOA {ioa} from points cache")
+                del self.points_cache[ioa]
+            
+            # For write operations, we need to ensure the station has the correct point type
+            if self.station:
+                try:
+                    # Get all points and remove any conflicting ones
+                    existing_point = self.station.get_point(io_address=ioa)
+                    if existing_point:
+                        existing_type = str(existing_point.type).split('.')[-1] if hasattr(existing_point, 'type') else 'unknown'
+                        logger.debug(f"🔍 Found existing point at IOA {ioa}: type={existing_type}, requested={type_id}")
+                        
+                        if existing_type != type_id:
+                            logger.warning(f"⚠️ TYPE CONFLICT: IOA {ioa} has type {existing_type}, but {type_id} requested for write")
+                            logger.warning(f"⚠️ This is likely due to polling creating monitoring points vs. write needing command points")
+                            # Since c104 doesn't have a direct remove method, we'll work around it
+                            # by creating a new connection/station instance for writes
+                            logger.debug(f"🔄 Will create fresh point with command type {type_id}")
+                except Exception as e:
+                    logger.debug(f"Error checking existing point at IOA {ioa}: {e}")
+            
+            # Create point with the requested type, bypassing cache
+            type_mapping = {
+                "M_SP_NA_1": c104.Type.M_SP_NA_1,
+                "M_DP_NA_1": c104.Type.M_DP_NA_1,
+                "M_ST_NA_1": c104.Type.M_ST_NA_1,
+                "M_ME_NA_1": c104.Type.M_ME_NA_1,
+                "M_ME_NB_1": c104.Type.M_ME_NB_1,
+                "M_ME_NC_1": c104.Type.M_ME_NC_1,
+                "M_IT_NA_1": c104.Type.M_IT_NA_1,
+                "C_SC_NA_1": c104.Type.C_SC_NA_1,
+                "C_DC_NA_1": c104.Type.C_DC_NA_1,
+                "C_RC_NA_1": c104.Type.C_RC_NA_1,
+                "C_SE_NA_1": c104.Type.C_SE_NA_1,
+                "C_SE_NB_1": c104.Type.C_SE_NB_1,
+                "C_SE_NC_1": c104.Type.C_SE_NC_1,
+            }
+            
+            c104_type = type_mapping.get(type_id, c104.Type.C_SC_NA_1)
+            logger.debug(f"🏗️ Creating fresh point: IOA={ioa}, type={type_id}, c104_type={c104_type}")
+            
+            # Try to add the point with correct type
+            point = self.station.add_point(io_address=ioa, type=c104_type)
+            if point:
+                logger.debug(f"✅ Successfully created fresh point at IOA {ioa} with type {type_id}")
+                self.points_cache[ioa] = point
+                return point
+            else:
+                logger.error(f"❌ Failed to create point at IOA {ioa} with type {type_id}")
+                return None
+            
+        except Exception as e:
+            logger.error(f"💥 Error in _force_recreate_point for IOA {ioa}: {e}")
+            import traceback
+            logger.error(f"💥 Stack trace: {traceback.format_exc()}")
+            # Fall back to standard ensure_point
+            return self._ensure_point(ioa, type_id)
             
     def read_point(self, ioa: int, type_id: str = "M_SP_NA_1") -> Tuple[Any, Optional[Dict]]:
         """Read a single point using c104 library with enhanced error handling"""
@@ -476,6 +583,7 @@ class IEC104Client:
     
     def write_point(self, ioa: int, value: Any, type_id: str = "C_SC_NA_1") -> Tuple[bool, Optional[Dict]]:
         """Write a single point using c104 library with enhanced error handling"""
+        logger.debug(f"🔧 write_point called: IOA={ioa}, value={value}, type_id={type_id}")
         try:
             if not self.connected or not self.station:
                 error_info = extract_iec104_error_details(
@@ -485,7 +593,22 @@ class IEC104Client:
                 return False, error_info
                 
             # Ensure point exists
-            point = self._ensure_point(ioa, type_id)
+            # For write operations, convert monitoring types to command types
+            if type_id.startswith('M_'):
+                # Map monitoring types to corresponding command types
+                command_type_mapping = {
+                    'M_SP_NA_1': 'C_SC_NA_1',  # Single point -> Single command
+                    'M_DP_NA_1': 'C_DC_NA_1',  # Double point -> Double command
+                    'M_ME_NA_1': 'C_SE_NA_1',  # Measured normalized -> Set normalized
+                    'M_ME_NB_1': 'C_SE_NB_1',  # Measured scaled -> Set scaled
+                    'M_ME_NC_1': 'C_SE_NC_1',  # Measured float -> Set float
+                }
+                command_type_id = command_type_mapping.get(type_id, 'C_SC_NA_1')
+                # Force recreation to avoid type conflicts
+                point = self._force_recreate_point(ioa, command_type_id)
+            else:
+                # For command types, also force recreation to ensure correct type
+                point = self._force_recreate_point(ioa, type_id)
             if not point:
                 error_info = extract_iec104_error_details(
                     f"Failed to create/get point with IOA {ioa}",
@@ -497,13 +620,18 @@ class IEC104Client:
             success = False
             try:
                 if type_id == "C_SC_NA_1":
-                    # Single command - accepts boolean directly
-                    cmd = c104.SingleCmd(bool(value))
+                    # Single command - accepts boolean directly with proper string handling
+                    bool_val = convert_to_boolean(value)
+                    logger.debug(f"📤 Creating SingleCmd: IOA={ioa}, bool_value={bool_val}, point_type={point.type if hasattr(point, 'type') else 'unknown'}")
+                    cmd = c104.SingleCmd(bool_val)
+                    logger.debug(f"✅ SingleCmd created successfully: {cmd}")
                     point.info = cmd
+                    logger.debug(f"✅ Command assigned to point.info")
                     success = point.transmit(c104.Cot.ACTIVATION)
+                    logger.debug(f"📡 Transmission result: {success}")
                 elif type_id == "C_DC_NA_1":
                     # Double command - expects c104.Double enum
-                    double_state = c104.Double.ON if value else c104.Double.OFF
+                    double_state = c104.Double.ON if convert_to_boolean(value) else c104.Double.OFF
                     cmd = c104.DoubleCmd(double_state)
                     point.info = cmd
                     success = point.transmit(c104.Cot.ACTIVATION)
@@ -538,6 +666,12 @@ class IEC104Client:
                     return False, error_info
                     
             except Exception as cmd_e:
+                logger.error(f"💥 Exception in command creation/transmission: {cmd_e}")
+                logger.error(f"💥 Exception type: {type(cmd_e)}")
+                logger.error(f"💥 IOA={ioa}, type_id={type_id}, value={value}")
+                if hasattr(cmd_e, '__traceback__'):
+                    import traceback
+                    logger.error(f"💥 Stack trace: {traceback.format_exc()}")
                 error_info = extract_iec104_error_details(cmd_e)
                 return False, error_info
                 
@@ -789,7 +923,15 @@ def iec104_set_with_error(device_config: Dict[str, Any], address: str, value: An
         
     # Convert read types to write types
     if type_id.startswith('M_'):
-        type_id = type_id.replace('M_SP_NA_1', 'C_SC_NA_1').replace('M_ME_NA_1', 'C_SE_NA_1').replace('M_ME_NB_1', 'C_SE_NB_1').replace('M_ME_NC_1', 'C_SE_NC_1')
+        # Map monitoring types to corresponding command types (same as in write_point)
+        command_type_mapping = {
+            'M_SP_NA_1': 'C_SC_NA_1',  # Single point -> Single command
+            'M_DP_NA_1': 'C_DC_NA_1',  # Double point -> Double command
+            'M_ME_NA_1': 'C_SE_NA_1',  # Measured normalized -> Set normalized
+            'M_ME_NB_1': 'C_SE_NB_1',  # Measured scaled -> Set scaled
+            'M_ME_NC_1': 'C_SE_NC_1',  # Measured float -> Set float
+        }
+        type_id = command_type_mapping.get(type_id, 'C_SC_NA_1')
         
     client = IEC104Client(host, port, asdu_address)
     

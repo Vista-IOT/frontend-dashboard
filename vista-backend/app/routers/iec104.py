@@ -5,7 +5,8 @@ import logging
 
 from app.services.iec104_service import (
     iec104_get_with_error,
-    iec104_set_with_error
+    iec104_set_with_error,
+    map_iec104_error_to_http_status
 )
 
 router = APIRouter(prefix="/deploy/api/iec104", tags=["iec104"])
@@ -27,6 +28,7 @@ class IEC104Response(BaseModel):
     success: bool
     data: Optional[Any] = None
     error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
 
 def _normalize_device_config(body: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize device configuration from request body"""
@@ -37,6 +39,21 @@ def _normalize_device_config(body: Dict[str, Any]) -> Dict[str, Any]:
         'iec104PortNumber': device.get('iec104PortNumber', 2404),
         'iec104AsduAddress': device.get('iec104AsduAddress', 1)
     }
+
+def _handle_error_response(error_info: Optional[Dict[str, Any]], operation: str) -> IEC104Response:
+    """Handle error response with enhanced error details"""
+    if error_info:
+        error_message = error_info.get('verbose_description') or error_info.get('error_message', f'{operation} operation failed')
+        return IEC104Response(
+            success=False,
+            error=error_message,
+            error_details=error_info
+        )
+    else:
+        return IEC104Response(
+            success=False,
+            error=f"{operation} operation failed"
+        )
 
 @router.post("/write")
 async def write_iec104_point(body: Dict[str, Any]):
@@ -84,7 +101,7 @@ async def write_iec104_point(body: Dict[str, Any]):
         logger.info(f"Using IEC-104 config: {iec104_config['iec104IpAddress']}:{iec104_config['iec104PortNumber']}")
         
         # Call the service with IEC-104 specific parameters
-        success, error = iec104_set_with_error(
+        success, error_info = iec104_set_with_error(
             iec104_config, 
             address, 
             value, 
@@ -105,11 +122,8 @@ async def write_iec104_point(body: Dict[str, Any]):
                 }
             )
         else:
-            logger.error(f"IEC-104 write failed: {error}")
-            return IEC104Response(
-                success=False,
-                error=error or "Write operation failed"
-            )
+            logger.error(f"IEC-104 write failed: {error_info}")
+            return _handle_error_response(error_info, "Write")
             
     except Exception as e:
         logger.error(f"Exception in IEC-104 write: {e}")
@@ -124,9 +138,9 @@ async def read_iec104_point(request: IEC104ReadRequest):
     try:
         logger.info(f"IEC-104 read request: address={request.address}")
         
-        value, error = iec104_get_with_error(request.deviceConfig, request.address)
+        value, error_info = iec104_get_with_error(request.deviceConfig, request.address)
         
-        if value is not None:
+        if error_info is None:
             return IEC104Response(
                 success=True,
                 data={
@@ -135,10 +149,8 @@ async def read_iec104_point(request: IEC104ReadRequest):
                 }
             )
         else:
-            return IEC104Response(
-                success=False,
-                error=error or "Read operation failed"
-            )
+            logger.error(f"IEC-104 read failed: {error_info}")
+            return _handle_error_response(error_info, "Read")
             
     except Exception as e:
         logger.error(f"Exception in IEC-104 read: {e}")
