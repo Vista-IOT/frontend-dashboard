@@ -5,6 +5,7 @@ export interface PolledTagValue {
   status: string;
   error: string | null;
   timestamp: number;
+  last_successful_timestamp: number | null;
 }
 
 export function usePolledTagValues(pollInterval = 1000) {

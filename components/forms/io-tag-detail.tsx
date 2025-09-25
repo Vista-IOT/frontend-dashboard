@@ -1,6 +1,8 @@
 "use client";
 
+import { format } from "date-fns";
 import { useState, useEffect } from "react";
+import { useRef } from "react";
 import {
   Plus,
   Edit,
@@ -806,7 +808,6 @@ export function IOTagDetailView({
                 <TableHead className="w-10"></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Data Type</TableHead>
-                <TableHead>Source</TableHead>
                 <TableHead>Default Value</TableHead>
                 <TableHead>Scan Rate</TableHead>
                 <TableHead>Address</TableHead>
@@ -816,6 +817,7 @@ export function IOTagDetailView({
                 <TableHead>Read Write</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Value</TableHead>
+                <TableHead className="w-32">Last Seen</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -823,7 +825,7 @@ export function IOTagDetailView({
               {tagsToDisplay.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={12}
+                    colSpan={14}
                     className="text-center py-6 text-muted-foreground"
                   >
                     No IO tags configured for this device. Click "Add" to create
@@ -847,7 +849,6 @@ export function IOTagDetailView({
                     </TableCell>
                     <TableCell className="font-medium">{tag.name}</TableCell>
                     <TableCell>{tag.dataType || "Analog"}</TableCell>
-                    <TableCell>{tag.source || "Device"}</TableCell>
                     <TableCell>{tag.defaultValue || "0.0"}</TableCell>
                     <TableCell>{tag.scanRate || "1"}</TableCell>
                     <TableCell>{tag.address}</TableCell>
@@ -895,6 +896,21 @@ export function IOTagDetailView({
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const tagVal: PolledTagValue | undefined = polledValues[deviceToDisplay.name]?.[tag.id];
+                        if (!tagVal || !tagVal.last_successful_timestamp) {
+                          return (
+                            <span className="text-gray-400 text-sm">No data</span>
+                          );
+                        }
+                        return (
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(tagVal.last_successful_timestamp * 1000), "MMM dd, HH:mm:ss")}
+                          </span>
                         );
                       })()}
                     </TableCell>

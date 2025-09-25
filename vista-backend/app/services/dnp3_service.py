@@ -1,5 +1,6 @@
 # Old logging import replaced
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+from app.services.last_seen import update_last_successful_timestamp
 import time
 import threading
 import socket
@@ -882,6 +883,10 @@ def poll_dnp3_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, An
                             "error": error,
                             "timestamp": int(time.time()),
                         }
+
+                        # Update persistent last successful timestamp only for successful reads
+                        if value is not None:
+                            update_last_successful_timestamp(device_name, tag_id, int(time.time()))
 
                     if value is not None:
                         polling_logger.debug(f"✅ DNP3 {device_name}.{tag_name}: {value}")

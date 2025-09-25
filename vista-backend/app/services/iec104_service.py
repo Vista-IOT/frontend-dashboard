@@ -1,5 +1,6 @@
 # Updated to use centralized polling logger and enhanced error handling
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+from app.services.last_seen import update_last_successful_timestamp
 
 import c104
 import time
@@ -771,6 +772,8 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                                     "error_details": extract_iec104_error_details(parse_error),
                                     "timestamp": int(time.time()),
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, int(time.time()))
                             logger.warning(f"IEC-104 device '{device_name}': Address parse error for tag '{tag_name}': {parse_error}")
                             continue
                             
@@ -791,6 +794,8 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                                     "error_details": error_info,
                                     "timestamp": int(time.time()),
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, int(time.time()))
                                 logger.warning(f"IEC-104 device '{device_name}': Error reading tag '{tag_name}' (IOA {ioa}): {error_msg}")
                             else:
                                 # Ensure value is a Python primitive for serialization
@@ -809,6 +814,8 @@ def poll_iec104_device_sync(device_config: Dict[str, Any], tags: List[Dict[str, 
                                     "error_details": None,
                                     "timestamp": int(time.time()),
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, int(time.time()))
                                 successful_reads += 1
                                 logger.info(f"IEC-104 device '{device_name}': Successfully read tag '{tag_name}' (IOA {ioa}): {safe_value}")
                     else:

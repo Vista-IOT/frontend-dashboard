@@ -5,11 +5,18 @@ from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
 import serial
+import json
+import os
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context, get_startup_logger
 from app.services.snmp_service import poll_snmp_device_sync, snmp_get_with_error_detailed, snmp_get
 from app.services.opcua_service import poll_opcua_device_sync, opcua_get_with_error
 from app.services.dnp3_service import poll_dnp3_device_sync, dnp3_get_with_error
 from app.services.iec104_service import poll_iec104_device_sync, iec104_get_with_error
+from app.services.last_seen import (
+    load_last_successful_timestamps,
+    update_last_successful_timestamp,
+    get_last_successful_timestamp
+)
 
 # Initialize specialized loggers
 polling_logger = get_polling_logger()
@@ -30,14 +37,24 @@ MODBUS_EXCEPTION_CODES = {
 def get_modbus_exception_verbose(exception_code):
     return MODBUS_EXCEPTION_CODES.get(exception_code, "Unknown Modbus exception code.")
 
-# Global dict to store latest polled values and status: {device_name: {tag_id: {value, status, error, timestamp}}}
+    """Get the last successful timestamp for a tag"""
+    with _last_successful_timestamps_lock:
+        return _last_successful_timestamps.get(device_name, {}).get(tag_id, None)
+    return MODBUS_EXCEPTION_CODES.get(exception_code, "Unknown Modbus exception code.")
+
+# Global dict to store latest polled values and status: {device_name: {tag_id: {value, status, error, timestamp, last_successful_timestamp}}}
 _latest_polled_values = {}
 _latest_polled_values_lock = threading.Lock()
 
 def get_latest_polled_values():
     with _latest_polled_values_lock:
         import copy
-        return copy.deepcopy(_latest_polled_values)
+        # Enrich with last successful timestamps
+        enriched_values = copy.deepcopy(_latest_polled_values)
+        for device_name, tags in enriched_values.items():
+            for tag_id, tag_data in tags.items():
+                tag_data["last_successful_timestamp"] = get_last_successful_timestamp(device_name, tag_id)
+        return enriched_values
 
 def ping_host(ip, count=2, timeout=1):
     try:
@@ -234,6 +251,8 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         time.sleep(scan_time_ms / 1000.0)
                         break
                     if result.isError():
@@ -255,6 +274,8 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         break
                     else:
                         all_registers.extend(result.registers)
@@ -283,6 +304,8 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "error": None,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                             except Exception as e:
                                 polling_logger.error(f"Error processing tag {tag_name}: {e}")
                                 _latest_polled_values[device_name][tag_id] = {
@@ -291,6 +314,8 @@ def poll_modbus_tcp_device(device_config, tags, scan_time_ms=1000):
                                     "error": str(e),
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                 time.sleep(scan_time_ms / 1000.0)
         finally:
             client.close()
@@ -417,6 +442,8 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         break
                     
                     if result.isError():
@@ -439,6 +466,8 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         break
                     else:
                         all_registers.extend(result.registers)
@@ -472,6 +501,8 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                     "error": None,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                             except Exception as e:
                                 polling_logger.error(f"Error processing RTU tag {tag_name}: {e}")
                                 _latest_polled_values[device_name][tag_id] = {
@@ -480,6 +511,8 @@ def poll_modbus_rtu_device(device_config, tags, scan_time_ms=1000):
                                     "error": str(e),
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                 
             except serial.SerialException as se:
                 polling_logger.error(f"Serial port error for RTU device {device_name}: {se}")
@@ -619,6 +652,8 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "error": None,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         elif raw_value == "":
                             # Handle empty string as "noSuchName" error (OID not available)
                             from app.services.snmp_service import get_snmp_error_verbose, format_enhanced_snmp_error
@@ -641,6 +676,8 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "error": enhanced_error,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                         else:
                             # Use enhanced error message if available
                             error_msg = snmp_error or f"SNMP GET failed for OID {oid}"
@@ -675,6 +712,8 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                                     "error": error_msg,
                                     "timestamp": now,
                                 }
+                                # Update persistent last successful timestamp
+                                update_last_successful_timestamp(device_name, tag_id, now)
                     
                     except Exception as e:
                         polling_logger.error(f"Error polling SNMP tag {tag_name}: {e}")
@@ -704,6 +743,9 @@ def start_polling_from_config(config):
     from gateway_manager import gateway_manager
     
     # polling_logger.info('Starting polling from config...')
+    
+    # Load persistent last successful timestamps
+    load_last_successful_timestamps()
     if config is None:
         polling_logger.warning('No configuration provided to start_polling_from_config. Skipping polling setup.')
         return

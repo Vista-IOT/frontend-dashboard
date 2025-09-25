@@ -1,5 +1,6 @@
 # Updated to use centralized polling logger and enhanced error handling
 from app.logging_config import get_polling_logger, get_error_logger, log_error_with_context
+from app.services.last_seen import update_last_successful_timestamp
 
 import asyncio
 import logging
@@ -718,6 +719,8 @@ async def poll_opcua_device_async(device_config: Dict[str, Any], tags: List[Dict
                             "error_details": error_info,
                             "timestamp": now,
                         }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                         continue
                     
                     # Read node value
@@ -748,6 +751,8 @@ async def poll_opcua_device_async(device_config: Dict[str, Any], tags: List[Dict
                             "error_details": None,
                             "timestamp": now,
                         }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                     else:
                         error_msg = error_info.get('verbose_description', f'OPC-UA read failed for Node ID {node_id}')
                         logger.error(f"OPC-UA read failed for {tag_name} @ {node_id}: {error_msg}")
@@ -758,6 +763,8 @@ async def poll_opcua_device_async(device_config: Dict[str, Any], tags: List[Dict
                             "error_details": error_info,
                             "timestamp": now,
                         }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                 
                 # Wait for the next polling cycle
                 await asyncio.sleep(scan_time_ms / 1000.0)
@@ -948,7 +955,9 @@ async def poll_opcua_device_with_global_storage(device_config: Dict[str, Any], t
                                 "error": error_info.get('verbose_description'),
                                 "error_details": error_info,
                                 "timestamp": now,
-                            }
+                        }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                         continue
                     
                     # Read node value
@@ -979,7 +988,9 @@ async def poll_opcua_device_with_global_storage(device_config: Dict[str, Any], t
                                 "error": None,
                                 "error_details": None,
                                 "timestamp": now,
-                            }
+                        }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                     else:
                         error_msg = error_info.get('verbose_description', f'OPC-UA read failed for Node ID {node_id}')
                         logger.error(f"OPC-UA read failed for {tag_name} @ {node_id}: {error_msg}")
@@ -990,7 +1001,9 @@ async def poll_opcua_device_with_global_storage(device_config: Dict[str, Any], t
                                 "error": error_msg,
                                 "error_details": error_info,
                                 "timestamp": now,
-                            }
+                        }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                 
                 # Wait for the next polling cycle
                 await asyncio.sleep(scan_time_ms / 1000.0)
@@ -1020,6 +1033,8 @@ async def poll_opcua_device_with_global_storage(device_config: Dict[str, Any], t
                             "error_details": error_info,
                             "timestamp": now,
                         }
+                        # Update persistent last successful timestamp
+                        update_last_successful_timestamp(device_name, tag_id, now)
                 
                 # Implement reconnection logic
                 reconnect_attempts += 1
