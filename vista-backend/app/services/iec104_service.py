@@ -167,29 +167,41 @@ def extract_iec104_error_details(error_result, connection_state=None, quality_fl
     if hasattr(error_result, '__class__'):
         error_info['error_type'] = error_result.__class__.__name__
     
-    # Handle connection state information
+    # Handle connection state information - ensure JSON serializable
     if connection_state is not None:
-        error_info['connection_state'] = connection_state
-        error_info['verbose_description'] = get_iec104_connection_error_verbose(connection_state)
+        # Convert enum or object to string/int for JSON serialization
+        if hasattr(connection_state, 'value'):  # Enum object
+            error_info['connection_state'] = str(connection_state.value)
+        elif hasattr(connection_state, 'name'):  # Enum object
+            error_info['connection_state'] = str(connection_state.name)  
+        else:
+            error_info['connection_state'] = str(connection_state)
+        
+        # Get numeric value for error code lookup
+        state_code = getattr(connection_state, 'value', connection_state) if hasattr(connection_state, 'value') else connection_state
+        try:
+            state_code = int(state_code) if state_code is not None else 0
+        except (ValueError, TypeError):
+            state_code = 0
+        error_info['verbose_description'] = get_iec104_connection_error_verbose(state_code)
     
-    # Handle quality flags for measured values
+    # Handle quality flags for measured values - ensure JSON serializable
     if quality_flags is not None:
-        error_info['quality_flags'] = quality_flags
-        quality_desc = get_iec104_quality_error_verbose(quality_flags)
+        error_info['quality_flags'] = int(quality_flags) if quality_flags is not None else 0
+        quality_desc = get_iec104_quality_error_verbose(error_info['quality_flags'])
         if error_info['verbose_description']:
             error_info['verbose_description'] += f"; Quality: {quality_desc}"
         else:
             error_info['verbose_description'] = f"Quality: {quality_desc}"
     
-    # Handle cause of transmission codes
+    # Handle cause of transmission codes - ensure JSON serializable  
     if cot_code is not None:
-        error_info['cot_code'] = cot_code
-        cot_desc = get_iec104_cot_error_verbose(cot_code)
+        error_info['cot_code'] = int(cot_code) if cot_code is not None else 0
+        cot_desc = get_iec104_cot_error_verbose(error_info['cot_code'])
         if error_info['verbose_description']:
             error_info['verbose_description'] += f"; COT: {cot_desc}"
         else:
             error_info['verbose_description'] = f"COT: {cot_desc}"
-    
     # Try to extract error codes from error message string
     error_str = str(error_result).lower()
     

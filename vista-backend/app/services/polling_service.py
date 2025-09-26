@@ -49,11 +49,39 @@ _latest_polled_values_lock = threading.Lock()
 def get_latest_polled_values():
     with _latest_polled_values_lock:
         import copy
+        import json
+        
         # Enrich with last successful timestamps
         enriched_values = copy.deepcopy(_latest_polled_values)
         for device_name, tags in enriched_values.items():
             for tag_id, tag_data in tags.items():
                 tag_data["last_successful_timestamp"] = get_last_successful_timestamp(device_name, tag_id)
+                
+                # Sanitize non-JSON-serializable values
+                sanitized_data = {}
+                for key, value in tag_data.items():
+                    try:
+                        # Test if the value is JSON serializable
+                        json.dumps(value)
+                        sanitized_data[key] = value
+                    except (TypeError, ValueError):
+                        # Convert non-serializable objects to strings
+                        if hasattr(value, '__dict__'):
+                            # For objects with __dict__, try to extract useful info
+                            sanitized_data[key] = str(value)
+                        elif hasattr(value, 'value'):
+                            # For enums, use the value
+                            sanitized_data[key] = str(value.value) 
+                        elif hasattr(value, 'name'):
+                            # For enums, use the name
+                            sanitized_data[key] = str(value.name)
+                        else:
+                            # Fallback to string representation
+                            sanitized_data[key] = str(value)
+                
+                # Replace the tag data with sanitized version
+                enriched_values[device_name][tag_id] = sanitized_data
+        
         return enriched_values
 
 def ping_host(ip, count=2, timeout=1):

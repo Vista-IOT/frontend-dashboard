@@ -132,8 +132,8 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         if self._should_log_endpoint(url):
             getattr(self.api_logger, log_level)(
                 f"API Response: {method} {url} - {status_code} ({process_time*1000:.2f}ms)",
-                extra={'extra_data': response_data}
-        )
+                extra={"extra_data": response_data}
+            )
         
         # Performance logging for slow requests
         if process_time > 1.0:  # Log requests taking more than 1 second

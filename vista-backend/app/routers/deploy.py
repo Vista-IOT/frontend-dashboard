@@ -165,7 +165,7 @@ async def reinit_backend():
         }
 
 @router.get("/api/io/polled-values")
-def get_polled_values():
+async def get_polled_values():
     values = get_latest_polled_values()
     
     return JSONResponse(values)
