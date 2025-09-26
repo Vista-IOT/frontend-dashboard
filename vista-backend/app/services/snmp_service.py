@@ -9,6 +9,9 @@ import time
 import threading
 from typing import Dict, Any, Optional, Union
 
+# Initialize logger at module level
+logger = get_polling_logger()
+
 # SNMP Error Code Mappings and Enhanced Error Handling
 # Standard SNMP Error Status Codes (RFC 3416)
 SNMP_ERROR_CODES = {

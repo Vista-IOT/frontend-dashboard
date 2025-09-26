@@ -695,7 +695,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                             enhanced_error = format_enhanced_snmp_error(error_details_empty, "SNMP GET", oid)
                             status_code = "snmp_no_such_name"
                             
-                            polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code 2]: OID not available on target device")
+                            polling_polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code 2]: OID not available on target device")
                             
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {
@@ -729,9 +729,9 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                             
                             # Log detailed error information
                             if error_details and error_details.get('error_code') is not None:
-                                logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code {error_details['error_code']}]: {error_details.get('verbose_description', 'Unknown error')}")
+                                polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code {error_details['error_code']}]: {error_details.get('verbose_description', 'Unknown error')}")
                             else:
-                                logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
+                                polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid}: {error_msg}")
                             
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {
