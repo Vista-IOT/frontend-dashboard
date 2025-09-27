@@ -18,6 +18,46 @@ from app.services.last_seen import (
     get_last_successful_timestamp
 )
 
+
+# Connectivity Error Codes for Network/Ping Operations
+CONNECTIVITY_ERROR_CODES = {
+    0: "SUCCESS: Host is reachable",
+    1: "TIMEOUT: Request timeout, host did not respond in time",
+    2: "HOST_UNREACHABLE: Host is unreachable (network or routing issue)",
+    3: "PACKET_LOSS: Partial packet loss detected",
+    4: "NETWORK_UNREACHABLE: Network is unreachable",
+    5: "HOST_DOWN: Host appears to be down or not responding",
+    99: "CONNECTION_ERROR: General connectivity error"
+}
+
+def format_connectivity_error(error_code: int, verbose_description: str) -> str:
+    """Format connectivity error in standardized format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)"""
+    return f"({error_code} - {verbose_description})"
+
+def extract_ping_error_details(ping_output: str, stderr: str = "") -> tuple[int, str]:
+    """Extract error code and formatted description from ping output"""
+    combined_output = (ping_output + stderr).lower()
+    
+    if "100% packet loss" in combined_output:
+        error_code = 5  # HOST_DOWN
+        description = "HOST_DOWN: Host appears to be down or not responding"
+    elif "packet loss" in combined_output:
+        error_code = 3  # PACKET_LOSS
+        description = "PACKET_LOSS: Partial packet loss detected"
+    elif "timeout" in combined_output or "no response" in combined_output:
+        error_code = 1  # TIMEOUT
+        description = "TIMEOUT: Request timeout, host did not respond in time"
+    elif "unreachable" in combined_output and "network" in combined_output:
+        error_code = 4  # NETWORK_UNREACHABLE
+        description = "NETWORK_UNREACHABLE: Network is unreachable"
+    elif "unreachable" in combined_output:
+        error_code = 2  # HOST_UNREACHABLE
+        description = "HOST_UNREACHABLE: Host is unreachable (network or routing issue)"
+    else:
+        error_code = 99  # CONNECTION_ERROR
+        description = "CONNECTION_ERROR: General connectivity error"
+    
+    return error_code, format_connectivity_error(error_code, description)
 # Initialize specialized loggers
 polling_logger = get_polling_logger()
 error_logger = get_error_logger()
@@ -101,12 +141,15 @@ def ping_host(ip, count=2, timeout=1):
             polling_logger.info(f"Ping to {ip} successful")
             return True, None
         else:
-            err = f"Ping to {ip} failed:\n{result.stdout}\n{result.stderr}"
-            # polling_logger.error(err)
-            return False, err
+            # Extract error details and apply standardized formatting
+            error_code, formatted_error = extract_ping_error_details(result.stdout, result.stderr)
+            # polling_logger.error(formatted_error)
+            return False, formatted_error
     except Exception as e:
         # polling_logger.error(f"Exception during ping to {ip}: {e}")
-        return False, str(e)
+        # Format exception as connection error
+        error_code, formatted_error = extract_ping_error_details(str(e))
+        return False, formatted_error
 
 def get_tag_conversion_type(tag):
     ct = tag.get('conversionType')
@@ -695,7 +738,7 @@ def poll_snmp_device_sync(device_config, tags, scan_time_ms=60000):
                             enhanced_error = format_enhanced_snmp_error(error_details_empty, "SNMP GET", oid)
                             status_code = "snmp_no_such_name"
                             
-                            polling_polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code 2]: OID not available on target device")
+                            polling_logger.error(f"SNMP GET failed for {tag_name} @ {oid} [Error Code 2]: OID not available on target device")
                             
                             with _latest_polled_values_lock:
                                 _latest_polled_values[device_name][tag_id] = {

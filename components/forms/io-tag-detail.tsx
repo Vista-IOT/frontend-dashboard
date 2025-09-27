@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { useState, useEffect } from "react";
 import { useRef } from "react";
+import { FileSpreadsheet, Upload } from "lucide-react";
 import {
   Plus,
   Edit,
@@ -749,35 +750,7 @@ export function IOTagDetailView({
             Configure input/output tags for data acquisition and processing
           </p>
         </div>
-                <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            onClick={handleExportCSV}
-            disabled={tagsToDisplay.length === 0}
-          >
-            <FileDown className="h-4 w-4 mr-2" /> Export CSV
-          </Button>
-          <input
-            type="file"
-            ref={(ref) => {
-              if (ref) {
-                ref.style.display = 'none';
-              }
-            }}
-            accept=".csv,.tsv,.txt"
-            onChange={handleFileChange}
-            id="csv-import-input"
-          />
-          <Button
-            variant="outline"
-            onClick={() => {
-              const input = document.getElementById('csv-import-input') as HTMLInputElement;
-              if (input) input.click();
-            }}
-          >
-            <FileUp className="h-4 w-4 mr-2" /> Import CSV
-          </Button>
-        </div>
+                
         
         <div className="flex space-x-2">
           <Button onClick={handleAddTag}>
@@ -797,7 +770,39 @@ export function IOTagDetailView({
           >
             <Trash2 className="h-4 w-4 mr-2" /> Delete
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportCSV}
+            disabled={tagsToDisplay.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+          <input
+            type="file"
+            ref={(ref) => {
+              if (ref) {
+                ref.style.display = 'none';
+              }
+            }}
+            accept=".csv,.tsv,.txt"
+            onChange={handleFileChange}
+            id="csv-import-input"
+          />
+          <Button
+            variant="outline"
+            className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700"
+            onClick={() => {
+              const input = document.getElementById('csv-import-input') as HTMLInputElement;
+              if (input) input.click();
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" /> Import CSV
+          </Button>
         </div>
+        
+          
+        
       </div>
 
       <Card>

@@ -194,6 +194,13 @@ def get_opcua_connection_error_verbose(error_code: int) -> str:
     """Get verbose description for OPC-UA connection error code"""
     return OPCUA_CONNECTION_ERROR_CODES.get(error_code, f"Unknown connection error code: {error_code}")
 
+def format_opcua_error(status_code: int, verbose_description: str) -> str:
+    """Format OPC-UA error in standardized format: (STATUS_CODE - ERROR_DESCRIPTION)"""
+    if isinstance(status_code, int):
+        return f"(0x{status_code:08X} - {verbose_description})"
+    else:
+        return f"({status_code} - {verbose_description})"
+
 def extract_opcua_error_details(error_result, status_code=None, connection_error_code=None):
     """Extract detailed error information from OPC-UA responses and exceptions"""
     error_info = {
@@ -245,16 +252,27 @@ def extract_opcua_error_details(error_result, status_code=None, connection_error
     error_str = str(error_result).lower()
     
     # Common OPC-UA error patterns
-    if 'timeout' in error_str:
-        error_info['connection_error_code'] = 1
-        error_info['verbose_description'] = get_opcua_connection_error_verbose(1)
-    elif 'connection refused' in error_str or 'refused' in error_str:
-        error_info['connection_error_code'] = 2
-        error_info['verbose_description'] = get_opcua_connection_error_verbose(2)
-    elif 'network' in error_str and 'unreachable' in error_str:
-        error_info['connection_error_code'] = 3
-        error_info['verbose_description'] = get_opcua_connection_error_verbose(3)
-    elif 'host' in error_str and 'unreachable' in error_str:
+    # Check errno patterns first (more specific)
+    if "errno 110" in error_str:
+        error_info["status_code"] = 0x800C0000
+        error_info["verbose_description"] = get_opcua_status_verbose(0x800C0000)
+    elif "errno 111" in error_str:
+        error_info["status_code"] = 0x80120000
+        error_info["verbose_description"] = get_opcua_status_verbose(0x80120000)
+    elif "errno 113" in error_str or "connect call failed" in error_str:
+        error_info["status_code"] = 0x80050000
+        error_info["verbose_description"] = get_opcua_status_verbose(0x80050000)
+    # Then check generic patterns
+    elif "timeout" in error_str or "timed out" in error_str:
+        error_info["status_code"] = 0x800C0000
+        error_info["verbose_description"] = get_opcua_status_verbose(0x800C0000)
+    elif "connection refused" in error_str or "refused" in error_str:
+        error_info["status_code"] = 0x80120000
+        error_info["verbose_description"] = get_opcua_status_verbose(0x80120000)
+    elif "network" in error_str and "unreachable" in error_str:
+        error_info["connection_error_code"] = 3
+        error_info["verbose_description"] = get_opcua_connection_error_verbose(3)
+    elif "host" in error_str and "unreachable" in error_str:
         error_info['connection_error_code'] = 4
         error_info['verbose_description'] = get_opcua_connection_error_verbose(4)
     elif 'dns' in error_str or 'name resolution' in error_str:
@@ -303,6 +321,17 @@ def extract_opcua_error_details(error_result, status_code=None, connection_error
     if not error_info['verbose_description']:
         error_info['verbose_description'] = f"OPC-UA Error: {error_info['error_message']}"
     
+    # Apply standardized formatting to verbose description
+    if error_info.get("verbose_description") and (error_info.get("status_code") is not None or error_info.get("connection_error_code") is not None):
+        # Use status code if available, otherwise use connection error code
+        error_code = error_info.get("status_code") or error_info.get("connection_error_code")
+        if error_code is not None:
+            # Only format if not already formatted
+            if not error_info["verbose_description"].startswith("("):
+                error_info["verbose_description"] = format_opcua_error(error_code, error_info["verbose_description"])
+    elif error_info.get("verbose_description") and not error_info["verbose_description"].startswith("("):
+        # For generic errors, use a default error code
+        error_info["verbose_description"] = format_opcua_error("UNKNOWN", error_info["verbose_description"])
     return error_info
 
 def map_opcua_error_to_http_status(opcua_status_code: int = None, connection_error_code: int = None) -> int:
@@ -510,7 +539,7 @@ async def test_opcua_connection(device_config: OPCUADeviceConfig) -> Tuple[bool,
             except Exception:
                 pass
 
-async def read_opcua_node(client: Client, node_id: str) -> Tuple[Any, Optional[Dict]]:
+async def read_opcua_node(client, node_id: str) -> Tuple[Any, Optional[Dict]]:
     """
     Read a single OPC-UA node value with enhanced error handling.
     
@@ -550,7 +579,7 @@ async def read_opcua_node(client: Client, node_id: str) -> Tuple[Any, Optional[D
         logger.error(f"Error reading OPC-UA node {node_id}: {error_info.get('verbose_description', str(e))}")
         return None, error_info
 
-async def write_opcua_node(client: Client, node_id: str, value: Any, data_type: Optional[str] = None) -> Tuple[bool, Optional[Dict]]:
+async def write_opcua_node(client, node_id: str, value: Any, data_type: Optional[str] = None) -> Tuple[bool, Optional[Dict]]:
     """
     Write a value to an OPC-UA node with enhanced error handling.
     

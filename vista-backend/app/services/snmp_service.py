@@ -40,6 +40,10 @@ def get_snmp_error_verbose(error_code: int) -> str:
     """Get verbose description for SNMP error code"""
     return SNMP_ERROR_CODES.get(error_code, f"Unknown SNMP error code: {error_code}")
 
+
+def format_snmp_error(error_code: int, verbose_description: str) -> str:
+    """Format SNMP error in standardized format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)"""
+    return f"({error_code} - {verbose_description})"
 def extract_snmp_error_details(error_result, error_indication=None, error_index=None):
     """Extract detailed error information from SNMP responses"""
     error_info = {
@@ -53,7 +57,7 @@ def extract_snmp_error_details(error_result, error_indication=None, error_index=
     # Handle pysnmp error objects
     if hasattr(error_result, 'errorStatus'):
         error_info['error_code'] = int(error_result.errorStatus)
-        error_info['verbose_description'] = get_snmp_error_verbose(error_info['error_code'])
+        error_info['verbose_description'] = format_snmp_error(error_info['error_code'], get_snmp_error_verbose(error_info['error_code']))
     
     if hasattr(error_result, 'errorIndex'):
         error_info['error_index'] = int(error_result.errorIndex)
@@ -72,8 +76,12 @@ def extract_snmp_error_details(error_result, error_indication=None, error_index=
         code_match = re.search(r'errorStatus[:\s]+(\d+)', error_str, re.IGNORECASE)
         if code_match:
             error_info['error_code'] = int(code_match.group(1))
-            error_info['verbose_description'] = get_snmp_error_verbose(error_info['error_code'])
+            error_info['verbose_description'] = format_snmp_error(error_info['error_code'], get_snmp_error_verbose(error_info['error_code']))
     
+    # Apply standardized error format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)
+    if error_info['verbose_description'] and error_info['error_code'] is not None:
+        # Format as requested: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)
+        error_info['verbose_description'] = format_snmp_error(error_info['error_code'], error_info['verbose_description'])
     return error_info
 
 def map_snmp_error_to_http_status(snmp_error_code: int) -> int:
@@ -471,15 +479,15 @@ def snmp_get_command_line_detailed(device_config: Dict[str, Any], oid: str, time
         # Look for common SNMP CLI error patterns
         if 'no such name' in msg.lower() or 'no such object' in msg.lower():
             error_details['error_code'] = 2
-            error_details['verbose_description'] = get_snmp_error_verbose(2)
+            error_details['verbose_description'] = format_snmp_error(2, get_snmp_error_verbose(2))
         elif 'bad value' in msg.lower():
             error_details['error_code'] = 3
-            error_details['verbose_description'] = get_snmp_error_verbose(3)
+            error_details['verbose_description'] = format_snmp_error(3, get_snmp_error_verbose(3))
         elif 'timeout' in msg.lower():
             error_details['error_indication'] = 'Request timeout'
         elif 'authorization' in msg.lower() or 'authentication' in msg.lower():
             error_details['error_code'] = 16
-            error_details['verbose_description'] = get_snmp_error_verbose(16)
+            error_details['verbose_description'] = format_snmp_error(16, get_snmp_error_verbose(16))
         
         enhanced_error = format_enhanced_snmp_error(error_details, "SNMP GET", oid)
         return None, enhanced_error, error_details
@@ -787,19 +795,19 @@ def snmp_set_command_line_detailed(device_config: Dict[str, Any], oid: str, asn_
         # Look for common SNMP CLI error patterns
         if 'no such name' in msg.lower() or 'no such object' in msg.lower():
             error_details['error_code'] = 2
-            error_details['verbose_description'] = get_snmp_error_verbose(2)
+            error_details['verbose_description'] = format_snmp_error(2, get_snmp_error_verbose(2))
         elif 'bad value' in msg.lower():
             error_details['error_code'] = 3
-            error_details['verbose_description'] = get_snmp_error_verbose(3)
+            error_details['verbose_description'] = format_snmp_error(3, get_snmp_error_verbose(3))
         elif 'read only' in msg.lower() or 'not-writable' in msg.lower():
             error_details['error_code'] = 4
-            error_details['verbose_description'] = get_snmp_error_verbose(4)
+            error_details['verbose_description'] = format_snmp_error(4, get_snmp_error_verbose(4))
         elif 'wrong type' in msg.lower():
             error_details['error_code'] = 7
-            error_details['verbose_description'] = get_snmp_error_verbose(7)
+            error_details['verbose_description'] = format_snmp_error(7, get_snmp_error_verbose(7))
         elif 'authorization' in msg.lower() or 'authentication' in msg.lower():
             error_details['error_code'] = 16
-            error_details['verbose_description'] = get_snmp_error_verbose(16)
+            error_details['verbose_description'] = format_snmp_error(16, get_snmp_error_verbose(16))
         elif 'timeout' in msg.lower():
             error_details['error_indication'] = 'Request timeout'
         

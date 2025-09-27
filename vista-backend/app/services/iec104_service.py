@@ -184,6 +184,9 @@ def extract_iec104_error_details(error_result, connection_state=None, quality_fl
         except (ValueError, TypeError):
             state_code = 0
         error_info['verbose_description'] = get_iec104_connection_error_verbose(state_code)
+        # Set error code based on connection state
+        if state_code != 0:  # 0 is success/connected state
+            error_info['error_code'] = state_code
     
     # Handle quality flags for measured values - ensure JSON serializable
     if quality_flags is not None:
@@ -205,13 +208,13 @@ def extract_iec104_error_details(error_result, connection_state=None, quality_fl
     # Try to extract error codes from error message string
     error_str = str(error_result).lower()
     
-    # Common IEC-104 error patterns
+    # Common IEC-104 error patterns - using proper IEC standard codes
     if 'timeout' in error_str:
-        error_info['error_code'] = 1
-        error_info['verbose_description'] = "TIMEOUT: Connection or operation timeout"
+        error_info['error_code'] = 1  # From COMMAND_ERROR_CODES: TIMEOUT
+        error_info['verbose_description'] = "TIMEOUT - Connection or operation timeout"
     elif 'connection' in error_str and ('refused' in error_str or 'failed' in error_str):
-        error_info['error_code'] = 2
-        error_info['verbose_description'] = "CONNECTION_REFUSED: Unable to establish connection to IEC-104 server"
+        error_info['error_code'] = 7  # From CONNECTION_ERROR_CODES: ERROR state
+        error_info['verbose_description'] = "CONNECTION_ERROR - Unable to establish connection to IEC-104 server"
     elif 'unknown' in error_str and 'type' in error_str:
         error_info['error_code'] = 44
         error_info['verbose_description'] = get_iec104_cot_error_verbose(44)
@@ -228,19 +231,23 @@ def extract_iec104_error_details(error_result, connection_state=None, quality_fl
         error_info['error_code'] = 4
         error_info['verbose_description'] = get_iec104_reject_verbose(4)
     
-    # If no specific error found, provide generic description
-    if not error_info['verbose_description']:
-        error_info['verbose_description'] = f"IEC-104 Error: {error_info['error_message']}"
+    # Apply standardized error format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)
+    if error_info['verbose_description'] and error_info['error_code'] is not None:
+        # Format as requested: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)
+        error_info['verbose_description'] = f"({error_info['error_code']} - {error_info['verbose_description']})"
+    elif not error_info['verbose_description']:
+        # If no specific error found, provide generic description with format
+        error_code = error_info.get('error_code', 0) or 0
+        error_info['verbose_description'] = f"({error_code} - IEC-104 Error: {error_info['error_message']})"
     
     return error_info
-
 def map_iec104_error_to_http_status(iec104_error_code: int) -> int:
     """Map IEC-104 error codes to appropriate HTTP status codes"""
     mapping = {
         0: 200,  # SUCCESS -> OK
         1: 408,  # TIMEOUT -> Request Timeout
         2: 503,  # CONNECTION_REFUSED -> Service Unavailable
-        3: 403,  # NOT_ACCESSIBLE -> Forbidden
+        7: 503,  # CONNECTION_ERROR -> Service Unavailable
         4: 400,  # INVALID_QUALIFIER -> Bad Request
         5: 400,  # INVALID_IOA -> Bad Request
         6: 405,  # COMMAND_NOT_PERMITTED -> Method Not Allowed

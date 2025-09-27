@@ -88,6 +88,64 @@ def get_modbus_exception_verbose(exception_code: int) -> str:
     return MODBUS_EXCEPTION_CODES.get(exception_code, "Unknown Modbus exception code.")
 
 
+def format_modbus_error(error_code: int, verbose_description: str) -> str:
+    """Format Modbus error in standardized format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)"""
+    return f"({error_code} - {verbose_description})"
+
+def extract_modbus_error_details(error_result, exception_code=None):
+    """Extract detailed error information from Modbus responses"""
+    error_info = {
+        'error_code': None,
+        'error_message': str(error_result),
+        'verbose_description': None,
+        'exception_code': exception_code
+    }
+    
+    # Handle pymodbus ExceptionResponse
+    if hasattr(error_result, 'exception_code'):
+        error_info['error_code'] = error_result.exception_code
+        error_info['verbose_description'] = get_modbus_exception_verbose(error_result.exception_code)
+    elif exception_code is not None:
+        error_info['error_code'] = exception_code
+        error_info['verbose_description'] = get_modbus_exception_verbose(exception_code)
+    else:
+        # Try to extract exception code from error string
+        error_str = str(error_result).lower()
+        if 'illegal function' in error_str:
+            error_info['error_code'] = 1
+            error_info['verbose_description'] = get_modbus_exception_verbose(1)
+        elif 'illegal data address' in error_str:
+            error_info['error_code'] = 2
+            error_info['verbose_description'] = get_modbus_exception_verbose(2)
+        elif 'illegal data value' in error_str:
+            error_info['error_code'] = 3
+            error_info['verbose_description'] = get_modbus_exception_verbose(3)
+        elif 'slave device failure' in error_str:
+            error_info['error_code'] = 4
+            error_info['verbose_description'] = get_modbus_exception_verbose(4)
+        elif 'slave device busy' in error_str:
+            error_info['error_code'] = 6
+            error_info['verbose_description'] = get_modbus_exception_verbose(6)
+        elif 'gateway path unavailable' in error_str:
+            error_info['error_code'] = 10
+            error_info['verbose_description'] = get_modbus_exception_verbose(10)
+        elif 'gateway target' in error_str:
+            error_info['error_code'] = 11
+            error_info['verbose_description'] = get_modbus_exception_verbose(11)
+        elif 'timeout' in error_str or 'connection' in error_str:
+            # Connection/timeout errors - not standard Modbus exceptions but common
+            error_info['error_code'] = 99  # Custom code for connection issues
+            error_info['verbose_description'] = "Connection/Timeout Error: Unable to communicate with device"
+    
+    # Apply standardized error format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)
+    if error_info['verbose_description'] and error_info['error_code'] is not None:
+        error_info['verbose_description'] = format_modbus_error(error_info['error_code'], error_info['verbose_description'])
+    elif error_info['error_code'] is not None:
+        # If we have a code but no description, create a generic one
+        error_info['verbose_description'] = format_modbus_error(error_info['error_code'], f"Modbus Error: {error_info['error_message']}") 
+    
+    return error_info
+
 def convert_value_for_modbus(value: Any, data_type: str, byte_order: str = 'ABCD') -> Union[int, List[int]]:
     """
     Convert a value to the appropriate format for Modbus writing.
@@ -300,13 +358,15 @@ async def read_modbus_register(client: ModbusTcpClient, address: Union[str, int]
         if register_type == 'coil':
             result = client.read_coils(address=actual_address, count=1, device_id=unit_id)
             if result.isError():
-                return None, f"Modbus read error: {result}"
+                error_details = extract_modbus_error_details(result)
+                return None, error_details['verbose_description'] or f"Modbus read error: {result}"
             return bool(result.bits[0]), None
             
         elif register_type == 'discrete_input':
             result = client.read_discrete_inputs(address=actual_address, count=1, device_id=unit_id)
             if result.isError():
-                return None, f"Modbus read error: {result}"
+                error_details = extract_modbus_error_details(result)
+                return None, error_details['verbose_description'] or f"Modbus read error: {result}"
             return bool(result.bits[0]), None
             
         elif register_type in ['holding_register', 'input_register']:
@@ -319,7 +379,8 @@ async def read_modbus_register(client: ModbusTcpClient, address: Union[str, int]
                 result = client.read_input_registers(address=actual_address, count=register_count, device_id=unit_id)
             
             if result.isError():
-                return None, f"Modbus read error: {result}"
+                error_details = extract_modbus_error_details(result)
+                return None, error_details['verbose_description'] or f"Modbus read error: {result}"
             
             # Convert registers to requested data type
             registers = result.registers
@@ -402,7 +463,8 @@ async def write_modbus_register(client: ModbusTcpClient, address: Union[str, int
             bool_value = bool(value)
             result = client.write_coil(address=actual_address, value=bool_value, device_id=unit_id)
             if result.isError():
-                return False, f"Modbus write error: {result}"
+                error_details = extract_modbus_error_details(result)
+                return False, error_details['verbose_description'] or f"Modbus write error: {result}"
             logger.debug(f"Successfully wrote coil {address}: {bool_value}")
             return True, None
             
@@ -421,7 +483,8 @@ async def write_modbus_register(client: ModbusTcpClient, address: Union[str, int
                 result = client.write_register(address=actual_address, value=converted_values, device_id=unit_id)
             
             if result.isError():
-                return False, f"Modbus write error: {result}"
+                error_details = extract_modbus_error_details(result)
+                return False, error_details['verbose_description'] or f"Modbus write error: {result}"
             
             logger.debug(f"Successfully wrote holding register {address}: {value} -> {converted_values}")
             return True, None
@@ -461,7 +524,8 @@ async def modbus_get_with_error_async(device_config: Dict[str, Any], address: Un
         return await read_modbus_register(client, address, data_type, byte_order, modbus_config.unit_number)
         
     except Exception as e:
-        return None, f"Modbus read error: {str(e)}"
+        error_details = extract_modbus_error_details(e)
+        return None, error_details['verbose_description'] or f"Modbus error: {str(e)}"
     
     finally:
         if client and client.is_socket_open():
@@ -484,7 +548,8 @@ def modbus_get_with_error(device_config: Dict[str, Any], address: Union[str, int
         finally:
             loop.close()
     except Exception as e:
-        return None, f"Modbus sync read error: {str(e)}"
+        error_details = extract_modbus_error_details(e)
+        return None, error_details['verbose_description'] or f"Modbus error: {str(e)}"
 
 
 async def modbus_set_with_error_async(device_config: Dict[str, Any], address: Union[str, int], value: Any, data_type: str = 'UINT16', byte_order: str = 'ABCD') -> Tuple[bool, Optional[str]]:
@@ -510,7 +575,8 @@ async def modbus_set_with_error_async(device_config: Dict[str, Any], address: Un
         return await write_modbus_register(client, address, value, data_type, byte_order, modbus_config.unit_number)
         
     except Exception as e:
-        return False, f"Modbus write error: {str(e)}"
+        error_details = extract_modbus_error_details(e)
+        return False, error_details['verbose_description'] or f"Modbus error: {str(e)}"
     
     finally:
         if client and client.is_socket_open():
@@ -533,4 +599,5 @@ def modbus_set_with_error(device_config: Dict[str, Any], address: Union[str, int
         finally:
             loop.close()
     except Exception as e:
-        return False, f"Modbus sync write error: {str(e)}"
+        error_details = extract_modbus_error_details(e)
+        return False, error_details['verbose_description'] or f"Modbus error: {str(e)}"
