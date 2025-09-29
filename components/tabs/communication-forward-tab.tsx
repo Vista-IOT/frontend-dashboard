@@ -52,6 +52,8 @@ import CommunicationForwardDestinationsTab from "./communication-forward-destina
 import DestinationForm from "../forms/destination-form";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import TagSelectionDialog from "@/components/dialogs/tag-selection-dialog";
+import { Badge } from "@/components/ui/badge";
 
 // --- Data Structures are now in configuration-store.ts ---
 
@@ -98,6 +100,9 @@ const BlockEditorModal = ({
   const [collapsedPorts, setCollapsedPorts] = useState<Record<string, boolean>>(
     {}
   );
+  // State for TagSelectionDialog
+  const [showTagDialog, setShowTagDialog] = useState(false);
+  const [selectedSourceTags, setSelectedSourceTags] = useState<any[]>([]);
   const [collapsedDestinations, setCollapsedDestinations] = useState<
     Record<string, boolean>
   >({});
@@ -129,162 +134,109 @@ const BlockEditorModal = ({
 
     switch (block.type) {
       case "source":
-        return (
-          <Tabs defaultValue={config?.sourceType || "io-tag"}>
-            <TabsList>
-              <TabsTrigger value="io-tag">IO Tags</TabsTrigger>
-              <TabsTrigger value="calc-tag">Calculation Tags</TabsTrigger>
-              <TabsTrigger value="stats-tag">Stats Tags</TabsTrigger>
-              <TabsTrigger value="user-tag">User Tags</TabsTrigger>
-              <TabsTrigger value="system-tag">System Tags</TabsTrigger>
-            </TabsList>
-            <TabsContent value="io-tag">
-              <ScrollArea className="h-96">
-                <div className="space-y-2 p-1">
-                  {ioTree.map((port: IOPortConfig) => (
-                    <div key={port.id} className="relative pl-2">
-                      <div className="absolute left-0 top-2 bottom-0 w-px bg-blue-200" />
-                      <div
-                        className="flex items-center font-medium text-primary mb-1 relative cursor-pointer select-none"
-                        onClick={() =>
-                          setCollapsedPorts((p) => ({
-                            ...p,
-                            [port.id]: !p[port.id],
-                          }))
-                        }
-                      >
-                        {collapsedPorts[port.id] ? (
-                          <ChevronRight size={16} />
-                        ) : (
-                          <ChevronDown size={16} />
-                        )}
-                        <Server size={16} className="mx-1 text-blue-700" />{" "}
-                        {port.name}
-                      </div>
-                      {!collapsedPorts[port.id] &&
-                        port.devices.map((device: DeviceConfig) => (
-                          <div key={device.id} className="ml-4 relative pl-4">
-                            <div className="flex items-center font-normal text-sm text-blue-900 mb-1 relative">
-                              <Cpu size={16} className="mr-1 text-blue-500" />{" "}
-                              {device.name}
-                            </div>
-                            {device.tags.map((tag: IOTag) => (
-                              <div
-                                key={tag.id}
-                                className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ml-6 ${
-                                  config?.id === tag.id
-                                    ? "bg-purple-100 text-purple-900"
-                                    : "hover:bg-accent"
-                                }`}
-                                onClick={() =>
-                                  onSelectionChange({
-                                    sourceType: "io-tag",
-                                    ...tag,
-                                  })
-                                }
-                              >
-                                <TagIcon className="h-4 w-4 text-purple-600" />
-                                {tag.name}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="calc-tag">
-              <ScrollArea className="h-96">
-                <div className="space-y-1 p-1">
-                  {calculationTags.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
-                        config?.id === tag.id
-                          ? "bg-green-100 text-green-900"
-                          : "hover:bg-accent"
-                      }`}
-                      onClick={() =>
-                        onSelectionChange({ sourceType: "calc-tag", ...tag })
-                      }
-                    >
-                      <TagIcon className="h-4 w-4 text-green-600" />
-                      {tag.name}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="stats-tag">
-              <ScrollArea className="h-96">
-                <div className="space-y-1 p-1">
-                  {statsTags.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
-                        config?.id === tag.id
-                          ? "bg-orange-100 text-orange-900"
-                          : "hover:bg-accent"
-                      }`}
-                      onClick={() =>
-                        onSelectionChange({ sourceType: "stats-tag", ...tag })
-                      }
-                    >
-                      <TagIcon className="h-4 w-4 text-orange-600" />
-                      {tag.name}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="user-tag">
-              <ScrollArea className="h-96">
-                <div className="space-y-1 p-1">
-                  {(appConfig.user_tags || []).map((tag) => (
-                    <div
-                      key={tag.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
-                        config?.id === tag.id
-                          ? "bg-blue-100 text-blue-900"
-                          : "hover:bg-accent"
-                      }`}
-                      onClick={() =>
-                        onSelectionChange({ sourceType: "user-tag", ...tag })
-                      }
-                    >
-                      <TagIcon className="h-4 w-4 text-blue-600" />
-                      {tag.name}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="system-tag">
-              <ScrollArea className="h-96">
-                <div className="space-y-1 p-1">
-                  {(appConfig.system_tags || []).map((tag) => (
-                    <div
-                      key={tag.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
-                        config?.id === tag.id
-                          ? "bg-gray-100 text-gray-900"
-                          : "hover:bg-accent"
-                      }`}
-                      onClick={() =>
-                        onSelectionChange({ sourceType: "system-tag", ...tag })
-                      }
-                    >
-                      <TagIcon className="h-4 w-4 text-gray-600" />
-                      {tag.name}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-        );
+        // Initialize selected tags from config
+        useEffect(() => {
+          if (config && config.sourceTags && Array.isArray(config.sourceTags)) {
+            setSelectedSourceTags(config.sourceTags);
+          } else if (config && config.id) {
+            // Convert single selection to array for backward compatibility
+            setSelectedSourceTags([{
+              id: config.id,
+              name: config.name,
+              type: config.dataType,
+              sourceType: config.sourceType,
+            }]);
+          } else {
+            setSelectedSourceTags([]);
+          }
+        }, [config]);
 
+        const handleTagsSelected = (tags: any[]) => {
+          // Update selection with multiple tags
+          onSelectionChange({
+            sourceTags: tags,
+            multiSelect: true,
+          });
+          setSelectedSourceTags(tags);
+        };
+
+        const handleRemoveTag = (tagId: string) => {
+          const updatedTags = selectedSourceTags.filter(tag => tag.id !== tagId);
+          setSelectedSourceTags(updatedTags);
+          onSelectionChange({
+            sourceTags: updatedTags,
+            multiSelect: true,
+          });
+        };
+
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-semibold">Source Tags</h4>
+                <p className="text-sm text-muted-foreground">
+                  Select multiple tags to use as data sources
+                </p>
+              </div>
+              <Button onClick={() => setShowTagDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Tags
+              </Button>
+            </div>
+
+            {/* Display selected tags */}
+            {selectedSourceTags.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Selected Tags:</span>
+                  <Badge variant="secondary">
+                    {selectedSourceTags.length} tag{selectedSourceTags.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <div className="grid gap-2 max-h-64 overflow-y-auto">
+                  {selectedSourceTags.map((tag) => (
+                    <div
+                      key={tag.id}
+                      className="flex items-center justify-between p-3 bg-muted rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <TagIcon className="h-4 w-4 text-primary" />
+                        <div>
+                          <div className="font-medium">{tag.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {tag.type} • {tag.sourceType || 'io-tag'}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveTag(tag.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                <TagIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No source tags selected</p>
+                <p className="text-sm">Click "Add Tags" to select multiple source tags</p>
+              </div>
+            )}
+
+            <TagSelectionDialog
+              open={showTagDialog}
+              onOpenChange={setShowTagDialog}
+              multiSelect={true}
+              selectedTags={selectedSourceTags}
+              onSelectTags={handleTagsSelected}
+            />
+          </div>
+        );
       case "destination":
         if (showCreateForm) {
           return (
@@ -882,7 +834,14 @@ const BridgesTabContent = () => {
   const [tempSelection, setTempSelection] = useState<any>(null);
 
   const setBridges = (newBridges: Bridge[]) => {
-    updateConfig(["communication_forward", "bridges"], newBridges);
+    updateConfig([], {
+      ...appConfig,
+      communication_forward: {
+        ...appConfig.communication_forward,
+        bridges: newBridges,
+        destinations: appConfig.communication_forward?.destinations || [],
+      },
+    });
   };
 
   const ioTree = useMemo(
@@ -927,6 +886,8 @@ const BridgesTabContent = () => {
         },
       ],
     };
+    console.log("Adding new bridge:", newBridge);
+    console.log("Current bridges:", bridges);
     setBridges([...bridges, newBridge]);
   };
 
@@ -984,14 +945,25 @@ const BridgesTabContent = () => {
           let updatedBlock: BridgeBlock = { ...block };
 
           // This logic now covers both initial selection and re-selection/editing
-          if (tempSelection.sourceType) {
-            // It's a source block
+          if (tempSelection.sourceTags && Array.isArray(tempSelection.sourceTags)) {
+            // Multi-select source tags
+            const tagCount = tempSelection.sourceTags.length;
+            updatedBlock.subType = "multi-source";
+            updatedBlock.label = tagCount === 1 
+              ? tempSelection.sourceTags[0].name 
+              : `${tagCount} tags selected`;
+            updatedBlock.config = {
+              sourceTags: tempSelection.sourceTags,
+              multiSelect: true,
+            };
+          } else if (tempSelection.sourceType) {
+            // Single source tag (legacy)
             updatedBlock.subType = tempSelection.sourceType;
             updatedBlock.label = tempSelection.tagName || tempSelection.name;
             updatedBlock.config = {
               tagId: tempSelection.tagId || tempSelection.id,
             };
-          } else if (tempSelection.key) {
+        } else if (tempSelection.key) {
             // It's a dest or intermediate block
             if (block.type === "destination" && tempSelection.id) {
               // This is an existing destination being selected
@@ -1032,19 +1004,27 @@ const BridgesTabContent = () => {
     // Prepare tempSelection state based on the block being edited
     if (block.subType) {
       if (block.type === "source") {
-        // Find the full tag object to populate tempSelection
-        const sourceTag =
-          block.subType === "io-tag"
-            ? appConfig.io_setup?.ports
-                .flatMap((p) => p.devices)
-                .flatMap((d) => d.tags)
-                .find((t) => t.id === block.config.tagId)
-            : block.subType === "calc-tag"
-            ? appConfig.calculation_tags?.find(
-                (t) => t.id === block.config.tagId
-              )
-            : appConfig.stats_tags?.find((t) => t.id === block.config.tagId);
-        setTempSelection({ sourceType: block.subType, ...sourceTag });
+        if (block.subType === "multi-source" && block.config.sourceTags) {
+          // Multi-select source tags - populate tempSelection with the selected tags
+          setTempSelection({ 
+            sourceTags: block.config.sourceTags,
+            multiSelect: true
+          });
+        } else {
+          // Single source tag (legacy)
+          const sourceTag =
+            block.subType === "io-tag"
+              ? appConfig.io_setup?.ports
+                  .flatMap((p) => p.devices)
+                  .flatMap((d) => d.tags)
+                  .find((t) => t.id === block.config.tagId)
+              : block.subType === "calc-tag"
+              ? appConfig.calculation_tags?.find(
+                  (t) => t.id === block.config.tagId
+                )
+              : appConfig.stats_tags?.find((t) => t.id === block.config.tagId);
+          setTempSelection({ sourceType: block.subType, ...sourceTag });
+        }
       } else {
         const typeDef =
           block.type === "destination"

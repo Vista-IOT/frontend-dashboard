@@ -60,6 +60,7 @@ import SecurityTab from "@/components/tabs/security-tab";
 import ProtocolsTab from "@/components/tabs/protocols-tab";
 import LogsTab from "@/components/tabs/logs-tab";
 import OverviewTab from "@/components/tabs/overview-tab";
+import DataService from "@/components/tabs/dataService";
 import DataCenterTab from "@/components/tabs/data-center-tab";
 import { MQTTForm } from "@/components/forms/mqtt-form";
 import { UserTagsForm } from "@/components/forms/user-tags-form";
@@ -291,6 +292,12 @@ function DashboardContent() {
       href: "?tab=configuration",
       icon: Code,
       active: activeTab === "configuration",
+    },
+    {
+      title: "Data Service",
+      href: "?tab=data-service",
+      icon: Database,
+      active: activeTab === "data-service",
     },
   ];
 
@@ -625,20 +632,20 @@ function DashboardContent() {
               {/* Tabs for main sections */}
               <div className="mt-8">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-9">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="network">Network</TabsTrigger>
-                    <TabsTrigger
+                  <TabsList className="flex w-full flex-wrap md:flex-nowrap">
+                    <TabsTrigger className="flex-1" value="overview">Overview</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="network">Network</TabsTrigger>
+                    <TabsTrigger className="flex-1"
                       value="datacenter"
                       onClick={() => handleNavigation("?tab=datacenter")}
                     >
                       Data Center
                     </TabsTrigger>
-                    <TabsTrigger value="security">Security</TabsTrigger>
-                    <TabsTrigger value="protocols">Protocols</TabsTrigger>
-                    <TabsTrigger value="communication-forward">Communication Forward</TabsTrigger>
-                    <TabsTrigger value="logs">Logs</TabsTrigger>
-                    <TabsTrigger value="configuration">
+                    <TabsTrigger className="flex-1" value="security">Security</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="data-service">Data Service</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="communication-forward">Communication Forward</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="logs">Logs</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="configuration">
                       Configuration
                     </TabsTrigger>
                   </TabsList>
@@ -663,8 +670,8 @@ function DashboardContent() {
                     <SecurityTab />
                   </TabsContent>
 
-                  <TabsContent value="protocols" className="mt-6 space-y-6">
-                    <ProtocolsTab />
+                  <TabsContent value="data-service" className="mt-6 space-y-6">
+                    <DataService />
                   </TabsContent>
 
                   <TabsContent value="communication-forward" className="mt-6 space-y-6">
