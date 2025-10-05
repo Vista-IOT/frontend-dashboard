@@ -275,7 +275,7 @@ export function CSVImportExport<T>({
       <Button
         variant="outline"
         onClick={handleExportCSV}
-        disabled={disabled || data.length === 0}
+        // disabled={disabled || data.length === 0}
         className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700"
       >
         <FileSpreadsheet className="h-4 w-4 mr-2" /> Export CSV

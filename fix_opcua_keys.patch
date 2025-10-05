@@ -1,0 +1,29 @@
+--- components/server-forms/opcua-server-form.tsx.backup
++++ components/server-forms/opcua-server-form.tsx
+@@ -657,16 +657,22 @@ export default function OpcuaTcpServerForm() {
+ 
+ // Helper functions for proper Data-Service integration
+ function generateDataServiceKey(selectedTag: any): string {
+   const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
+-  return `${deviceName}:${selectedTag.name}`
++  // Generate unique tag name with timestamp to match backend format
++  const timestamp = Date.now()
++  const tagName = `tag-${timestamp}`
++  return `${deviceName}:${tagName}`
+ }
+ 
+ function generateNodeIdFromTag(selectedTag: any, dataId?: string): string {
+   // Use string-based node IDs with the tag key for better organization
+   const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
+-  const tagName = selectedTag.name || "TAG"
+-  return `ns=2;s=${deviceName}:${tagName}`
++  // Use the original tag name for the node ID (display purposes)
++  const originalTagName = selectedTag.name || "TAG"
++  // Clean the tag name if it already contains the device name
++  const cleanTagName = originalTagName.startsWith(`${deviceName}:`) 
++    ? originalTagName.substring(`${deviceName}:`.length)
++    : originalTagName
++  return `ns=2;s=${deviceName}:${cleanTagName}`
+ }
+ 
+ function generateBrowseName(tagName: string, deviceName?: string): string {

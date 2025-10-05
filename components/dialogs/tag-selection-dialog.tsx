@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -91,6 +91,9 @@ type Tag = {
   value?: string;
   description?: string;
   path?: string; // To track the path (port/device/tag)
+  dataType?: string;
+  units?: string;
+  defaultValue?: string | number;
 };
 
 interface TagSelectionDialogProps {
@@ -118,53 +121,77 @@ export default function TagSelectionDialog({
   const [selectedTab, setSelectedTab] = useState<string>('io-tag');
   const [collapsedPorts, setCollapsedPorts] = useState<Record<string, boolean>>({});
   const [collapsedDevices, setCollapsedDevices] = useState<Record<string, boolean>>({});
-  const [internalSelectedTags, setInternalSelectedTags] = useState<Tag[]>(selectedTags);
+  const [internalSelectedTags, setInternalSelectedTags] = useState<Tag[]>([]);
 
-  // Use the shared tree builder for IO ports
-  const ioTagTree = buildIoTagTree(config, { excludeCalculationTagId, excludeCalculationTags });
+  // Memoize the IO tag tree to prevent infinite re-renders
+  const ioTagTree = useMemo(() => {
+    return buildIoTagTree(config, { excludeCalculationTagId, excludeCalculationTags });
+  }, [config, excludeCalculationTagId, excludeCalculationTags]);
 
-  // Update internal selection when props change
+  // Update internal selection when props change - Fixed to prevent infinite loops
   useEffect(() => {
     setInternalSelectedTags(selectedTags);
-  }, [selectedTags]);
+  }, [selectedTags.length, selectedTags.map(tag => tag.id).join(',')]); // Use stable dependencies
 
-  // Helper to handle tag selection
-  function handleTagSelect(tag: Tag) {
+  // Helper to handle tag selection - use useCallback to prevent re-creation
+  const handleTagSelect = useCallback((tag: Tag) => {
     if (multiSelect) {
       // Multi-select mode: toggle tag selection
-      const isSelected = internalSelectedTags.some(t => t.id === tag.id);
-      if (isSelected) {
-        setInternalSelectedTags(prev => prev.filter(t => t.id !== tag.id));
-      } else {
-        setInternalSelectedTags(prev => [...prev, tag]);
-      }
+      setInternalSelectedTags(prev => {
+        const isSelected = prev.some(t => t.id === tag.id);
+        if (isSelected) {
+          return prev.filter(t => t.id !== tag.id);
+        } else {
+          return [...prev, tag];
+        }
+      });
     } else {
       // Single select mode: immediately call callback and close
       onSelectTag?.(tag);
       onOpenChange(false);
     }
-  }
+  }, [multiSelect, onSelectTag, onOpenChange]);
 
   // Helper to check if a tag is selected
-  const isTagSelected = (tagId: string) => {
+  const isTagSelected = useCallback((tagId: string) => {
     return internalSelectedTags.some(t => t.id === tagId);
-  };
+  }, [internalSelectedTags]);
 
   // Helper to toggle port collapse state
-  const togglePort = (portId: string) => {
+  const togglePort = useCallback((portId: string) => {
     setCollapsedPorts(prev => ({ ...prev, [portId]: !prev[portId] }));
-  };
+  }, []);
 
   // Helper to toggle device collapse state
-  const toggleDevice = (deviceId: string) => {
+  const toggleDevice = useCallback((deviceId: string) => {
     setCollapsedDevices(prev => ({ ...prev, [deviceId]: !prev[deviceId] }));
-  };
+  }, []);
 
   // Handle confirm selection for multi-select mode
-  const handleConfirmSelection = () => {
+  const handleConfirmSelection = useCallback(() => {
     onSelectTags?.(internalSelectedTags);
     onOpenChange(false);
-  };
+  }, [onSelectTags, internalSelectedTags, onOpenChange]);
+
+  // Memoize calculation tags to prevent re-renders
+  const calculationTags = useMemo(() => {
+    return config.calculation_tags || [];
+  }, [config.calculation_tags]);
+
+  // Memoize stats tags to prevent re-renders
+  const statsTags = useMemo(() => {
+    return config.stats_tags || [];
+  }, [config.stats_tags]);
+
+  // Memoize user tags to prevent re-renders
+  const userTags = useMemo(() => {
+    return config.user_tags || [];
+  }, [config.user_tags]);
+
+  // Memoize system tags to prevent re-renders
+  const systemTags = useMemo(() => {
+    return config.system_tags || [];
+  }, [config.system_tags]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -231,7 +258,9 @@ export default function TagSelectionDialog({
                             onClick={() => handleTagSelect({
                               id: tag.id,
                               name: `${device.name}:${tag.name}`,
-                              type: tag.dataType,
+                              deviceName: device.name,
+                              type: 'io',
+                              dataType: tag.dataType,
                               value: tag.address,
                               description: tag.description,
                             })}
@@ -270,7 +299,7 @@ export default function TagSelectionDialog({
 
             <TabsContent value="calc-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
               <div className="space-y-1 p-1">
-                {config.calculation_tags?.map((tag: CalculationTag) => (
+                {calculationTags.map((tag: CalculationTag) => (
                   <div
                     key={tag.id}
                     className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
@@ -304,7 +333,7 @@ export default function TagSelectionDialog({
                     )}
                   </div>
                 ))}
-                {(!config.calculation_tags || config.calculation_tags.length === 0) && (
+                {calculationTags.length === 0 && (
                   <div className="text-center text-muted-foreground p-8">
                     <FileDigit className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No calculation tags available.</p>
@@ -315,7 +344,7 @@ export default function TagSelectionDialog({
 
             <TabsContent value="stats-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
               <div className="space-y-1 p-1">
-                {config.stats_tags?.map((tag: StatsTag) => (
+                {statsTags.map((tag: StatsTag) => (
                   <div
                     key={tag.id}
                     className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
@@ -349,7 +378,7 @@ export default function TagSelectionDialog({
                     )}
                   </div>
                 ))}
-                {(!config.stats_tags || config.stats_tags.length === 0) && (
+                {statsTags.length === 0 && (
                   <div className="text-center text-muted-foreground p-8">
                     <BarChart className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No stats tags available.</p>
@@ -360,7 +389,7 @@ export default function TagSelectionDialog({
 
             <TabsContent value="user-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
               <div className="space-y-1 p-1">
-                {config.user_tags?.map((tag: Tag) => (
+                {userTags.map((tag: Tag) => (
                   <div
                     key={tag.id}
                     className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
@@ -393,7 +422,7 @@ export default function TagSelectionDialog({
                     )}
                   </div>
                 ))}
-                {(!config.user_tags || config.user_tags.length === 0) && (
+                {userTags.length === 0 && (
                   <div className="text-center text-muted-foreground p-8">
                     <UserCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No user tags available.</p>
@@ -404,7 +433,7 @@ export default function TagSelectionDialog({
 
             <TabsContent value="system-tag" className="flex-1 min-h-0 min-w-0 overflow-auto">
               <div className="space-y-1 p-1">
-                {config.system_tags?.map((tag: Tag) => (
+                {systemTags.map((tag: Tag) => (
                   <div
                     key={tag.id}
                     className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm ${
@@ -437,7 +466,7 @@ export default function TagSelectionDialog({
                     )}
                   </div>
                 ))}
-                {(!config.system_tags || config.system_tags.length === 0) && (
+                {systemTags.length === 0 && (
                   <div className="text-center text-muted-foreground p-8">
                     <Cog className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No system tags available.</p>
