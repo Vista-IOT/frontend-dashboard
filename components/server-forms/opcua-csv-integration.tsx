@@ -295,7 +295,7 @@ export default function OPCUACSVIntegration({
         const mappingResponse = await dataServiceAPI.createOpcuaMapping({
           id: dataId,
           key: generateDataServiceKey(csvTag),
-          node_id: csvTag.nodeId,
+          // node_id removed - backend auto-generates
           browse_name: csvTag.browseName || csvTag.tagName,
           display_name: csvTag.displayName || csvTag.tagName,
           data_type: csvTag.dataType,
@@ -316,6 +316,11 @@ export default function OPCUACSVIntegration({
       } catch (error) {
         console.warn(`Error processing CSV tag ${csvTag.tagName}:`, error)
       }
+        // Log the auto-generated node_id
+        const generatedNodeId = mappingResponse.data?.node_id
+        if (generatedNodeId) {
+          console.log(`Generated node_id for ${csvTag.tagName}: ${generatedNodeId}`)
+        }
     }
 
     if (successCount > 0) {

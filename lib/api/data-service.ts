@@ -70,6 +70,39 @@ export interface BulkRegisterResponse {
   errors: string[];
 }
 
+// OPC-UA Mapping interfaces
+export interface OpcuaMappingRequest {
+  id: string;
+  key: string;
+  // node_id is now optional - backend will auto-generate if not provided
+  node_id?: string;
+  browse_name?: string;
+  display_name?: string;
+  data_type?: string;
+  value_rank?: number;
+  access_level?: string;
+  timestamps?: string;
+  namespace?: number;
+  description?: string;
+}
+
+export interface OpcuaMappingResponse {
+  ok: boolean;
+  node_id: string;
+  generated_mapping?: any;
+  error?: string;
+}
+
+export interface BulkOpcuaMappingRequest {
+  data_ids: string[];
+  start_namespace?: number;
+  start_node_id?: number;
+  padding_strategy?: "data_type" | "sequential";
+  access_level?: string;
+  timestamps?: string;
+  value_rank?: number;
+}
+
 class DataServiceAPI {
   private baseUrl: string;
   private timeout: number;
@@ -210,10 +243,19 @@ class DataServiceAPI {
   }
 
   // Create OPC-UA mapping
-  async createOpcuaMapping(mapping: any) {
-    return this.request('/mappings/opcua', {
-      method: 'POST',
+  // Create OPC-UA mapping (single) - node_id will be auto-generated if not provided
+  async createOpcuaMapping(mapping: OpcuaMappingRequest): Promise<DataServiceResponse<OpcuaMappingResponse>> {
+    return this.request("/mappings/opcua", {
+      method: "POST",
       body: JSON.stringify(mapping),
+    });
+  }
+
+  // Create OPC-UA mappings in bulk - node_ids will be auto-generated
+  async createBulkOpcuaMappings(request: BulkOpcuaMappingRequest) {
+    return this.request("/mappings/opcua", {
+      method: "POST",
+      body: JSON.stringify(request),
     });
   }
 

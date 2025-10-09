@@ -64,7 +64,7 @@ interface DataServiceDataPoint {
 // OPC-UA Mapping interface (Data-Service format)
 interface OPCUAMapping {
   key: string
-  node_id: string
+  node_id?: string // Optional - backend auto-generates if not provided
   browse_name: string
   display_name: string
   data_type: string
@@ -279,7 +279,7 @@ export default function OpcuaTcpServerForm() {
             tagType: selectedTag.type || 'IO',
             dataType: mapFrontendDataTypeToOpcua(selectedTag.dataType || 'Analog'),
             defaultValue: selectedTag.defaultValue || 0,
-            nodeId,
+            nodeId: generatedNodeId,
             browseName,
             displayName: browseName,
             valueRank: -1,
@@ -323,14 +323,13 @@ export default function OpcuaTcpServerForm() {
           
           // Step 2: Create OPC-UA mapping with proper node ID allocation
           const opcuaDataType = mapFrontendDataTypeToOpcua(selectedTag.dataType || 'Analog')
-          const nodeId = generateNodeIdFromTag(selectedTag, dataId) // Generate based on data type and sequence
           const browseName = generateBrowseName(selectedTag.name, selectedTag.deviceName || selectedTag.device)
           const accessLevel = determineAccessLevel(selectedTag)
           
           const mappingResponse = await dataServiceAPI.createOpcuaMapping({
             id: dataId,
             key: dataServiceKey,
-            node_id: nodeId,
+            // node_id removed - backend auto-generates
             browse_name: browseName,
             display_name: browseName,
             data_type: opcuaDataType,
@@ -346,6 +345,9 @@ export default function OpcuaTcpServerForm() {
             continue
           }
           
+          
+          // Get the auto-generated node_id from backend response
+          const generatedNodeId = mappingResponse.data?.node_id || "auto-generated"
           // Step 3: Create local tag representation
           const newTag: OPCUAServerTag = {
             id: dataId,
@@ -353,7 +355,7 @@ export default function OpcuaTcpServerForm() {
             tagType: selectedTag.type || 'IO',
             dataType: opcuaDataType,
             defaultValue: selectedTag.defaultValue || 0,
-            nodeId,
+            nodeId: generatedNodeId,
             browseName,
             displayName: browseName,
             valueRank: -1,
@@ -809,17 +811,17 @@ function generateDataServiceKey(selectedTag: any): string {
   const timestamp = Date.now()
   const tagName = `tag-${timestamp}`
   return `${deviceName}:${tagName}`
-}
-
-function generateNodeIdFromTag(selectedTag: any, dataId?: string): string {
-  // Use string-based node IDs with the tag key for better organization
-  const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
-  // Use the original tag name for the node ID (display purposes)
-  const originalTagName = selectedTag.name || "TAG"
-  // Clean the tag name if it already contains the device name
-  const cleanTagName = originalTagName.startsWith(`${deviceName}:`) 
-    ? originalTagName.substring(`${deviceName}:`.length)
-    : originalTagName
+// DEPRECATED: }
+// DEPRECATED: 
+// DEPRECATED: function generateNodeIdFromTag(selectedTag: any, dataId?: string): string {
+// DEPRECATED:   // Use string-based node IDs with the tag key for better organization
+// DEPRECATED:   const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
+// DEPRECATED:   // Use the original tag name for the node ID (display purposes)
+// DEPRECATED:   const originalTagName = selectedTag.name || "TAG"
+// DEPRECATED:   // Clean the tag name if it already contains the device name
+// DEPRECATED:   const cleanTagName = originalTagName.startsWith(`${deviceName}:`) 
+// DEPRECATED:     ? originalTagName.substring(`${deviceName}:`.length)
+// DEPRECATED:     : originalTagName
   return `ns=2;s=${deviceName}:${cleanTagName}`
 }
 
