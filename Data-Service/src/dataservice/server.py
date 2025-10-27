@@ -9,16 +9,103 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 import uvicorn
+import os
+import time
+import threading
+from typing import Optional, Dict, Any, List
 from .servers.modbus_server import modbus_server_thread
 from .servers.opcua_server import opcua_server_thread
 from .servers.iec104_server import iec104_server_thread
 from .servers.snmp_server import snmp_server_thread
 from .core.datastore import DATA_STORE
 from .core.mqtt_forwarder import MqttForwarder
+from .core.mqtt_publisher import MQTTPublisher
+from .core.config_manager import config_manager
 from .core.mapping_store import MODBUS_MAPPING, IEC104_MAPPING, OPCUA_MAPPING, SNMP_MAPPING
 from .core.ipc import IpcServer
 from .bulk_opcua_mapping import auto_generate_opcua_mappings
+
+
+# ====================== PYDANTIC MODELS FOR MQTT ======================
+
+class MQTTAuthConfig(BaseModel):
+    enabled: bool = False
+    username: str = ""
+    password: str = ""
+
+class MQTTTLSConfig(BaseModel):
+    enabled: bool = False
+    verify_server: bool = True
+    allow_insecure: bool = False
+    cert_file: str = ""
+    key_file: str = ""
+    ca_file: str = ""
+
+class MQTTBrokerConfig(BaseModel):
+    address: str = "localhost"
+    port: int = 1883
+    client_id: str = "dataservice-mqtt-pub"
+    keepalive: int = 60
+    clean_session: bool = True
+    protocol: str = "mqtt"
+    auth: MQTTAuthConfig = Field(default_factory=MQTTAuthConfig)
+    tls: MQTTTLSConfig = Field(default_factory=MQTTTLSConfig)
+
+class MQTTTagSelection(BaseModel):
+    id: str
+    name: str
+    deviceName: Optional[str] = None
+    portName: Optional[str] = None
+    device: Optional[str] = None
+    port: Optional[str] = None
+    type: Optional[str] = None
+
+class MQTTPublishTopic(BaseModel):
+    id: str
+    topic: str
+    tagType: str = "io-tag"
+    tagFilter: str = ""
+    selectedTags: List[MQTTTagSelection] = Field(default_factory=list)
+    publishInterval: int = 1000
+    qos: int = 0
+    retain: bool = False
+    format: str = "json"
+    includeTimestamp: bool = True
+    enabled: bool = True
+
+class MQTTTopicsConfig(BaseModel):
+    publish: List[MQTTPublishTopic] = Field(default_factory=list)
+    subscribe: List[Dict[str, Any]] = Field(default_factory=list)
+
+class MQTTPublisherConfig(BaseModel):
+    enabled: bool = False
+    broker: MQTTBrokerConfig = Field(default_factory=MQTTBrokerConfig)
+    topics: MQTTTopicsConfig = Field(default_factory=MQTTTopicsConfig)
+
+class MQTTPublisherStatus(BaseModel):
+    enabled: bool
+    connected: bool
+    broker: str
+    active_topics: int
+    total_topics: int
+
+class MQTTTestPublishRequest(BaseModel):
+    topic: str
+    qos: int = 0
+    retain: bool = False
+    format: str = "json"
+    includeTimestamp: bool = True
+    selectedTags: List[MQTTTagSelection] = Field(default_factory=list)
+    tagFilter: str = ""
+
+class MQTTTestPublishResponse(BaseModel):
+    ok: bool
+    message: Optional[str] = None
+    error: Optional[str] = None
+    tag_count: Optional[int] = None
+    payload_size: Optional[int] = None
 
 _START_TIME = time.time()
 
@@ -80,15 +167,27 @@ class ServiceManager:
 app = FastAPI(title="DataService", version="1.0.0")
 
 # Add CORS middleware to allow frontend access
+frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+frontend_host = frontend_url.replace('http://', '').replace('https://', '').split(':')[0]
+frontend_port = os.getenv('FRONTEND_PORT', '3000')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"],  # Frontend URLs
+    allow_origins=[
+        frontend_url,
+        f"http://{frontend_host}:{frontend_port}",
+        f"http://localhost:{frontend_port}",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*"  # Allow all origins for development - restrict in production
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 services = ServiceManager()
 mqtt_forwarder = MqttForwarder()
+mqtt_publisher = MQTTPublisher()
 ipc_server = IpcServer()
 
 
@@ -517,7 +616,9 @@ def simulate_data():
 
 def main():
     # For backward-compat if directly executed
-    uvicorn.run("dataservice.server:app", host="0.0.0.0", port=8080, reload=False)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', '8080'))
+    uvicorn.run("dataservice.server:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":
@@ -650,4 +751,107 @@ def set_opcua_mapping(body: dict):
 def get_opcua_mappings():
     """Get all OPC-UA mappings"""
     return OPCUA_MAPPING.all()
+
+
+# ====================== MQTT PUBLISHER ENDPOINTS ======================
+
+@app.get('/mqtt/publisher/config', tags=["MQTT Publisher"])
+def get_mqtt_publisher_config():
+    """
+    Get MQTT Publisher Configuration
+    
+    Returns the current MQTT publisher configuration including:
+    - Broker settings (address, port, authentication, TLS)
+    - Publish topics with tag selections
+    - QoS, retain, format, and interval settings
+    """
+    return mqtt_publisher.get_config()
+
+
+@app.post('/mqtt/publisher/config', tags=["MQTT Publisher"])
+def set_mqtt_publisher_config(config: MQTTPublisherConfig):
+    """
+    Set MQTT Publisher Configuration
+    
+    Update the MQTT publisher configuration and restart the publisher.
+    Configuration is automatically persisted to disk and will be loaded on restart.
+    """
+    try:
+        mqtt_publisher.update_config(config.dict())
+        return {'ok': True, 'message': 'MQTT publisher configuration updated'}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get('/mqtt/publisher/status', response_model=MQTTPublisherStatus, tags=["MQTT Publisher"])
+def get_mqtt_publisher_status():
+    """
+    Get MQTT Publisher Status
+    
+    Returns real-time status of the MQTT publisher:
+    - Connection status (connected/disconnected)
+    - Broker address
+    - Number of active topics
+    - Total configured topics
+    """
+    return mqtt_publisher.get_status()
+
+
+@app.post('/mqtt/publisher/test', response_model=MQTTTestPublishResponse, tags=["MQTT Publisher"])
+def test_mqtt_publish(request: MQTTTestPublishRequest):
+    """
+    Test MQTT Publish
+    
+    Test publishing a message to verify configuration before deploying.
+    Publishes a single test message with the specified settings.
+    """
+    try:
+        result = mqtt_publisher.test_publish(request.dict())
+        return result
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post('/mqtt/publisher/restart', tags=["MQTT Publisher"])
+def restart_mqtt_publisher():
+    """
+    Restart MQTT Publisher
+    
+    Restart the MQTT publisher with the current configuration.
+    Useful after making configuration changes or troubleshooting connection issues.
+    """
+    try:
+        mqtt_publisher.stop()
+        time.sleep(0.5)
+        mqtt_publisher.start()
+        return {'ok': True, 'message': 'MQTT publisher restarted'}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get('/mqtt/publisher/topics', tags=["MQTT Publisher"])
+def list_mqtt_topics():
+    """
+    List MQTT Topics
+    
+    Get a list of all configured MQTT publish topics with their settings.
+    """
+    config = mqtt_publisher.get_config()
+    topics = config.get('topics', {}).get('publish', [])
+    
+    return {
+        'topics': [
+            {
+                'id': t.get('id'),
+                'topic': t.get('topic'),
+                'enabled': t.get('enabled', True),
+                'tagCount': len(t.get('selectedTags', [])),
+                'publishInterval': t.get('publishInterval', 1000),
+                'qos': t.get('qos', 0),
+                'format': t.get('format', 'json')
+            }
+            for t in topics
+        ]
+    }
+
 

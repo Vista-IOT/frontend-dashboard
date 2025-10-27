@@ -6,3 +6,4 @@ paho-mqtt
 fastapi
 uvicorn
 python-dotenv
+aiohttp

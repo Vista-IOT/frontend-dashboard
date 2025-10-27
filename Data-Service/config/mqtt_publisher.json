@@ -1,0 +1,28 @@
+{
+  "enabled": false,
+  "broker": {
+    "address": "test.mosquitto.org",
+    "port": 1883,
+    "client_id": "dataservice-mqtt-pub",
+    "keepalive": 60,
+    "clean_session": true,
+    "protocol": "mqtt",
+    "auth": {
+      "enabled": false,
+      "username": "",
+      "password": ""
+    },
+    "tls": {
+      "enabled": false,
+      "verify_server": true,
+      "allow_insecure": false,
+      "cert_file": "",
+      "key_file": "",
+      "ca_file": ""
+    }
+  },
+  "topics": {
+    "publish": [],
+    "subscribe": []
+  }
+}
