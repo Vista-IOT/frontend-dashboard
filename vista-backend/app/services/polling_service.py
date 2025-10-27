@@ -1,6 +1,7 @@
 import time
 # Old logging import replaced
 import threading
+from typing import Tuple
 from pymodbus.client import ModbusTcpClient, ModbusSerialClient
 import subprocess
 import struct
@@ -34,7 +35,7 @@ def format_connectivity_error(error_code: int, verbose_description: str) -> str:
     """Format connectivity error in standardized format: (ERROR_CODE - ERROR DESCRIPTION/MESSAGE)"""
     return f"({error_code} - {verbose_description})"
 
-def extract_ping_error_details(ping_output: str, stderr: str = "") -> tuple[int, str]:
+def extract_ping_error_details(ping_output: str, stderr: str = "") -> Tuple[int, str]:
     """Extract error code and formatted description from ping output"""
     combined_output = (ping_output + stderr).lower()
     

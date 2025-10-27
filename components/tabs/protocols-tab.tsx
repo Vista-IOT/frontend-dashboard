@@ -11,7 +11,7 @@ import { SNMPForm } from "@/components/forms/snmp-form"
 import { IECProtocolsForm } from "@/components/forms/iec-protocols-form"
 import { ProtocolConversionForm } from "@/components/forms/protocol-conversion-form"
 import { DataMappingForm } from "@/components/forms/data-mapping-form"
-import { MQTTPubForm } from "@/components/forms/mqtt-pub-form"
+import { MQTTPubForm } from "@/components/forms/mqtt-pub-form-new"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 
 export default function ProtocolsTab() {

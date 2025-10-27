@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ModbusTcpServerForm from "@/components/server-forms/modbus-server-form";
 import OpcuaTcpServerForm from "@/components/server-forms/opcua-server-form";
 import IEC104TcpServerForm from "@/components/server-forms/iec104-server-form";
-import { MQTTPubForm } from "@/components/forms/mqtt-pub-form";
+import { MQTTPubForm } from "@/components/forms/mqtt-pub-form-new";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
 export default function DataServiceTab() {

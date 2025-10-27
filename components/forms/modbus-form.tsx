@@ -280,6 +280,11 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
         serial: values.serial,
         slave_id: values.slave_id
       })
+      
+      // Persist to backend
+      const { saveConfigToBackend } = useConfigStore.getState()
+      await saveConfigToBackend()
+      
       toast.success('Modbus settings saved successfully!', {
         duration: 3000
       })
