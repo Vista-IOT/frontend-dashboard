@@ -251,10 +251,33 @@ export default function ModbusTcpServerForm() {
     }
   }
 
-  // Generate Data-Service key in format: deviceName.tagId
+  // Get register count based on Modbus data type
+  const getRegisterCount = (dataType: string): number => {
+    const registerCounts: Record<string, number> = {
+      'int16': 1,
+      'uint16': 1,
+      'int32': 2,
+      'uint32': 2,
+      'float32': 2,
+      'float': 2,
+      'int64': 4,
+      'uint64': 4,
+      'float64': 4,
+      'double': 4,
+      'bool': 1,
+    }
+    return registerCounts[dataType.toLowerCase()] || 1
+  }
+
+  // Generate Data-Service key in format: deviceName:tagId or just tagName for virtual tags
   const generateDataServiceKey = (tag: any): string => {
+    // For user tags, calculation tags, stats tags, system tags - use tag name directly
+    if (tag.type === 'user' || tag.type === 'calculation' || tag.type === 'stats' || tag.type === 'system') {
+      return tag.name || tag.id
+    }
+    
+    // For IO tags - use deviceName:tagName format
     const deviceName = tag.deviceName || tag.device || "UNKNOWN"
-    // Use the existing tag ID instead of generating new timestamp
     return `${deviceName}:${tag.id}`
   }
 
@@ -423,6 +446,9 @@ export default function ModbusTcpServerForm() {
           })
           
           if (!isDataServiceError(mappingResponse)) {
+            // Calculate register count based on data type
+            const registerCount = getRegisterCount(modbusDataType)
+            
             const newTag: ModbusServerTag = {
               id: result.id,
               tagName: selectedTag.name,
@@ -441,7 +467,8 @@ export default function ModbusTcpServerForm() {
             }
             
             newTags.push(newTag)
-            currentAddress++
+            // Increment by register count to avoid overlaps
+            currentAddress += registerCount
           } else {
             console.warn(`Failed to create Modbus mapping for ${selectedTag.name}:`, mappingResponse.error)
           }
@@ -488,11 +515,31 @@ export default function ModbusTcpServerForm() {
       return
     }
 
-    // Note: Data-Service doesn't have a delete mapping endpoint currently
-    // We'll remove from local state and warn the user
-    setServerTags(prev => prev.filter(t => t.id !== tagId))
-    
-    toast.warning(`Tag "${tag.tagName}" removed from display. Note: Data-Service mapping still exists. Restart Data-Service to clear all mappings.`)
+    // Use dataId (Data-Service ID) for deletion, not the local tag.id
+    const dataServiceId = tag.dataId
+    if (!dataServiceId) {
+      toast.error("No Data-Service ID found for this tag")
+      return
+    }
+
+    try {
+      // Delete from Data-Service using the DELETE API endpoint with dataId
+      const response = await dataServiceAPI.deleteModbusMapping(dataServiceId)
+      
+      if (!isDataServiceError(response)) {
+        // Remove from local state
+        setServerTags(prev => prev.filter(t => t.id !== tagId))
+        toast.success(`Tag "${tag.tagName}" deleted successfully from Data-Service`)
+        
+        // Refresh mappings to stay in sync
+        setTimeout(syncExistingMappings, 500)
+      } else {
+        toast.error(`Failed to delete tag: ${response.error}`)
+      }
+    } catch (error) {
+      console.error('Error deleting tag:', error)
+      toast.error(`Error deleting tag: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   const handleTagUpdate = (tagId: string, updates: Partial<ModbusServerTag>) => {

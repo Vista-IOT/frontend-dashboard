@@ -12,7 +12,7 @@ from app.middleware import RequestResponseLoggingMiddleware, RequestSizeMiddlewa
 
 # Import routers
 from app.routers import dashboard, deploy, hardware, config
-from app.routers import dnp3, snmp_set, opcua, modbus, iec104
+from app.routers import dnp3, snmp_set, opcua, modbus, iec104, logs, admin
 from app.services.config_monitor import config_monitor
 
 # Initialize comprehensive logging system
@@ -52,16 +52,16 @@ app.add_middleware(
 )
 startup_logger.info("   ✅ Request/Response logging middleware added")
 
-# Add CORS middleware
+
+# Add CORS middleware - Allow access from any origin for IoT dashboard
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,
+    allow_origins=["*"],  # Allow all origins for IoT dashboard access from anywhere
+    allow_credentials=False,  # Must be False when using wildcard origin
     allow_methods=["*"],
     allow_headers=["*"],
 )
 startup_logger.info("   ✅ CORS middleware added (all origins allowed)")
-
 # Log middleware setup completion
 startup_logger.info("🎯 All FastAPI middleware configured successfully")
 
@@ -94,6 +94,16 @@ try:
     
     app.include_router(iec104.router)
     startup_logger.info("   ✅ IEC104 router registered")
+    
+    app.include_router(logs.router)
+    startup_logger.info("   ✅ Logs router registered (/api/logs)")
+    
+    app.include_router(admin.router)
+    startup_logger.info("   ✅ Admin router registered (/api/admin)")
+    
+    from app.routers import virtual_tags
+    app.include_router(virtual_tags.router)
+    startup_logger.info("   ✅ Virtual Tags router registered (/api/user-tags, /api/calculation-tags)")
     
     startup_logger.info("🎉 All API routers registered successfully")
     startup_logger.info("📊 Available API endpoints:")

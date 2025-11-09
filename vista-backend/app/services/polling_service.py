@@ -93,8 +93,13 @@ def get_latest_polled_values():
         
         # Enrich with last successful timestamps
         enriched_values = copy.deepcopy(_latest_polled_values)
-        for device_name, tags in enriched_values.items():
-            for tag_id, tag_data in tags.items():
+        for device_name, device_data in enriched_values.items():
+            for tag_id, tag_data in device_data.items():
+                # Skip if tag_data is not a dict (e.g., direct name mappings from virtual tags)
+                if not isinstance(tag_data, dict):
+                    continue
+                    
+                # Add last successful timestamp to each tag
                 tag_data["last_successful_timestamp"] = get_last_successful_timestamp(device_name, tag_id)
                 
                 # Sanitize non-JSON-serializable values
@@ -827,6 +832,14 @@ def start_polling_from_config(config):
     
     # Wait a moment for threads to stop
     time.sleep(1)
+    
+    # Initialize virtual tags (user tags + calculation tags)
+    try:
+        from app.services.virtual_tag_service import initialize_virtual_tags
+        initialize_virtual_tags(config)
+        polling_logger.info('Virtual tags (user tags + calculation tags) initialized successfully')
+    except Exception as e:
+        polling_logger.error(f'Failed to initialize virtual tags: {e}')
     
     io_setup = config.get('io_setup', {})
     ports = io_setup.get('ports', [])

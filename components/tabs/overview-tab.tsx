@@ -20,8 +20,6 @@ export default function OverviewTab() {
     { name: "VPN", status: data.protocols?.vpn || "connected" },
     { name: "Modbus", status: data.protocols?.modbus || "partial" },
     { name: "OPC-UA", status: data.protocols?.opcua || "connected" },
-    { name: "DNP3.0", status: data.protocols?.dnp3 || "disconnected" },
-    { name: "Watchdog", status: data.protocols?.watchdog || "active" },
   ];
   return (
     <>
@@ -103,7 +101,9 @@ export default function OverviewTab() {
               <div className="font-medium">Status</div>
               <div className="font-medium">Connections</div>
             </div>
-            {Object.entries(data.protocols || {}).map(([name, status]: [string, any]) => (
+            {Object.entries(data.protocols || {})
+              .filter(([name]) => name !== 'dnp3' && name !== 'watchdog')
+              .map(([name, status]: [string, any]) => (
               <div className="grid gap-2 md:grid-cols-4 border-t pt-2" key={name}>
                 <div>{name}</div>
                 <div>-</div>

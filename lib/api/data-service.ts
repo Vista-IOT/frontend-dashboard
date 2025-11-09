@@ -36,6 +36,7 @@ export interface ModbusMapping {
   scaling_factor: number;
   endianess: string;
   description: string;
+  default_value?: number | string;  // Optional default value for initialization
 }
 
 export interface DataServiceResponse<T = any> {
@@ -206,6 +207,13 @@ class DataServiceAPI {
     return this.request('/mappings/modbus', {
       method: 'POST',
       body: JSON.stringify(mapping),
+    });
+  }
+
+  // Delete Modbus mapping
+  async deleteModbusMapping(mappingId: string) {
+    return this.request(`/mappings/modbus/${mappingId}`, {
+      method: 'DELETE',
     });
   }
 

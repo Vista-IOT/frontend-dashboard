@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, X, FileText } from "lucide-react";
+import { Plus, X, FileText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -51,6 +51,17 @@ import type { UserTagFormValues } from "@/lib/stores/configuration-store";
 // Import CSV components
 import { CSVImportExport } from "@/components/common/csv-import-export";
 import { userTagColumns, validateUserTag } from "@/lib/csv-configs";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Tag Dialog Component for both adding and editing tags
 function TagDialog({
@@ -320,6 +331,9 @@ export function UserTagsForm() {
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [editingTag, setEditingTag] = useState<UserTag | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{tags: UserTag[], duplicates: UserTag[]}>({tags: [], duplicates: []});
 
   // Function to open dialog for adding a new tag
   const handleAddTag = () => {
@@ -370,22 +384,93 @@ export function UserTagsForm() {
     }
   };
 
-  // CSV Import handler
+  const handleBulkDelete = () => {
+    if (selectedTagIds.size === 0) {
+      toast.error("Please select tags to delete.", { duration: 3000 });
+      return;
+    }
+    
+    const updatedTags = userTags.filter((tag) => !selectedTagIds.has(tag.id));
+    updateConfig(["user_tags"], updatedTags);
+    setSelectedTagIds(new Set());
+    toast.success(`Deleted ${selectedTagIds.size} tag(s) successfully.`, {
+      duration: 3000,
+    });
+  };
+
+  const toggleTagSelection = (tagId: string) => {
+    const newSelection = new Set(selectedTagIds);
+    if (newSelection.has(tagId)) {
+      newSelection.delete(tagId);
+    } else {
+      newSelection.add(tagId);
+    }
+    setSelectedTagIds(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTagIds.size === userTags.length) {
+      setSelectedTagIds(new Set());
+    } else {
+      setSelectedTagIds(new Set(userTags.map(tag => tag.id)));
+    }
+  };
+
+  // CSV Import handler with duplicate detection
   const handleCSVImport = (importedTags: UserTag[]) => {
     // Check for duplicate names
-    const existingNames = userTags.map(tag => tag.name.toLowerCase());
+    const existingNamesMap = new Map(userTags.map(tag => [tag.name.toLowerCase(), tag]));
     const duplicates = importedTags.filter(tag => 
-      existingNames.includes(tag.name.toLowerCase())
+      existingNamesMap.has(tag.name.toLowerCase())
     );
 
     if (duplicates.length > 0) {
-      toast.error(`Cannot import tags with duplicate names: ${duplicates.map(t => t.name).join(', ')}`, { duration: 5000 });
+      // Show dialog asking if user wants to overwrite
+      setPendingImport({ tags: importedTags, duplicates });
+      setDuplicateDialogOpen(true);
       return;
     }
 
-    // Add imported tags to existing ones
+    // No duplicates, add imported tags to existing ones
     const updatedTags = [...userTags, ...importedTags];
     updateConfig(["user_tags"], updatedTags);
+    toast.success(`Successfully imported ${importedTags.length} tag(s).`, { duration: 3000 });
+  };
+
+  const handleOverwriteDuplicates = () => {
+    const { tags: importedTags, duplicates } = pendingImport;
+    
+    // Create a map of existing tags by name (lowercase)
+    const existingNamesMap = new Map(userTags.map(tag => [tag.name.toLowerCase(), tag]));
+    
+    // Remove duplicates from existing tags and add all imported tags
+    const nonDuplicateTags = userTags.filter(tag => 
+      !importedTags.some(imported => imported.name.toLowerCase() === tag.name.toLowerCase())
+    );
+    
+    const updatedTags = [...nonDuplicateTags, ...importedTags];
+    updateConfig(["user_tags"], updatedTags);
+    
+    setDuplicateDialogOpen(false);
+    setPendingImport({ tags: [], duplicates: [] });
+    toast.success(`Imported ${importedTags.length} tag(s), overwriting ${duplicates.length} duplicate(s).`, { duration: 3000 });
+  };
+
+  const handleSkipDuplicates = () => {
+    const { tags: importedTags } = pendingImport;
+    
+    // Only import tags that don't have duplicates
+    const existingNamesSet = new Set(userTags.map(tag => tag.name.toLowerCase()));
+    const nonDuplicateTags = importedTags.filter(tag => 
+      !existingNamesSet.has(tag.name.toLowerCase())
+    );
+    
+    const updatedTags = [...userTags, ...nonDuplicateTags];
+    updateConfig(["user_tags"], updatedTags);
+    
+    setDuplicateDialogOpen(false);
+    setPendingImport({ tags: [], duplicates: [] });
+    toast.success(`Imported ${nonDuplicateTags.length} tag(s), skipped ${importedTags.length - nonDuplicateTags.length} duplicate(s).`, { duration: 3000 });
   };
 
   return (
@@ -424,6 +509,29 @@ export function UserTagsForm() {
                 )}
               </Tooltip>
             </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="destructive"
+                      onClick={handleBulkDelete}
+                      className="flex items-center gap-1"
+                      disabled={selectedTagIds.size === 0}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Selected ({selectedTagIds.size})
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {selectedTagIds.size === 0 && (
+                  <TooltipContent>
+                    Select tags using checkboxes to delete multiple at once
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {/* CSV Import/Export */}
@@ -441,6 +549,13 @@ export function UserTagsForm() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={userTags.length > 0 && selectedTagIds.size === userTags.length}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all tags"
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Data Type</TableHead>
                 <TableHead>Default Value</TableHead>
@@ -454,7 +569,7 @@ export function UserTagsForm() {
               {userTags.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-4 text-muted-foreground"
                   >
                     No user tags defined. Click "Add" to create a new tag.
@@ -469,6 +584,13 @@ export function UserTagsForm() {
                     onDoubleClick={() => handleRowDoubleClick(tag)}
                     style={{ cursor: "pointer" }}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedTagIds.has(tag.id)}
+                        onCheckedChange={() => toggleTagSelection(tag.id)}
+                        aria-label={`Select ${tag.name}`}
+                      />
+                    </TableCell>
                     <TableCell>{tag.name}</TableCell>
                     <TableCell>{tag.dataType}</TableCell>
                     <TableCell>
@@ -501,6 +623,38 @@ export function UserTagsForm() {
           onSaveTag={saveTag}
           editTag={editingTag}
         />
+
+        {/* Duplicate handling dialog */}
+        <AlertDialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Duplicate Tags Found</AlertDialogTitle>
+              <AlertDialogDescription>
+                Found {pendingImport.duplicates.length} tag(s) with duplicate names:
+                <div className="mt-2 p-2 bg-muted rounded text-sm font-mono">
+                  {pendingImport.duplicates.map(d => d.name).join(', ')}
+                </div>
+                <div className="mt-3">
+                  Do you want to overwrite the existing tags or skip the duplicates?
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setDuplicateDialogOpen(false);
+                setPendingImport({ tags: [], duplicates: [] });
+              }}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleSkipDuplicates} className="bg-blue-600 hover:bg-blue-700">
+                Skip Duplicates
+              </AlertDialogAction>
+              <AlertDialogAction onClick={handleOverwriteDuplicates} className="bg-orange-600 hover:bg-orange-700">
+                Overwrite Existing
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
