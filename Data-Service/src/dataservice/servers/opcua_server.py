@@ -201,31 +201,43 @@ async def opcua_server_thread(stop_event: Event):
                             else:
                                 node_id = ua.NodeId(identifier, ns)
                             
-                            var = await data_folder.add_variable(
-                                node_id,
-                                browse_name,
-                                coerced_value,
-                                get_opcua_data_type(data_type)
-                            )
-                            
-                            # Set properties
-                            await var.set_display_name(ua.LocalizedText(display_name))
-                            await var.set_access_level(get_access_level(access_level))
-                            
-                            # Set writable if access allows writing
-                            if 'Write' in access_level:
-                                await var.set_writable(True)
-                            
-                            # Add description
-                            if description:
-                                await var.set_description(ua.LocalizedText(description))
+                            try:
+                                var = await data_folder.add_variable(
+                                    node_id,
+                                    browse_name,
+                                    coerced_value,
+                                    get_opcua_data_type(data_type)
+                                )
+                                
+                                # Set properties
+                                await var.set_display_name(ua.LocalizedText(display_name))
+                                await var.set_access_level(get_access_level(access_level))
+                                
+                                # Set writable if access allows writing
+                                if 'Write' in access_level:
+                                    await var.set_writable(True)
+                                
+                                # Add description
+                                if description:
+                                    await var.set_description(ua.LocalizedText(description))
+                                
+                                print(f"OPC-UA created mapped variable: {key} -> {node_id_str} ({data_type})")
+                            except Exception as create_error:
+                                # Node might already exist, try to get it
+                                if "BadNodeIdExists" in str(create_error) or "already exists" in str(create_error):
+                                    try:
+                                        var = server.get_node(node_id)
+                                        print(f"OPC-UA: Node {node_id_str} already exists, using existing node for {key}")
+                                    except Exception as get_error:
+                                        print(f"OPC-UA: Could not get existing node {node_id_str}: {get_error}")
+                                        continue
+                                else:
+                                    raise
                             
                             # Cache the variable
                             data_id_to_var[data_id] = var
                             node_id_to_var[node_id_str] = var
                             key_to_data_type[key] = data_type
-                            
-                            print(f"OPC-UA created mapped variable: {key} -> {node_id_str} ({data_type})")
                         
                         # Update variable value
                         var = data_id_to_var.get(data_id)
@@ -236,7 +248,11 @@ async def opcua_server_thread(stop_event: Event):
                             coerced_value = coerce_value_for_opcua_type(current_value, expected_type)
                             
                             try:
+                                # Get old value to check if it changed
+                                old_value = await var.get_value()
                                 await var.set_value(coerced_value)
+                                if old_value != coerced_value:
+                                    print(f"OPC-UA: Updated {key}: {old_value} → {coerced_value}")
                             except Exception as e:
                                 print(f"OPC-UA set value error for {key}: {e}")
                                 

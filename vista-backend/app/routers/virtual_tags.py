@@ -4,16 +4,52 @@ API endpoints for managing virtual tags (user tags and calculation tags)
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Any, Dict
-from app.services.virtual_tag_service import update_user_tag_value, evaluate_calculation_tags
+from typing import Any, Dict, Optional
+from app.services.virtual_tag_service import (
+    update_user_tag_value, 
+    evaluate_calculation_tags,
+    add_user_tag_dynamically
+)
 from app.services.config_loader import load_latest_config
 
 router = APIRouter()
 
 
+class AddUserTagRequest(BaseModel):
+    tag_name: str
+    default_value: Any = 0
+    data_type: str = 'Analog'
+    units: Optional[str] = ''
+    description: Optional[str] = ''
+
+
 class UpdateUserTagRequest(BaseModel):
     tag_name: str
     value: Any
+
+
+@router.post("/api/user-tags/add")
+async def add_user_tag(request: AddUserTagRequest):
+    """
+    Dynamically add a user tag to the virtual tag service
+    
+    This allows user tags to be added at runtime without requiring config reload.
+    The tag will be added to _latest_polled_values and synced to Data-Service.
+    This endpoint is idempotent - calling it multiple times is safe.
+    """
+    success = add_user_tag_dynamically(
+        tag_name=request.tag_name,
+        default_value=request.default_value,
+        data_type=request.data_type,
+        units=request.units or '',
+        description=request.description or ''
+    )
+    
+    # Always return success since the function is now idempotent
+    return {
+        "ok": True,
+        "message": f"User tag '{request.tag_name}' registered successfully"
+    }
 
 
 @router.post("/api/user-tags/update")

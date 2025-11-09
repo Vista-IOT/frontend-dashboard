@@ -267,6 +267,13 @@ class DataServiceAPI {
     });
   }
 
+  // Delete OPC-UA mapping
+  async deleteOpcuaMapping(mappingId: string) {
+    return this.request(`/mappings/opcua/${mappingId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Get detailed health status
   async getDetailedHealth() {
     return this.request('/health/detailed');
@@ -302,6 +309,12 @@ class DataServiceAPI {
     return this.request("/mappings/iec104", {
       method: "POST",
       body: JSON.stringify(mapping),
+    });
+  }
+
+  async deleteIEC104Mapping(mappingId: string) {
+    return this.request(`/mappings/iec104/${mappingId}`, {
+      method: 'DELETE',
     });
   }
 

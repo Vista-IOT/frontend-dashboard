@@ -125,28 +125,41 @@ def evaluate_calculation_tags(config: Dict[str, Any]):
             formula = tag.get('formula', '0')
             
             try:
-                # Build evaluation context with all available tag values
-                eval_context = {}
+                # Build a map of all available tag values by tag name
+                tag_values_map = {}
                 
-                # Add all polled values to context
+                # Add all polled values to map
                 for device_name, device_tags in _latest_polled_values.items():
                     if isinstance(device_tags, dict):
                         for tag_id, tag_data in device_tags.items():
                             if isinstance(tag_data, dict) and 'value' in tag_data:
                                 # Add by tag_name if available
                                 if 'tag_name' in tag_data:
-                                    eval_context[tag_data['tag_name']] = tag_data['value']
+                                    tag_values_map[tag_data['tag_name']] = tag_data['value']
                                 # Also add by tag_id
-                                eval_context[tag_id] = tag_data['value']
+                                tag_values_map[tag_id] = tag_data['value']
                 
                 # Add direct tag name mappings
                 for key, value in _latest_polled_values.items():
                     if isinstance(value, dict) and 'value' in value and 'source' in value:
                         # Remove calc: prefix for evaluation
                         clean_key = key.replace('calc:', '')
-                        eval_context[clean_key] = value['value']
+                        tag_values_map[clean_key] = value['value']
                 
-                # Evaluate the formula
+                # Build evaluation context with variables A-H mapped to their referenced tag values
+                eval_context = {}
+                for var_name in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']:
+                    tag_ref = tag.get(var_name, '')
+                    if tag_ref:  # If variable is assigned to a tag
+                        # Get the value of the referenced tag
+                        tag_value = tag_values_map.get(tag_ref, 0)
+                        # Map uppercase variable name (A, B, C, etc.) to the tag value
+                        eval_context[var_name.upper()] = tag_value
+                    else:
+                        # Unassigned variables default to 0
+                        eval_context[var_name.upper()] = 0
+                
+                # Evaluate the formula with variable substitution
                 # Note: This uses eval() which can be dangerous - in production, use a safe expression evaluator
                 result = eval(formula, {"__builtins__": {}}, eval_context)
                 
@@ -216,6 +229,68 @@ def start_calculation_engine(config: Dict[str, Any], update_interval: float = 1.
     logger.info(f"Started calculation engine for {len(calc_tags)} calculation tags")
     
     return stop_event
+
+
+def add_user_tag_dynamically(tag_name: str, default_value: Any = 0, data_type: str = 'Analog', 
+                             units: str = '', description: str = '') -> bool:
+    """
+    Dynamically add or update a user tag in _latest_polled_values
+    This allows user tags to be added at runtime without requiring config reload
+    This function is idempotent - calling it multiple times with the same tag is safe
+    
+    Args:
+        tag_name: Name of the user tag
+        default_value: Default value for the tag
+        data_type: Data type (Analog, Digital, etc.)
+        units: Units string
+        description: Description of the tag
+        
+    Returns:
+        True if successful (always returns True)
+    """
+    with _latest_polled_values_lock:
+        # Check if tag already exists
+        if tag_name in _latest_polled_values:
+            logger.info(f"User tag {tag_name} already exists, updating metadata")
+            # Update existing tag metadata but preserve current value
+            if 'USER_TAGS' in _latest_polled_values and tag_name in _latest_polled_values['USER_TAGS']:
+                existing_value = _latest_polled_values['USER_TAGS'][tag_name].get('value', default_value)
+                _latest_polled_values['USER_TAGS'][tag_name].update({
+                    'data_type': data_type,
+                    'description': description,
+                    'units': units,
+                    'timestamp': time.time()
+                })
+            return True
+        
+        # Create USER_TAGS device if it doesn't exist
+        if 'USER_TAGS' not in _latest_polled_values:
+            _latest_polled_values['USER_TAGS'] = {}
+        
+        # Add to USER_TAGS device
+        _latest_polled_values['USER_TAGS'][tag_name] = {
+            'value': default_value,
+            'status': 'good',
+            'error': None,
+            'timestamp': time.time(),
+            'tag_name': tag_name,
+            'data_type': data_type,
+            'read_write': 'Read/Write',
+            'description': description,
+            'units': units
+        }
+        
+        # Also store by tag name for easy lookup
+        _latest_polled_values[tag_name] = {
+            'value': default_value,
+            'status': 'good',
+            'error': None,
+            'timestamp': time.time(),
+            'source': 'user_tag'
+        }
+        
+        logger.info(f"Dynamically added user tag: {tag_name} = {default_value}")
+        return True
 
 
 def update_user_tag_value(tag_name: str, new_value: Any) -> bool:

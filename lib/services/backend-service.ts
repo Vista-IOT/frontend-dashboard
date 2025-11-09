@@ -96,6 +96,36 @@ class BackendService {
   }
 
   /**
+   * Dynamically add a user tag to the virtual tag service
+   * @param tagName The tag name
+   * @param defaultValue The default value
+   * @param dataType The data type
+   * @param units The units
+   * @param description The description
+   */
+  async addUserTag(
+    tagName: string, 
+    defaultValue: any = 0, 
+    dataType: string = 'Analog',
+    units: string = '',
+    description: string = ''
+  ): Promise<boolean> {
+    try {
+      const response = await axios.post(`${this.apiUrl}/user-tags/add`, {
+        tag_name: tagName,
+        default_value: defaultValue,
+        data_type: dataType,
+        units,
+        description
+      });
+      return response.data?.ok === true;
+    } catch (error: any) {
+      console.error(`Error adding user tag ${tagName}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Update a tag value
    * @param tagId The tag ID
    * @param value The new value

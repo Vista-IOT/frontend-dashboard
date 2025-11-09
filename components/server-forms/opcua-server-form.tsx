@@ -23,6 +23,8 @@ import OPCUACSVIntegration, { getSampleCSVContent, type OPCUAServerTag } from ".
 
 // Import Data-Service API client
 import { dataServiceAPI, isDataServiceError, type DataServiceResponse } from "@/lib/api/data-service"
+// Import Backend Service for virtual tag management
+import backendService from "@/lib/services/backend-service"
 
 // OPC-UA Server configuration schema (aligned with Data-Service)
 const serverConfigSchema = z.object({
@@ -302,6 +304,24 @@ export default function OpcuaTcpServerForm() {
 
       for (const selectedTag of selectedTags) {
         try {
+          // Step 0: For user tags, add to virtual tag service first
+          if (selectedTag.type === 'user') {
+            try {
+              const added = await backendService.addUserTag(
+                selectedTag.name,
+                selectedTag.defaultValue || 0,
+                selectedTag.dataType || 'Analog',
+                selectedTag.units || '',
+                selectedTag.description || `User tag ${selectedTag.name}`
+              )
+              if (added) {
+                console.log(`✓ User tag ${selectedTag.name} registered in virtual tag service (or already exists)`)
+              }
+            } catch (error) {
+              console.warn(`Failed to add user tag to virtual service (continuing anyway):`, error)
+            }
+          }
+          
           // Step 1: Register data point in Data-Service datastore
           const dataServiceKey = generateDataServiceKey(selectedTag)
           const dataServiceDataType = mapFrontendDataTypeToDataService(selectedTag.dataType || 'Analog')
@@ -416,10 +436,28 @@ export default function OpcuaTcpServerForm() {
       return
     }
 
-    // Remove from local state (Data-Service doesn't have delete mapping endpoint)
-    setServerTags(prev => prev.filter(t => t.id !== tagId))
-    
-    toast.warning(`Tag "${tag.tagName}" removed from display. Restart Data-Service to clear server-side mappings.`)
+    setIsLoading(true)
+    try {
+      // Delete from Data-Service
+      const response = await dataServiceAPI.deleteOpcuaMapping(tagId)
+      
+      if (isDataServiceError(response)) {
+        toast.error(`Failed to delete tag: ${response.error}`)
+        return
+      }
+
+      // Remove from local state
+      setServerTags(prev => prev.filter(t => t.id !== tagId))
+      toast.success(`Tag "${tag.tagName}" deleted successfully from Data-Service`)
+      
+      // Refresh mappings to stay in sync
+      setTimeout(syncExistingMappings, 500)
+    } catch (error: any) {
+      console.error('Error deleting tag:', error)
+      toast.error(`Failed to delete tag: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleTagUpdate = (tagId: string, updates: Partial<OPCUAServerTag>) => {
@@ -806,23 +844,20 @@ export default function OpcuaTcpServerForm() {
 
 // FIXED: Helper functions for proper Data-Service integration
 function generateDataServiceKey(selectedTag: any): string {
-  const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
-  // Generate unique tag name with timestamp to match backend format
-  const timestamp = Date.now()
-  const tagName = `tag-${timestamp}`
-  return `${deviceName}:${tagName}`
-// DEPRECATED: }
-// DEPRECATED: 
-// DEPRECATED: function generateNodeIdFromTag(selectedTag: any, dataId?: string): string {
-// DEPRECATED:   // Use string-based node IDs with the tag key for better organization
-// DEPRECATED:   const deviceName = selectedTag.deviceName || selectedTag.device || "DEVICE"
-// DEPRECATED:   // Use the original tag name for the node ID (display purposes)
-// DEPRECATED:   const originalTagName = selectedTag.name || "TAG"
-// DEPRECATED:   // Clean the tag name if it already contains the device name
-// DEPRECATED:   const cleanTagName = originalTagName.startsWith(`${deviceName}:`) 
-// DEPRECATED:     ? originalTagName.substring(`${deviceName}:`.length)
-// DEPRECATED:     : originalTagName
-  return `ns=2;s=${deviceName}:${cleanTagName}`
+  // For user tags, calculation tags, stats tags, system tags - use tag name directly
+  if (selectedTag.type === 'user' || selectedTag.type === 'calculation' || 
+      selectedTag.type === 'stats' || selectedTag.type === 'system') {
+    return selectedTag.name || selectedTag.id
+  }
+  
+  // For IO tags - use deviceName:tagName format
+  if (selectedTag.deviceName || selectedTag.device) {
+    const deviceName = selectedTag.deviceName || selectedTag.device
+    return `${deviceName}:${selectedTag.id}`
+  }
+  
+  // Fallback: use just the tag name/id for any other virtual tags
+  return selectedTag.name || selectedTag.tagName || selectedTag.id
 }
 
 function generateBrowseName(tagName: string, deviceName?: string): string {

@@ -156,10 +156,14 @@ export default function ModbusTcpServerForm() {
         
         setServerTags(tags)
         
-        // Set next address after existing mappings
+        // Set next address after existing mappings, accounting for register count
         if (tags.length > 0) {
-          const maxAddr = Math.max(...tags.map(t => t.modbusAddress))
-          setNextAddress(maxAddr + 1)
+          // Find the tag with the highest ending address
+          const maxEndAddr = Math.max(...tags.map(t => {
+            const registerCount = getRegisterCount(t.dataType)
+            return t.modbusAddress + registerCount - 1
+          }))
+          setNextAddress(maxEndAddr + 1)
         }
       }
     } catch (error) {
@@ -277,8 +281,13 @@ export default function ModbusTcpServerForm() {
     }
     
     // For IO tags - use deviceName:tagName format
-    const deviceName = tag.deviceName || tag.device || "UNKNOWN"
-    return `${deviceName}:${tag.id}`
+    if (tag.deviceName || tag.device) {
+      const deviceName = tag.deviceName || tag.device
+      return `${deviceName}:${tag.id}`
+    }
+    
+    // Fallback: use just the tag name/id for any other virtual tags
+    return tag.name || tag.tagName || tag.id
   }
 
   const handleAddTags = async (selectedTags: any[]) => {
@@ -433,9 +442,10 @@ export default function ModbusTcpServerForm() {
         const access = determineRegisterAccess(registerType)
         
         try {
+          const dataServiceKey = generateDataServiceKey(selectedTag)
           const mappingResponse = await dataServiceAPI.createModbusMapping({
-            id: result.id,
-            key: generateDataServiceKey(selectedTag),
+            id: dataServiceKey, // Use the same key as the data_id
+            key: dataServiceKey,
             register_address: currentAddress,
             function_code: functionCode,
             data_type: modbusDataType,
@@ -450,7 +460,7 @@ export default function ModbusTcpServerForm() {
             const registerCount = getRegisterCount(modbusDataType)
             
             const newTag: ModbusServerTag = {
-              id: result.id,
+              id: dataServiceKey,
               tagName: selectedTag.name,
               tagType: selectedTag.type || 'IO',
               dataType: modbusDataType,
@@ -463,7 +473,7 @@ export default function ModbusTcpServerForm() {
               endianess: 'big',
               units: selectedTag.units || '',
               description: `Bulk-generated mapping for ${selectedTag.name}`,
-              dataId: result.id,
+              dataId: dataServiceKey,
             }
             
             newTags.push(newTag)

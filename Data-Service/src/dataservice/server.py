@@ -5,6 +5,7 @@ import sys
 import json
 import time
 import os
+import requests
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -253,6 +254,31 @@ def bulk_register(body: dict):
     }
 
 
+def _write_back_to_vista_backend(key: str, value: any):
+    """
+    Write user tag values back to vista-backend to keep them in sync
+    This ensures that when OPC UA clients write to user tags, the values
+    are reflected in the vista-backend's _latest_polled_values
+    """
+    try:
+        # Check if this is a user tag (no device prefix)
+        if ':' not in key:
+            # This might be a user tag - try to update it in vista-backend
+            response = requests.post(
+                'http://localhost:8000/api/user-tags/update',
+                json={'tag_name': key, 'value': value},
+                timeout=1
+            )
+            if response.status_code == 200:
+                print(f"✓ Wrote user tag {key} = {value} back to vista-backend")
+            elif response.status_code == 404:
+                # Tag doesn't exist in vista-backend, that's okay
+                pass
+    except Exception as e:
+        # Don't fail the write if vista-backend is unavailable
+        print(f"Warning: Could not write back to vista-backend: {e}")
+
+
 @app.post("/write")
 def write(body: dict):
     key = body.get('key')
@@ -260,7 +286,14 @@ def write(body: dict):
     value = body.get('value')
     if key is None and address is None:
         raise HTTPException(400, 'key or address required')
+    
+    # Write to Data-Service datastore
     DATA_STORE.write(key if key is not None else int(address), value)
+    
+    # Write back to vista-backend for user tags
+    if key is not None:
+        _write_back_to_vista_backend(key, value)
+    
     return {'ok': True}
 
 
@@ -378,6 +411,31 @@ def set_iec104_mapping(body: dict):
 @app.get('/mappings/iec104')
 def get_iec104_mappings():
     return IEC104_MAPPING.all()
+
+@app.delete('/mappings/iec104/{data_id}')
+def delete_iec104_mapping(data_id: str):
+    """Delete a specific IEC104 mapping by data_id"""
+    try:
+        # Get the mapping to find the key
+        mappings = IEC104_MAPPING.all()
+        if data_id not in mappings:
+            raise HTTPException(404, f'Mapping with id {data_id} not found')
+        
+        mapping = mappings[data_id]
+        key = mapping.get('key')
+        
+        # Remove from IEC104_MAPPING
+        IEC104_MAPPING.remove_mapping(data_id)
+        
+        # Unregister from DATA_STORE if key exists
+        if key:
+            DATA_STORE.unregister(key)
+        
+        return {'ok': True, 'message': f'Mapping {data_id} deleted successfully'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f'Error deleting mapping: {str(e)}')
 
 
 @app.post('/mappings/snmp')
@@ -739,4 +797,29 @@ def set_opcua_mapping(body: dict):
 def get_opcua_mappings():
     """Get all OPC-UA mappings"""
     return OPCUA_MAPPING.all()
+
+@app.delete('/mappings/opcua/{data_id}')
+def delete_opcua_mapping(data_id: str):
+    """Delete a specific OPC-UA mapping by data_id"""
+    try:
+        # Get the mapping to find the key
+        mappings = OPCUA_MAPPING.all()
+        if data_id not in mappings:
+            raise HTTPException(404, f'Mapping with id {data_id} not found')
+        
+        mapping = mappings[data_id]
+        key = mapping.get('key')
+        
+        # Remove from OPCUA_MAPPING
+        OPCUA_MAPPING.remove_mapping(data_id)
+        
+        # Unregister from DATA_STORE if key exists
+        if key:
+            DATA_STORE.unregister(key)
+        
+        return {'ok': True, 'message': f'Mapping {data_id} deleted successfully'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f'Error deleting mapping: {str(e)}')
 

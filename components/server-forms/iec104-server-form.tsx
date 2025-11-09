@@ -251,11 +251,25 @@ export default function IEC104TcpServerForm() {
     }
   }
 
-  // Generate Data-Service key in format: deviceName.tagId
+  // Generate Data-Service key based on tag type
   const generateDataServiceKey = (tag: any): string => {
-    const deviceName = tag.deviceName || tag.device || "UNKNOWN"
-    // Use the existing tag ID instead of generating new timestamp
-    return `${deviceName}:${tag.id}`
+    // For user tags and calc tags, use just the tag name (no device prefix)
+    if (tag.type === 'User' || tag.tagType === 'User' || tag.source === 'user_tag') {
+      return tag.name || tag.tagName || tag.id
+    }
+    
+    if (tag.type === 'Calculation' || tag.tagType === 'Calculation' || tag.source === 'calculation_tag') {
+      return tag.name || tag.tagName || tag.id
+    }
+    
+    // For IO tags, use deviceName:tagName format
+    if (tag.deviceName || tag.device) {
+      const deviceName = tag.deviceName || tag.device
+      return `${deviceName}:${tag.id}`
+    }
+    
+    // Fallback: use just the tag name/id for any other virtual tags
+    return tag.name || tag.tagName || tag.id
   }
 
   const handleAddTags = async (selectedTags: any[]) => {
@@ -405,16 +419,17 @@ export default function IEC104TcpServerForm() {
         const access = determineIEC104Access(registerType)
         
         try {
+          const dataServiceKey = generateDataServiceKey(selectedTag)
           const mappingResponse = await dataServiceAPI.createIEC104Mapping({
-            id: result.id,
-            key: generateDataServiceKey(selectedTag),
+            id: dataServiceKey,
+            key: dataServiceKey,
             ioa: currentAddress,
             type: functionCode,
           })
           
           if (!isDataServiceError(mappingResponse)) {
             const newTag: IEC104ServerTag = {
-              id: result.id,
+              id: dataServiceKey,
               tagName: selectedTag.name,
               tagType: selectedTag.type || 'IO',
               dataType: iec104DataType,
@@ -427,7 +442,7 @@ export default function IEC104TcpServerForm() {
               endianess: 'big',
               units: selectedTag.units || '',
               description: `Bulk-generated mapping for ${selectedTag.name}`,
-              dataId: result.id,
+              dataId: dataServiceKey,
             }
             
             newTags.push(newTag)
@@ -478,11 +493,28 @@ export default function IEC104TcpServerForm() {
       return
     }
 
-    // Note: Data-Service doesn't have a delete mapping endpoint currently
-    // We'll remove from local state and warn the user
-    setServerTags(prev => prev.filter(t => t.id !== tagId))
-    
-    toast.warning(`Tag "${tag.tagName}" removed from display. Note: Data-Service mapping still exists. Restart Data-Service to clear all mappings.`)
+    setIsLoading(true)
+    try {
+      // Delete from Data-Service
+      const response = await dataServiceAPI.deleteIEC104Mapping(tagId)
+      
+      if (isDataServiceError(response)) {
+        toast.error(`Failed to delete tag: ${response.error}`)
+        return
+      }
+
+      // Remove from local state
+      setServerTags(prev => prev.filter(t => t.id !== tagId))
+      toast.success(`Tag "${tag.tagName}" deleted successfully from Data-Service`)
+      
+      // Refresh mappings to stay in sync
+      setTimeout(syncExistingMappings, 500)
+    } catch (error: any) {
+      console.error('Error deleting tag:', error)
+      toast.error(`Failed to delete tag: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleTagUpdate = (tagId: string, updates: Partial<IEC104ServerTag>) => {
