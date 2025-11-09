@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ModbusTcpServerForm from "@/components/server-forms/modbus-server-form";
 import OpcuaTcpServerForm from "@/components/server-forms/opcua-server-form";
 import IEC104TcpServerForm from "@/components/server-forms/iec104-server-form";
+import { MQTTPubForm } from "@/components/forms/mqtt-pub-form-new";
 import { useConfigStore } from "@/lib/stores/configuration-store";
 
 export default function DataServiceTab() {
@@ -43,11 +44,12 @@ export default function DataServiceTab() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeServiceTab} onValueChange={setActiveServiceTab}>
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
             <TabsTrigger value="modbus">Modbus</TabsTrigger>
             <TabsTrigger value="opcua">OPC-UA</TabsTrigger>
             <TabsTrigger value="iec-104">IEC-104</TabsTrigger>
             <TabsTrigger value="snmp">SNMP</TabsTrigger>
+            <TabsTrigger value="mqtt-pub">MQTT Pub</TabsTrigger>
           </TabsList>
 
           <TabsContent value="modbus">
@@ -66,6 +68,10 @@ export default function DataServiceTab() {
             <div className="text-center py-8 text-muted-foreground">
               <p>SNMP server configuration coming soon...</p>
             </div>
+          </TabsContent>
+
+          <TabsContent value="mqtt-pub">
+            <MQTTPubForm />
           </TabsContent>
         </Tabs>
       </CardContent>
