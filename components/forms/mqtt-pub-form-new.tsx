@@ -110,10 +110,35 @@ export function MQTTPubForm() {
     defaultValues: getInitialConfig()
   })
 
-  // Load config on mount
+  // Load config on mount - try to get from Data-Service first, fallback to Zustand
   useEffect(() => {
-    const initialConfig = getInitialConfig()
-    form.reset(initialConfig)
+    const loadConfig = async () => {
+      try {
+        const apiBase = typeof window !== "undefined" ? window.location.origin : ""
+        const response = await fetch(`${apiBase}/api/mqtt-publisher/config`)
+        
+        if (response.ok) {
+          const dataServiceConfig = await response.json()
+          
+          // If Data-Service has config, use it and update Zustand
+          if (dataServiceConfig && (dataServiceConfig.brokers?.length > 0 || dataServiceConfig.mappings?.length > 0)) {
+            form.reset(dataServiceConfig)
+            
+            // Also update Zustand store to keep in sync
+            updateConfig(['protocols', 'mqtt'], dataServiceConfig)
+            return
+          }
+        }
+      } catch (error) {
+        console.log('Could not load from Data-Service, using Zustand config:', error)
+      }
+      
+      // Fallback to Zustand config
+      const initialConfig = getInitialConfig()
+      form.reset(initialConfig)
+    }
+    
+    loadConfig()
   }, [])
 
   const brokers = form.watch("brokers") || []
@@ -242,16 +267,36 @@ export function MQTTPubForm() {
         mappings: values.mappings
       })
       
-      // Persist to backend
+      // Persist to backend (YAML config)
       await saveConfigToBackend()
       
-      toast.success('MQTT Publisher configuration saved successfully!', {
-        duration: 3000
+      // Also send to Data-Service for real-time MQTT publishing
+      const apiBase = typeof window !== "undefined" ? window.location.origin : ""
+      const dataServiceResponse = await fetch(`${apiBase}/api/mqtt-publisher/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          enabled: values.enabled,
+          brokers: values.brokers,
+          mappings: values.mappings
+        })
+      })
+      
+      if (!dataServiceResponse.ok) {
+        throw new Error('Failed to update Data-Service MQTT publisher')
+      }
+      
+      toast.success('MQTT Publisher configuration saved and activated!', {
+        duration: 3000,
+        description: 'Configuration saved to backend and Data-Service'
       })
     } catch (error) {
       console.error('Error saving MQTT configuration:', error)
       toast.error('Failed to save MQTT configuration', {
-        duration: 5000
+        duration: 5000,
+        description: error instanceof Error ? error.message : 'Unknown error'
       })
     } finally {
       setIsSaving(false)

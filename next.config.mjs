@@ -30,6 +30,14 @@ const nextConfig = {
         source: "/deploy/api/:path*",
         destination: "http://127.0.0.1:8000/deploy/api/:path*",
       },
+      {
+        source: "/api/mqtt-publisher/:path*",
+        destination: "http://127.0.0.1:8080/mqtt-publisher/:path*",
+      },
+      {
+        source: "/api/data/:path*",
+        destination: "http://127.0.0.1:8080/data/:path*",
+      },
     ];
   },
   eslint: {

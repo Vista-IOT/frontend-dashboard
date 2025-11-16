@@ -15,6 +15,7 @@ from .servers.modbus_server import modbus_server_thread
 from .servers.opcua_server import opcua_server_thread
 from .servers.iec104_server import iec104_server_thread
 from .servers.snmp_server import snmp_server_thread
+from .servers.mqtt_publisher import mqtt_publisher_server, MQTT_PUBLISHER_MAPPING, datastore_ready_event
 from .core.datastore import DATA_STORE
 from .core.mqtt_forwarder import MqttForwarder
 from .core.mapping_store import MODBUS_MAPPING, IEC104_MAPPING, OPCUA_MAPPING, SNMP_MAPPING
@@ -35,6 +36,9 @@ class ServiceManager:
         self.opcua_thread: Optional[threading.Thread] = None
         self.iec104_thread: Optional[threading.Thread] = None
         self.snmp_thread: Optional[threading.Thread] = None
+        # MQTT Publisher configuration storage
+        self.mqtt_publisher_config = {'brokers': [], 'mappings': [], 'enabled': False}
+        self.datastore_ready = datastore_ready_event
 
     def start_modbus(self):
         if self.modbus_thread and self.modbus_thread.is_alive():
@@ -78,6 +82,30 @@ class ServiceManager:
     def stop_snmp(self):
         self.snmp_stop.set()
 
+    def update_mqtt_publisher(self, config: dict):
+        """Update MQTT publisher configuration and restart if needed"""
+        self.mqtt_publisher_config = config
+        
+        # Update the global mqtt_publisher_server with new config
+        if config.get('enabled', False):
+            brokers = config.get('brokers', [])
+            mappings = config.get('mappings', [])
+            
+            # Filter only enabled brokers and mappings
+            enabled_brokers = [b for b in brokers if b.get('enabled', True)]
+            enabled_mappings = [m for m in mappings if m.get('enabled', True)]
+            
+            mqtt_publisher_server.update_brokers(enabled_brokers)
+            mqtt_publisher_server.update_mappings(enabled_mappings)
+            
+        else:
+            # Stop if disabled
+            mqtt_publisher_server.stop()
+    
+    def get_mqtt_publisher_config(self):
+        """Get current MQTT publisher configuration"""
+        return self.mqtt_publisher_config
+
 
 app = FastAPI(title="DataService", version="1.0.0")
 
@@ -103,6 +131,54 @@ def on_startup():
     mqtt_forwarder.start()
     ipc_server.start()
     CALCULATION_ENGINE.start(update_interval=1.0)
+    
+    # Set the datastore_ready event after a short delay to allow for initial data population
+    def signal_datastore_ready():
+        time.sleep(5) # a 5-second delay
+        print("Setting datastore_ready event")
+        services.datastore_ready.set()
+    
+    # Fetch user tags from vista-backend and register them in the DATA_STORE
+    def fetch_and_register_user_tags():
+        try:
+            response = requests.get("http://localhost:8000/api/virtual-tags/status")
+            if response.status_code == 200:
+                data = response.json()
+                user_tags = data.get("user_tags", {})
+                for tag_name, tag_data in user_tags.items():
+                    DATA_STORE.register(
+                        key=tag_name,
+                        default=tag_data.get("value"),
+                        data_type=tag_data.get("data_type", "float"),
+                        units=tag_data.get("units", ""),
+                    )
+                print(f"Registered {len(user_tags)} user tags from vista-backend")
+        except Exception as e:
+            print(f"Error fetching user tags from vista-backend: {e}")
+
+    # Periodically update the DATA_STORE with the latest values from the vista-backend
+    def sync_with_vista_backend():
+        while True:
+            try:
+                response = requests.get("http://localhost:8000/api/virtual-tags/status")
+                if response.status_code == 200:
+                    data = response.json()
+                    user_tags = data.get("user_tags", {})
+                    for tag_name, tag_data in user_tags.items():
+                        DATA_STORE.write(tag_name, tag_data.get("value"))
+                    
+                    calc_tags = data.get("calc_tags", {})
+                    for tag_name, tag_data in calc_tags.items():
+                        DATA_STORE.write(tag_name, tag_data.get("value"))
+
+            except Exception as e:
+                print(f"Error syncing with vista-backend: {e}")
+            
+            time.sleep(1) # Sync every second
+
+    threading.Thread(target=fetch_and_register_user_tags, daemon=True).start()
+    threading.Thread(target=sync_with_vista_backend, daemon=True).start()
+    threading.Thread(target=signal_datastore_ready, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -820,6 +896,129 @@ def delete_opcua_mapping(data_id: str):
         return {'ok': True, 'message': f'Mapping {data_id} deleted successfully'}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(500, f'Error deleting mapping: {str(e)}')
+
+
+# ====================== MQTT PUBLISHER ENDPOINTS ======================
+
+@app.post('/mqtt-publisher/config')
+def set_mqtt_publisher_config(body: dict):
+    """
+    Set MQTT Publisher configuration (brokers and mappings)
+    
+    Body format:
+    {
+        "enabled": true,
+        "brokers": [
+            {
+                "id": "broker-1",
+                "name": "Production Broker",
+                "address": "mqtt.example.com",
+                "port": 1883,
+                "clientId": "iot-gateway-1",
+                "keepalive": 60,
+                "cleanSession": true,
+                "protocol": "mqtt",
+                "auth": {
+                    "enabled": false,
+                    "username": "",
+                    "password": ""
+                },
+                "tls": {
+                    "enabled": false,
+                    "verifyServer": true,
+                    "allowInsecure": false
+                },
+                "enabled": true
+            }
+        ],
+        "mappings": [
+            {
+                "id": "mapping-1",
+                "topicName": "sensors/temperature",
+                "brokerId": "broker-1",
+                "selectedTags": [
+                    {"id": "tag1", "name": "temp_sensor_1", "dataType": "float"}
+                ],
+                "qos": 0,
+                "retain": false,
+                "publishInterval": 1000,
+                "format": "json",
+                "includeTimestamp": true,
+                "enabled": true
+            }
+        ]
+    }
+    """
+    try:
+        enabled = body.get('enabled', False)
+        brokers = body.get('brokers', [])
+        mappings = body.get('mappings', [])
+        
+        config = {
+            'enabled': enabled,
+            'brokers': brokers,
+            'mappings': mappings
+        }
+        
+        # Update the service manager with new config
+        services.update_mqtt_publisher(config)
+        
+        return {'ok': True, 'message': 'MQTT Publisher configuration updated successfully'}
+    except Exception as e:
+        raise HTTPException(500, f'Error updating MQTT Publisher config: {str(e)}')
+
+
+@app.get('/mqtt-publisher/config')
+def get_mqtt_publisher_config():
+    """Get current MQTT Publisher configuration"""
+    return services.get_mqtt_publisher_config()
+
+
+@app.get('/mqtt-publisher/status')
+def get_mqtt_publisher_status():
+    """Get MQTT Publisher status"""
+    config = services.get_mqtt_publisher_config()
+    
+    # Get broker connection status
+    broker_status = {}
+    for broker_id, broker_conn in mqtt_publisher_server.brokers.items():
+        broker_status[broker_id] = {
+            'connected': broker_conn.connected.is_set(),
+            'queue_size': broker_conn.publish_queue.qsize()
+        }
+    
+    return {
+        'enabled': config.get('enabled', False),
+        'running': mqtt_publisher_server.thread is not None and mqtt_publisher_server.thread.is_alive(),
+        'brokers_count': len(config.get('brokers', [])),
+        'mappings_count': len(config.get('mappings', [])),
+        'broker_status': broker_status
+    }
+
+
+@app.get('/mappings/mqtt-publisher')
+def get_mqtt_publisher_mappings():
+    """Get all MQTT Publisher mappings"""
+    return MQTT_PUBLISHER_MAPPING.all()
+
+
+@app.delete('/mappings/mqtt-publisher/{mapping_id}')
+def delete_mqtt_publisher_mapping(mapping_id: str):
+    """Delete a specific MQTT Publisher mapping"""
+    try:
+        MQTT_PUBLISHER_MAPPING.remove_mapping(mapping_id)
+        
+        # Update the running server configuration
+        config = services.get_mqtt_publisher_config()
+        if config.get('enabled'):
+            # Remove from mappings list
+            mappings = [m for m in config.get('mappings', []) if m.get('id') != mapping_id]
+            config['mappings'] = mappings
+            services.update_mqtt_publisher(config)
+        
+        return {'ok': True, 'message': f'Mapping {mapping_id} deleted successfully'}
     except Exception as e:
         raise HTTPException(500, f'Error deleting mapping: {str(e)}')
 

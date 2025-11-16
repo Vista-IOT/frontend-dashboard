@@ -105,6 +105,10 @@ try:
     app.include_router(virtual_tags.router)
     startup_logger.info("   ✅ Virtual Tags router registered (/api/user-tags, /api/calculation-tags)")
     
+    from app.routers import mqtt_publisher
+    app.include_router(mqtt_publisher.router)
+    startup_logger.info("   ✅ MQTT Publisher router registered (/api/mqtt-publisher)")
+    
     startup_logger.info("🎉 All API routers registered successfully")
     startup_logger.info("📊 Available API endpoints:")
     startup_logger.info("   🔧 Hardware: /api/hardware/* - Hardware detection and configuration")
